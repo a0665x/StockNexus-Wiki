@@ -12,19 +12,9 @@
     }
     return out;
   }
-  function select(payload, selected, separate = false, limit = 800) {
+  function select(payload, selected, separate = false) {
     const sourceGraphs = groups(payload), available = selected.filter(p => sourceGraphs[p]);
-    const picked = Object.fromEntries(available.map(p => [p, []]));
-    // Round-robin prevents a high-volume provider from taking the entire view budget.
-    let count = 0;
-    for (let i = 0; count < limit; i++) {
-      let added = false;
-      for (const p of available) {
-        const a = sourceGraphs[p].articles[i];
-        if (a && count < limit) { picked[p].push(a); count++; added = true; }
-      }
-      if (!added) break;
-    }
+    const picked = Object.fromEntries(available.map(p => [p,sourceGraphs[p].articles]));
     const nodes = new Map(), edges = new Map();
     for (const p of available) {
       const ids = new Set(picked[p].map(a => a.id));
@@ -128,7 +118,18 @@
     matches.sort((a,b)=>b.score-a.score||(a.id<b.id?-1:a.id>b.id?1:0));
     return {roots:matches.slice(0,Math.max(1,Math.min(10,Number(limit)||3))),matched_articles:matches.length,scanned_articles:rows.length};
   }
-  const api = { select, snapshot, groups, linkStyle, settings, filterEdges, trace, traceMany, rankRoots, identity };
+  // GPU budget only: never mutate the complete search/export payload.
+  function renderSlice(view, limit=800, priority=[]) {
+    limit=Math.max(100,Math.min(2400,Number(limit)||800));
+    const rank=new Map(priority.map((id,i)=>[id,i]));
+    const ordered=view.articles.slice().sort((a,b)=>
+      (rank.get(a.id)??Infinity)-(rank.get(b.id)??Infinity)||
+      String(b.published_at||'').localeCompare(String(a.published_at||''))||String(a.id).localeCompare(String(b.id)));
+    const articles=ordered.slice(0,limit),ids=new Set(articles.map(a=>a.id));
+    const relations=view.relations.filter(e=>ids.has(endpoint(e.source))&&ids.has(endpoint(e.target))).slice(0,limit*3);
+    return {articles,relations};
+  }
+  const api = { select, snapshot, groups, linkStyle, settings, filterEdges, trace, traceMany, rankRoots, identity, endpoint, renderSlice };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.AtlasView = api;
 })(globalThis);

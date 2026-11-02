@@ -16,7 +16,7 @@ assert.equal(get('count').textContent,'1');
 assert.equal(vm.runInContext('viewMode',context),'timeline','Failed WebGL must select the usable timeline');
 assert.equal(get('empty').hidden,true);
 assert.equal(get('graphFallback').hidden,false);
-assert.equal(get('modeNetwork').disabled,true);
+assert.equal(get('modeNetwork').disabled,false,'Graph retry must remain available after WebGL failure');
 assert.match(get('graphFailureReason').textContent,/Error creating WebGL context/,'Original failure must survive successful news loading');
 assert.equal(get('empty').hidden,true,'Do not show an empty-news message for valid articles');
 assert(logs.some(s=>s.includes('[GraphNews 3D]')&&s.includes('Error creating WebGL context')));

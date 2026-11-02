@@ -5,7 +5,10 @@ import datetime as dt
 import json
 import os
 import queue
+import signal
 import itertools
+import functools
+import logging
 import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -15,43 +18,83 @@ from news_atlas.model import SCHEMA_VERSION, article, clean, timestamp, deduplic
 from news_atlas.search import normalize_request, query_key, search_source
 from news_atlas.storage import Store
 from news_atlas import api, credentials
+from news_atlas.graph_cache import build_cached, lookup_cached
 from news_atlas.openapi import specification
 from news_atlas.channels import definitions, annotate, classify, version as channel_version
 
-ROOT = Path(__file__).resolve().parent
-MAX_GRAPH_ARTICLES = 800
+cache_logger=logging.getLogger('news_atlas.graph_cache')
+cache_logger.setLevel(logging.INFO)
+if not cache_logger.handlers:
+    cache_logger.addHandler(logging.StreamHandler())
 
-def graph_payload(rows, channels=None):
+ROOT = Path(__file__).resolve().parent
+
+
+def graph_payload(rows, channels=None, relation_settings=None, include_relations=True):
+    from news_atlas.relation_settings import settings
+    cfg=settings(relation_settings)
+    stage_times={}
+    def relations_for(label, subset, cross_only=False):
+        tick=time.perf_counter()
+        result=build_relations(subset,cross_only=cross_only,relation_settings=cfg)
+        stage_times[label]=round((time.perf_counter()-tick)*1000,2)
+        return result
     channels = channels or definitions()
     all_rows = annotate(deduplicate(rows), channels)
-    shown = all_rows[:MAX_GRAPH_ARTICLES]
+    shown = all_rows
     source_graphs = {}
     for provider in ('google', 'yahoo', 'massive'):
         own = annotate(deduplicate([r for r in rows if r['source']['provider'] == provider]), channels)
-        subset = own[:MAX_GRAPH_ARTICLES]
-        source_graphs[provider] = {'articles': subset, 'relations': build_relations(subset), 'total_articles': len(own)}
+        subset = own
+        source_graphs[provider] = {'articles': subset, 'relations': relations_for(provider,subset) if include_relations else [], 'total_articles': len(own)}
     # Separate cross-source budgets preserve all existing within-source relations.
     cross = {}
     for left, right in itertools.combinations(source_graphs,2):
         a,b = source_graphs[left]['articles'],source_graphs[right]['articles']
-        if not a or not b:
+        if not include_relations or not a or not b:
             continue
-        candidates=deduplicate([r for pair in itertools.zip_longest(a,b) for r in pair if r][:MAX_GRAPH_ARTICLES])
-        for edge in build_relations(candidates, max_neighbors=2, cross_only=True):
+        candidates=deduplicate(a+b)
+        for edge in relations_for(left+'_'+right,candidates,True):
             cross[tuple(sorted((edge['source'],edge['target'])))]={**edge,'cross_sources':[left,right]}
-    return {'schema_version': SCHEMA_VERSION, 'articles': shown, 'relations': build_relations(shown),
+    combined=relations_for('combined',shown) if include_relations else []
+    if include_relations:
+        cache_logger.info('graph_compute_ms %s',json.dumps(stage_times))
+    return {'schema_version': SCHEMA_VERSION, 'articles': shown, 'relations': combined,
             'source_graphs': source_graphs, 'cross_relations': list(cross.values()),
             'channel_definitions': channels, 'channel_version': channel_version(channels),
-            'total_articles': len(all_rows), 'display_limit': MAX_GRAPH_ARTICLES,
+            'total_articles': len(all_rows), 'display_limit': None,
+            'relation_settings': cfg, 'relations_pending': not include_relations,
             'relation_note': '規則關聯並非因果；分數為排序用啟發式指標，不是機率。'}
+
+def retain_known_edges(pending, previous):
+    """Keep provisional evidence only for unchanged endpoints while fresh rules run."""
+    def carry(new, old):
+        before={a['id']:a for a in old.get('articles',[])}
+        same={a['id'] for a in new.get('articles',[]) if before.get(a['id'])==a}
+        new['relations']=[e for e in old.get('relations',[]) if e['source'] in same and e['target'] in same]
+        return same
+    unchanged=carry(pending,previous)
+    for source, group in pending['source_graphs'].items():
+        carry(group,previous.get('source_graphs',{}).get(source,{}))
+    pending['cross_relations']=[e for e in previous.get('cross_relations',[]) if e['source'] in unchanged and e['target'] in unchanged]
+    # These are previous valid pair evidences, not the final new degree-budget selection.
+    pending['relations_pending']=True
+    return pending
+
 
 def search_events(request, key, store):
     start_time = time.monotonic()
     by_source = {}
+    cfg=request.get('relation_settings')
+    channels=store.list_channels()
     for source in request['sources']:
         term = request['ticker'] if source == 'massive' else request['query']
-        by_source[source] = store.read(source, query_key(source, term, request.get('rss_region')), request['start'], request['end'])
-    yield {'type': 'cache', 'graph': graph_payload([a for rows in by_source.values() for a in rows], store.list_channels()),
+        by_source[source] = deduplicate(store.read(source, query_key(source, term, request.get('rss_region')), request['start'], request['end']))
+    cached_rows=[a for rows in by_source.values() for a in rows]
+    displayed=lookup_cached(store,cached_rows,channels,cfg)
+    if displayed is None:
+        displayed=graph_payload(cached_rows,channels,cfg,False)
+    yield {'type': 'cache', 'graph': displayed,
            'counts': {s: len(rows) for s, rows in by_source.items()},
            'message': '檢查日期覆蓋'}
     events = queue.Queue()
@@ -80,9 +123,27 @@ def search_events(request, key, store):
             if event['type'] == 'source':
                 completed += 1
                 by_source[event['source']] = event['articles']
-                event.update(completed=completed, total=len(request['sources']),
-                             graph=graph_payload([a for rows in by_source.values() for a in rows], store.list_channels()))
+                current_rows=[a for rows in by_source.values() for a in rows]
+                updated=lookup_cached(store,current_rows,channels,cfg)
+                if updated is None:
+                    updated=retain_known_edges(graph_payload(current_rows,channels,cfg,False),displayed)
+                displayed=updated
+                event.update(completed=completed, total=len(request['sources']),graph=displayed)
             yield event
+    yield {'type':'phase','phase':'relations','message':'新聞已載入，正在計算關聯','elapsed':round(time.monotonic()-start_time)}
+    # One final graph calculation; stream heartbeats while it runs, keeping news visible.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as compute:
+        future=compute.submit(functools.partial(build_cached,store,graph_payload),[a for rows in by_source.values() for a in rows],store.list_channels(),cfg)
+        while True:
+            try:
+                graph=future.result(timeout=1)
+                yield {'type':'graph','graph':graph}
+                break
+            except concurrent.futures.TimeoutError:
+                yield {'type':'heartbeat','phase':'relations','elapsed':round(time.monotonic()-start_time)}
+            except Exception:
+                yield {'type':'graph_error','message':'關聯計算未完成；新聞已保留，可在關聯設定重試。'}
+                break
     yield {'type': 'done', 'elapsed': round(time.monotonic() - start_time), 'db': store.stats()}
 
 class Handler(BaseHTTPRequestHandler):
@@ -129,7 +190,7 @@ class Handler(BaseHTTPRequestHandler):
             saved = self.store.load_snapshot(path.rsplit('/',1)[-1])
             self.json_response(200 if saved else 404, saved or {'error':'快照不存在'})
             return
-        files = {'/time-lens.js': ('dist/time-lens.js','text/javascript; charset=utf-8'), '/docs': ('dist/docs.html','text/html; charset=utf-8'), '/docs/': ('dist/docs.html','text/html; charset=utf-8'), '/vendor/swagger-ui-bundle.js': ('dist/vendor/swagger-ui-bundle.js','text/javascript; charset=utf-8'), '/vendor/swagger-ui.css': ('dist/vendor/swagger-ui.css','text/css; charset=utf-8'), '/interaction.js': ('dist/interaction.js','text/javascript; charset=utf-8'), '/date-range.js': ('dist/date-range.js','text/javascript; charset=utf-8'), '/glow.js': ('dist/glow.js','text/javascript; charset=utf-8'), '/i18n.js': ('dist/i18n.js','text/javascript; charset=utf-8'), '/explorer-ui.js': ('dist/explorer-ui.js','text/javascript; charset=utf-8'), '/schema/news-atlas.schema.json': ('schema/news-atlas.schema.json','application/json; charset=utf-8'), '/': ('dist/index.html', 'text/html; charset=utf-8'), '/3d-force-graph.min.js': ('dist/3d-force-graph.min.js', 'text/javascript; charset=utf-8'), '/app.js': ('dist/app.js', 'text/javascript; charset=utf-8'), '/graph-view.js': ('dist/graph-view.js', 'text/javascript; charset=utf-8'), '/timeline.js': ('dist/timeline.js', 'text/javascript; charset=utf-8')}
+        files = {'/relation-settings.js': ('dist/relation-settings.js','text/javascript; charset=utf-8'), '/time-lens.js': ('dist/time-lens.js','text/javascript; charset=utf-8'), '/docs': ('dist/docs.html','text/html; charset=utf-8'), '/docs/': ('dist/docs.html','text/html; charset=utf-8'), '/vendor/swagger-ui-bundle.js': ('dist/vendor/swagger-ui-bundle.js','text/javascript; charset=utf-8'), '/vendor/swagger-ui.css': ('dist/vendor/swagger-ui.css','text/css; charset=utf-8'), '/interaction.js': ('dist/interaction.js','text/javascript; charset=utf-8'), '/date-range.js': ('dist/date-range.js','text/javascript; charset=utf-8'), '/glow.js': ('dist/glow.js','text/javascript; charset=utf-8'), '/i18n.js': ('dist/i18n.js','text/javascript; charset=utf-8'), '/explorer-ui.js': ('dist/explorer-ui.js','text/javascript; charset=utf-8'), '/schema/news-atlas.schema.json': ('schema/news-atlas.schema.json','application/json; charset=utf-8'), '/': ('dist/index.html', 'text/html; charset=utf-8'), '/3d-force-graph.min.js': ('dist/3d-force-graph.min.js', 'text/javascript; charset=utf-8'), '/app.js': ('dist/app.js', 'text/javascript; charset=utf-8'), '/graph-view.js': ('dist/graph-view.js', 'text/javascript; charset=utf-8'), '/timeline.js': ('dist/timeline.js', 'text/javascript; charset=utf-8')}
         if path not in files:
             self.send_error(404)
             return
@@ -164,7 +225,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             length = int(self.headers.get('Content-Length', '0'))
-            if not 0 < length <= (12000000 if self.path in ('/api/snapshots','/api/classify',*api.POST_PATHS) else 16384):
+            if not 0 < length <= (268435456 if self.path in ('/api/snapshots','/api/classify',*api.POST_PATHS) else 16384):
                 raise ValueError('搜尋內容大小錯誤')
             body = json.loads(self.rfile.read(length))
             if not isinstance(body,dict): raise ValueError('Request body 必須是 JSON object')
@@ -175,14 +236,14 @@ class Handler(BaseHTTPRequestHandler):
                 except OSError:self.json_response(500,{'error':'無法保存本機金鑰設定'})
                 return
             if self.path in api.POST_PATHS:
-                self.json_response(200,api.dispatch(self.path,body,self.store,graph_payload));return
+                self.json_response(200,api.dispatch(self.path,body,self.store,functools.partial(build_cached,self.store,graph_payload)));return
             if self.path == '/api/channels':
                 saved = self.store.save_channel(body)
                 self.json_response(200, {'channel':saved,'channels':self.store.list_channels()})
                 return
             if self.path == '/api/classify':
                 rows = body.get('articles') if isinstance(body,dict) else None
-                if not isinstance(rows,list) or len(rows)>2400 or any(not isinstance(r,dict) or not isinstance(r.get('id'),str) or len(r['id'])>100 or not isinstance(r.get('title'),str) or len(r['title'])>2000 or not isinstance(r.get('summary',''),str) or len(r.get('summary',''))>12000 for r in rows):
+                if not isinstance(rows,list) or any(not isinstance(r,dict) or not isinstance(r.get('id'),str) or len(r['id'])>100 or not isinstance(r.get('title'),str) or len(r['title'])>2000 or not isinstance(r.get('summary',''),str) or len(r.get('summary',''))>12000 for r in rows):
                     raise ValueError('重新分類的文章格式或數量不正確')
                 channels=self.store.list_channels()
                 self.json_response(200, {'annotations':[{"id":r['id'],**classify(r,channels)} for r in rows],'channels':channels,'version':channel_version(channels)})
@@ -204,7 +265,7 @@ class Handler(BaseHTTPRequestHandler):
                 if 'graph' in event: graph=event['graph']
                 if event['type']=='source': sources.append({k:v for k,v in event.items() if k not in ('graph','articles')})
                 if event['type']=='done': done=event
-            self.json_response(200,{'graph':graph,'sources':sources,'db':done.get('db',{}),'elapsed':done.get('elapsed',0),'partial':any(s.get('error') or s.get('cache',{}).get('missing_ranges') for s in sources)})
+            self.json_response(200,{'graph':graph,'sources':sources,'db':done.get('db',{}),'elapsed':done.get('elapsed',0),'partial':bool(graph and graph.get('relations_pending')) or any(s.get('error') or s.get('cache',{}).get('missing_ranges') for s in sources)})
             return
         self.send_response(200)
         self.send_header('Content-Type', 'application/x-ndjson; charset=utf-8')
@@ -220,6 +281,9 @@ class Handler(BaseHTTPRequestHandler):
             pass
 
 if __name__ == '__main__':
+    def stop_server(signum, frame):
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM, stop_server)
     store = Store()
     port = int(os.environ.get('PORT', '8765'))
     server = ThreadingHTTPServer(('0.0.0.0', port), Handler)

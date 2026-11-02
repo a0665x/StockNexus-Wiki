@@ -13,11 +13,11 @@
 
 ## 合約要點
 
-POST 需 application/json。一般 body 上限 16384 bytes；snapshots、classify 及 api.POST_PATHS 接受最多 12000000 bytes。驗證錯誤 400，找不到資源 404，Content-Type 錯誤 415，建立快照 201。HTTP 200 不等於來源成功或歷史完整。
+POST 需 application/json。一般 body 上限 16384 bytes；snapshots、classify 及 api.POST_PATHS 接受最多 268435456 bytes（256 MiB；超過明確拒絕，不截斷）。驗證錯誤 400，找不到資源 404，Content-Type 錯誤 415，建立快照 201。HTTP 200 不等於來源成功或歷史完整。
 
 `/api/search` 是 NDJSON：cache/status/source/heartbeat/done，一行一物件。`/api/search/result` 聚合成單一 JSON，檢查 partial 及每來源 warnings/error/cache。兩者會外連並寫 acquisition cache。
 
-`/api/cache/graph` 不外連；normalize/build/filter/explore/timeline/classify/view validate 不保存傳入文章。圖譜輸入通常最多 800 節點、6000 邊；classify 可 2400 篇。快照按來源分區驗證，不可把 merged IDs 直接當每來源儲存格式。
+`/api/cache/graph` 不外連；normalize/build/filter/explore/timeline/classify/view validate 不保存傳入文章。圖譜輸入通常全部已提供 節點、6000 邊；classify 可 2400 篇。快照按來源分區驗證，不可把 merged IDs 直接當每來源儲存格式。
 
 `/api/graph/explore` 接 graph + query/limit，或 graph + root_ids（二選一）；結果帶 roots/evidence、各樹、shared_nodes、method。Python 排名與 JS 排名必須保持一致。當前 method：weighted_prefix_v2。這個 REST 操作供外部 client 用；瀏覽器圖內搜尋直接在本地計算，不依賴它。
 
@@ -28,3 +28,14 @@ OpenAPI operationId 與 x-mcp annotations 提供候選 tools 提示，但**目�
 增加 API 時同步 server 路由、api dispatch、OpenAPI request/response、驗證測試；涉及 schema 改動再更新 canonical schema 與舊快照相容性。不要只改 Swagger 畫面而未實作路由。
 
 `POST /api/settings/massive-key`（key writeOnly）與 DELETE 用於主機明確記住／忘記，僅回 configured。SearchRequest／快照 metadata 支援 rss_region；`/api/capabilities` 提供 regions 對照。完整 OpenAPI 現有 22 個 operationId。
+
+`POST /api/graph/build` 可傳 `articles`（全部已提供）或 `source_graphs`（google/yahoo/massive，各全部已提供，二選一），並帶可選 relation_settings。重算只讀傳入文章，不外連／不寫 DB；未知日期 null 保留為孤立點。返回 GraphPayload.relation_settings，預設 rules-v1，自訂 rules-v2，schema 同時接受兩者。快照 view.relation_settings 經同一驗證器清理並持久化；省略時 defaults。具體欄位見 OpenAPI 的 relation_settings schema。
+
+圖譜、normalize、classify、探索與快照移除文章／連線數量的固定裁切與驗證上限；GraphPayload.display_limit 為 null，capabilities.limits.articles／relations 為 null。每條連線的規則／鄰居預算與探索樹的 roots／depth 等仍受設定約束，與文章是否保留分開。
+
+Search stream update (2026-11-02): SearchRequest accepts `relation_settings`. `cache`
+and `source` graph payloads have `relations_pending: true` and empty edges. After sources,
+`phase: relations` and heartbeat events precede the final `graph` event with
+`relations_pending: false`. On computation failure `graph_error` retains the prior news,
+then `done` closes the stream. `/api/search/result` reports `partial: true` for incomplete
+relations as well as provider coverage errors. GPU budgets are client-only.

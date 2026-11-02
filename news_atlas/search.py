@@ -5,6 +5,7 @@ from .model import TICKER, deduplicate
 from .providers import acquire
 from .storage import Store, dates
 from .regions import validate_region,edition
+from .relation_settings import settings as relation_settings
 
 _LOCKS = [threading.Lock() for _ in range(32)]
 
@@ -32,7 +33,7 @@ def normalize_request(body, today=None):
         raise ValueError('日期需為過去至今天，且一次不超過 366 天')
     if not isinstance(body.get('force_refresh', False), bool):
         raise ValueError('force_refresh 必須是布林值')
-    return {'rss_region':validate_region(body.get('rss_region')),'query': query, 'ticker': ticker, 'sources': sources, 'start': start.isoformat(),
+    return {'relation_settings':relation_settings(body.get('relation_settings')),'rss_region':validate_region(body.get('rss_region')),'query': query, 'ticker': ticker, 'sources': sources, 'start': start.isoformat(),
             'end': (last + dt.timedelta(days=1)).isoformat(), 'display_end': last.isoformat(),
             'force_refresh': body.get('force_refresh', False)}
 

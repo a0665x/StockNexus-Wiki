@@ -26,3 +26,10 @@ assert(view.linkStyle({scope:'cross',type:'shared_entity'}).strength<view.linkSt
 const scoped={...payload,cross_relations:[{...edge('a','d'),cross_sources:['google','massive']}]};
 assert(!view.select(scoped,['google'],false).relations.some(e=>e.scope==='cross'));
 console.log('PASS: default mixing, source relationship preservation and weaker cross-source forces');
+
+const dated=(prefix,count,p)=>Array.from({length:count},(_,i)=>({...article(prefix+i,p),published_at:i===count-1?'2025-11-03T00:00:00Z':'2026-10-01T00:00:00Z'}));
+const annual={source_graphs:{google:{articles:dated('g',800,'google'),relations:[]},massive:{articles:dated('m',800,'massive'),relations:[]}}};
+const sampled=view.select(annual,['google','massive']);
+assert.equal(sampled.articles.length,1600);
+for(const p of ['google','massive'])assert(sampled.articles.some(a=>a.display_provider===p&&a.published_at.startsWith('2025')),'all source articles retained across years');
+console.log('PASS: all 1600 articles retained across both years and sources');

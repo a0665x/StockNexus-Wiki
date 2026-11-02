@@ -1,16 +1,21 @@
 'use strict';
 const $ = id => document.getElementById(id);
-const colors = { google: '#72dfbd', yahoo: '#c59cfc', massive: '#80b4ff' };
+const defaultColors={google:'#0072b2',yahoo:'#e69f00',massive:'#cc79a7'};
+const savedColors=AtlasUI.read('sourceColors',{});
+const colors=Object.fromEntries(Object.entries(defaultColors).map(([p,value])=>[p,/^#[0-9a-f]{6}$/i.test(savedColors?.[p])?savedColors[p]:value]));
 const sourceNames = { google: 'Google', yahoo: 'Yahoo', massive: 'Massive' };
 const relationNames = { shared_entity: '共同實體', shared_topic: '共同主題', similar_title: '相似標題' };
 let articles = [], relations = [], hovered = null, selected = null, controller = null, exportMeta = {}, currentSearch = 0;
 let graph = null, fitTimer = null, sourceArticles = new Map();
-let graphFailure=null,webglCreationReason='';
+let renderBudget=800,renderedCount=0,renderedEdges=0;
+let graphFailure=null,webglCreationReason='',graphRetryBusy=false;
+let relationActivity={busy:false},searchPhase='',searchStarted=0,operationNotice='',pendingSearchMeta=null,searchClock=null;
+let highlightMode='root',graphChannel='',categoryTrace={nodes:new Map(),edges:new Set(),roots:[]};
 let basePayload = {articles:[],relations:[]}, currentView = {articles:[],relations:[]}, sourceStates = {}, saving = false, restoredPositions = new Map();
 const providers = ['google','yahoo','massive'];
 const viewSources = () => providers.filter(p => $('view-'+p).checked !== false);
 const isSeparate = () => $('separateSources').checked === true;
-let viewMode='network', channelDefinitions=[], channelCatalog=[], channelFilter='all', timelineCutoff=null, timelineTimer=null, editingChannel=null;
+let viewMode='network', channelDefinitions=[], channelCatalog=[], channelFilter='all', timelineCutoff=null, editingChannel=null;
 let classifying=false, classificationEpoch=0, timelineBounds=null, timelineFocusRequested=true;
 const networkPositions=new Map(), internalLengths=new Map();
 const edgeKey=l=>l.scope+':'+[(l.raw_relation||l).source,(l.raw_relation||l).target].sort().join(':');
@@ -18,17 +23,34 @@ let exploration=AtlasView.settings(AtlasUI.read('exploration',{})), activeTrace=
 let glowConfig=AtlasGlow.settings(AtlasUI.read('glow',{})), glowLayer=null, pinnedRoot=null, interaction=null, idleFocus=null, stickyGuideUntil=0;
 let lockedRoots=[], keywordLocked=false, rootSearchState=null, rootSearchTicket=0, rootSearchBusy=false;
 let focusView={articles:[],relations:[]};
-let timeLens=null,timeSizer=null,timePanel=null;
+let timeLens=null,timeSizer=null,timePanel=null,relationUI=null;
 const timeLensAvailable=typeof globalThis.AtlasTimeLens?.init==='function'&&typeof globalThis.AtlasTimeLens?.attach==='function';
 let timeFocus=AtlasTimeline.timeSettings(AtlasUI.read('timeFocus',{}));
 const focusRoot=()=>lockedRoots[0]??null;
-let timelineStyle=AtlasUI.read('timelineStyle','density');
+const timelineStyle='density';
 const reducedMotion = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 function el(tag, text, cls) { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; }
 function date(value) { if (!value) return '日期未知'; const d = new Date(value); return Number.isNaN(d.getTime()) ? '日期未知' : d.toLocaleString(AtlasI18n.language()==='en'?'en-US':'zh-TW'); }
+function updateActivity(){
+  const messages=[];
+  if(graphFailure)messages.push(AtlasI18n.t('3D 無法啟動；請查看錯誤原因後重試。')+' '+graphFailure.message);
+  if(graphRetryBusy)messages.push(AtlasI18n.t('正在重建 3D…'));
+  if(controller)messages.push(AtlasI18n.t(searchPhase==='relations'?'新聞已載入，正在計算關聯；可切換視圖。':pendingSearchMeta&&focusView.articles.length?'搜尋中，暫時保留上一張圖。':'正在讀取新聞；可切換視圖。')+' '+Math.floor((Date.now()-searchStarted)/1000)+'s');
+  if(controller&&basePayload.relations_pending&&relations.length)messages.push(AtlasI18n.t('已保留既有關聯；新資料的關聯仍在更新。'));
+  if(relationActivity.busy)messages.push(AtlasI18n.t('套用關聯中；目前圖譜保留，可繼續操作。')+' '+Math.floor((Date.now()-relationActivity.started)/1000)+'s');
+  if(!controller&&!relationActivity.busy){if(relationActivity.error)messages.push(relationActivity.error);else if(operationNotice)messages.push(operationNotice);else if(basePayload.relations_pending)messages.push(AtlasI18n.t('新聞已保留，關聯尚未完成；可在設定中重新套用。'));else if(!focusView.articles.length)messages.push(AtlasI18n.t(!viewSources().length?'所有來源已隱藏；請勾選顯示來源。':pendingSearchMeta?'正在等待搜尋結果。':exportMeta.query||exportMeta.ticker?'此搜尋目前沒有可顯示結果；請檢查來源狀態。':'此頁尚未載入搜尋結果；可搜尋或開啟已儲存圖譜。'));else messages.push(AtlasI18n.t(graphFailure?'新聞與關聯已載入':'圖譜已就緒'));}
+  if(viewMode==='network'&&focusView.articles.length)messages.push(`3D ${renderedCount}/${focusView.articles.length} · ${AtlasI18n.t('渲染預算')} ${renderBudget}`);
+  $('activityText').textContent=messages.join(' · ');
+  $('activitySpinner').hidden=!(controller||relationActivity.busy||graphRetryBusy);
+  $('cancelOperation').hidden=!(controller||relationActivity.busy);
+  $('retryGraph').hidden=!graphFailure;$('retryGraph').disabled=graphRetryBusy;
+  $('modeNetwork').disabled=graphRetryBusy;
+  $('modeNetwork').textContent=AtlasI18n.t('3D 關聯');
+  $('modeNetwork').title=graphFailure?AtlasI18n.t('重試建立 3D；目前新聞會保留。'):'';
+}
 function updateGraphMessage(){
   $('graphFallback').hidden=!graphFailure;
-  $('modeNetwork').disabled=!!graphFailure;
+  updateActivity();
   if(graphFailure){
     $('graphFallbackSummary').textContent=AtlasI18n.t('3D 無法使用，已切換時間軸；新聞與關聯搜尋仍可使用。');
     $('graphFailureReason').textContent=graphFailure.message;
@@ -38,10 +60,11 @@ function updateGraphMessage(){
   if(failure){
     const title=failure.kind==='context-lost'?'3D 渲染中斷（WebGL context lost）。':'3D 初始化失敗（WebGL）。';
     $('empty').replaceChildren(el('p',AtlasI18n.t(title)),el('p',failure.message,'raw'),el('p',AtlasI18n.t('新聞仍可使用，或切換時間軸查看。Chrome 請檢查設定 → 系統 → 圖形加速及 chrome://gpu，完成後重新載入頁面。')));
-  }else $('empty').textContent=viewSources().length?'目前來源沒有可顯示新聞。':'請勾選至少一個顯示來源。';
+  }else $('empty').textContent=controller?AtlasI18n.t('正在讀取新聞；可切換視圖。'):viewSources().length?'目前來源沒有可顯示新聞。':'請勾選至少一個顯示來源。';
 }
 function reportGraphFailure(kind,message){
   graphFailure={kind,message:String(message)};
+  renderBudget=[100,200,400,800,1200,1600,2000,2400].filter(value=>value<=Math.max(100,renderBudget/2)).pop();$('renderBudget').value=String(renderBudget);
   console.error('[GraphNews 3D]',kind,graphFailure.message);
   if(kind==='context-lost'&&graph)switchMode('timeline');else updateGraphMessage();
 }
@@ -49,12 +72,13 @@ function reportGraphFailure(kind,message){
 $('graph').addEventListener('webglcontextcreationerror',event=>{webglCreationReason=event.statusMessage||'';},true);
 $('graph').addEventListener('webglcontextlost',event=>{event.preventDefault();reportGraphFailure('context-lost',event.statusMessage||'WebGL context lost');},true);
 $('graph').addEventListener('webglcontextrestored',()=>{if(graphFailure?.kind==='context-lost'){graphFailure=null;updateGraphMessage();}},true);
+function initializeGraph(){
 try {
   graph = ForceGraph3D()($('graph')).backgroundColor('#090f1b').nodeId('id')
-    .nodeColor(nodeColor).nodeVal(3).nodeOpacity(.95)
+    .nodeColor(nodeColor).nodeVal(3).nodeResolution(6).nodeOpacity(.95)
     .linkColor(linkColor).linkWidth(.6).linkOpacity(1)
     .onNodeHover(n => {if(interaction&&interaction.supported!==false)return;setHovered(n);})
-    .onNodeClick(n => showArticle(n)).onBackgroundClick(()=>{if(!interaction)clearFocus();}).onNodeDragEnd(n => { n.fx = undefined; n.fy = undefined; n.fz = undefined; rememberNetwork(); graph.d3ReheatSimulation(); });
+    .onNodeClick(n => showArticle(n)).onBackgroundClick(()=>{if(!interaction)clearGraphSelection();}).onNodeDragEnd(n => { n.fx = undefined; n.fy = undefined; n.fz = undefined; rememberNetwork(); graph.d3ReheatSimulation(); });
   graph.d3Force('charge').strength(-45); graph.d3Force('link').distance(l => AtlasView.linkStyle(l,internalLengths.get(edgeKey(l))).distance).strength(l=>AtlasView.linkStyle(l).strength); graph.cooldownTime(reducedMotion ? 800 : 8000);
   graph.d3Force('source-cluster', alpha => {
     if (!isSeparate()) return;
@@ -62,25 +86,69 @@ try {
     for (const n of graph.graphData().nodes) { const center = (active.indexOf(n.display_provider) - (active.length - 1) / 2) * 240; n.vx = (n.vx || 0) + (center - (n.x || 0)) * .035 * alpha; n.vy = (n.vy || 0) - (n.y || 0) * .012 * alpha; n.vz = (n.vz || 0) - (n.z || 0) * .012 * alpha; }
   });
   graph.d3Force('preserve-position', alpha=>{if(isSeparate())return;for(const n of graph.graphData().nodes){if(!n.anchor)continue;for(const k of ['x','y','z'])n['v'+k]=(n['v'+k]||0)+(n.anchor[k]-(n[k]||0))*.012*alpha;}});
-  new ResizeObserver(() => { const r = $('stage').getBoundingClientRect(); graph.width(r.width).height(r.height); if(viewMode==='timeline')renderTimeline(); }).observe($('stage'));
+  graph.renderer?.()?.setPixelRatio?.(Math.min(globalThis.devicePixelRatio||1,renderBudget<800?1:1.5));
+  const size=$('stage').getBoundingClientRect();graph.width(size.width).height(size.height);
+  graphFailure=null;
 } catch (error) { graph = null; reportGraphFailure('initialization',[error.message||String(error),webglCreationReason].filter(Boolean).join(' · ')); }
-function nodeColor(n){const base=colors[n.display_provider||n.source.provider]||'#b9d8df';if(focusRoot()===null)return base;const hit=activeTrace.nodes.get(n.id);if(!hit)return AtlasGlow.tint(base,glowConfig.background);return AtlasGlow.tint(base,Math.max(.12,Math.pow(glowConfig.decay,hit.depth)));}
-function edgeLight(l){const id=typeof l.target==='object'?l.target.id:l.target,other=typeof l.source==='object'?l.source.id:l.source;return Math.pow(glowConfig.decay,Math.max(activeTrace.nodes.get(id)?.depth||0,activeTrace.nodes.get(other)?.depth||0));}
-function linkColor(l){if(focusRoot()===null)return l.scope==='cross'?'rgba(244,205,132,.45)':'rgba(130,200,210,.4)';return activeTrace.edges.has(AtlasView.identity(l))?`rgba(140,255,220,${Math.max(.05,edgeLight(l))})`:`rgba(120,155,180,${glowConfig.background*.25})`;}
-function edgeStyle(l){if(focusRoot()===null)return {color:l.scope==='cross'?'#f4cd84':'#82c8d2',opacity:l.scope==='cross'?.45:.4};return activeTrace.edges.has(AtlasView.identity(l))?{color:'#8cffdc',opacity:Math.max(.05,edgeLight(l))}:{color:'#789bb4',opacity:glowConfig.background*.25};}
-function acquireRoot(n){if(!n||lockedRoots.length)return;lockedRoots=[n.id];pinnedRoot=n.id;keywordLocked=false;rootSearchState=null;$('rootResults').replaceChildren();refreshFocus();}
+}
+initializeGraph();
+new ResizeObserver(()=>{const r=$('stage').getBoundingClientRect();graph?.width(r.width).height(r.height);if(viewMode==='timeline')renderTimeline();}).observe($('stage'));
+function disposeGraph(){
+    // A damaged renderer must not prevent construction of its replacement.
+    for(const dispose of [()=>rememberNetwork(),()=>interaction?.dispose(),()=>timeSizer?.dispose(),()=>glowLayer?.dispose(),()=>graph?.pauseAnimation(),()=>graph?._destructor?.()]){try{dispose();}catch(error){console.warn('[GraphNews cleanup]',error.message);}}
+    graph=null;interaction=null;timeSizer=null;glowLayer=null;$('graph').replaceChildren();webglCreationReason='';
+}
+async function retryGraph(){
+  if(graphRetryBusy)return;graphRetryBusy=true;updateActivity();
+  await new Promise(resolve=>setTimeout(resolve,30));
+  try{
+    disposeGraph();
+    initializeGraph();attachGraphBehaviors();
+    if(!graphFailure&&graph){viewMode='network';applyMode();rebuild();}
+    else{viewMode='timeline';applyMode();renderTimeline();}
+  }catch(error){reportGraphFailure('initialization',error.message||String(error));viewMode='timeline';applyMode();renderTimeline();}
+  finally{graphRetryBusy=false;updateGraphMessage();}
+}
+$('retryGraph').onclick=retryGraph;
+$('renderBudget').value=String(renderBudget);
+$('renderBudget').onchange=()=>{renderBudget=Number($('renderBudget').value)||800;renderNetwork();updateActivity();};
+$('cancelOperation').onclick=()=>{if(controller)$('cancel').onclick();else relationUI?.cancel();};
+function graphTrace(){return highlightMode==='category'&&viewMode==='network'?categoryTrace:activeTrace;}
+function graphHasHighlight(){return highlightMode==='category'&&viewMode==='network'?categoryTrace.nodes.size>0:focusRoot()!==null;}
+function refreshCategory(){
+  const nodes=new Map(focusView.articles.filter(a=>graphChannel&&(a.channels||[]).some(c=>c.id===graphChannel)).map(a=>[a.id,{depth:0,parents:[],strength:1}]));
+  categoryTrace={nodes,edges:new Set(focusView.relations.filter(e=>nodes.has(AtlasView.endpoint(e.source))&&nodes.has(AtlasView.endpoint(e.target))).map(AtlasView.identity)),roots:[]};
+}
+function syncHighlightUI(){
+  const category=highlightMode==='category';
+  $('highlightModeSwitch').checked=category;
+  $('graphChannelLabel').hidden=!category;
+  for(const id of ['rootQuery','rootLimit','rootSearchSubmit'])$(id).disabled=category&&viewMode==='network'||rootSearchBusy;
+  $('highlightStatus').textContent=AtlasI18n.t(category?(viewMode!=='network'?'分類亮光僅套用 3D；root 選取保留。':!graphChannel?'選擇分類；點擊新聞只查看詳情。':categoryTrace.nodes.size?'分類模式：點擊只查看新聞，不改 root。':'此分類在目前來源沒有新聞。'):'點擊新聞或搜尋 roots');
+  if(category&&viewMode==='network'&&graphChannel)$('highlightStatus').textContent+=' '+categoryTrace.nodes.size;
+}
+function setHighlightMode(mode){highlightMode=mode;hovered=null;interaction?.clear();idleFocus?.stop();refreshCategory();syncHighlightUI();renderNetwork();refreshFocus();if(mode==='root')touchFocus();}
+function clearGraphSelection(){if(highlightMode==='category'&&viewMode==='network'){graphChannel='';$('graphChannel').value='';refreshCategory();syncHighlightUI();refreshFocus();}else clearFocus();}
+$('highlightModeSwitch').onchange=()=>setHighlightMode($('highlightModeSwitch').checked?'category':'root');
+$('graphChannel').onchange=()=>{graphChannel=$('graphChannel').value;refreshCategory();syncHighlightUI();renderNetwork();refreshFocus();};
+function nodeColor(n){const base=colors[n.display_provider||n.source.provider]||'#b9d8df';if(!graphHasHighlight())return base;const hit=graphTrace().nodes.get(n.id);if(!hit)return AtlasGlow.tint(base,glowConfig.background);return AtlasGlow.tint(base,Math.max(.12,Math.pow(glowConfig.decay,hit.depth)));}
+function edgeLight(l){const id=typeof l.target==='object'?l.target.id:l.target,other=typeof l.source==='object'?l.source.id:l.source;return Math.pow(glowConfig.decay,Math.max(graphTrace().nodes.get(id)?.depth||0,graphTrace().nodes.get(other)?.depth||0));}
+function linkColor(l){if(!graphHasHighlight())return l.scope==='cross'?'rgba(244,205,132,.45)':'rgba(130,200,210,.4)';return graphTrace().edges.has(AtlasView.identity(l))?`rgba(140,255,220,${Math.max(.05,edgeLight(l))})`:`rgba(120,155,180,${glowConfig.background*.25})`;}
+function edgeStyle(l){if(!graphHasHighlight())return {color:l.scope==='cross'?'#f4cd84':'#82c8d2',opacity:l.scope==='cross'?.45:.4};return graphTrace().edges.has(AtlasView.identity(l))?{color:'#8cffdc',opacity:Math.max(.05,edgeLight(l))}:{color:'#789bb4',opacity:glowConfig.background*.25};}
+function acquireRoot(n){if(!n||lockedRoots.length||highlightMode==='category'&&viewMode==='network')return;lockedRoots=[n.id];pinnedRoot=n.id;keywordLocked=false;rootSearchState=null;$('rootResults').replaceChildren();refreshFocus();}
 function setHovered(n){const id=n?.id||null;if(hovered!==id){hovered=id;refreshFocus();}touchFocus();showPreview(n);}
 function clearFocus(){rootSearchTicket++;idleFocus?.stop();interaction?.clear();lockedRoots=[];keywordLocked=false;rootSearchState=null;pinnedRoot=null;hovered=null;$('rootResults').replaceChildren();refreshFocus();showPreview(null);if(viewMode==='timeline')renderTimeline();}
-function touchFocus(){if(focusRoot()!==null&&!keywordLocked&&!rootSearchBusy)idleFocus?.touch();}
-function refreshFocus(){pinnedRoot=focusRoot();activeTrace=AtlasView.traceMany(focusView.relations,lockedRoots,exploration);candidateTrace=AtlasView.traceMany(relations,!pinnedRoot&&hovered?[hovered]:[],exploration);showTrace(pinnedRoot,activeTrace);if(!pinnedRoot&&hovered)$('traceStatus').textContent=AtlasI18n.t('候選 tree 預覽 · 點一下確認 root')+' · '+candidateTrace.nodes.size;glowLayer?.refresh();}
+function touchFocus(){if(highlightMode!=='category'&&focusRoot()!==null&&!keywordLocked&&!rootSearchBusy)idleFocus?.touch();}
+function refreshFocus(){pinnedRoot=focusRoot();activeTrace=AtlasView.traceMany(focusView.relations,lockedRoots,exploration);candidateTrace=AtlasView.traceMany(relations,!pinnedRoot&&hovered?[hovered]:[],exploration);showTrace(pinnedRoot,activeTrace);if(highlightMode==='category'&&viewMode==='network')$('traceStatus').textContent='';else if(!pinnedRoot&&hovered)$('traceStatus').textContent=AtlasI18n.t('候選 tree 預覽 · 點一下確認 root')+' · '+candidateTrace.nodes.size;glowLayer?.refresh();}
 function showTrace(id,trace){$('traceStatus').textContent=id?`延伸 ${trace.nodes.size-(trace.roots?.length||1)} 個節點 · 最多 ${exploration.depth} 層 · 每節點 ${exploration.branchLimit} 分支`+(trace.truncated?' · 已達顯示上限':''):'';}
 function showPreview(n) { const box = $('preview'); box.replaceChildren(); box.hidden = !n; if (!n) return;if(!focusRoot())box.append(el('div',AtlasI18n.t('預覽中 · 點一下進入星系'),'meta')); box.append(el('div', (n.source.publisher || n.source.provider) + ' · ' + (n.display_sources || [n.source.provider]).map(p=>sourceNames[p]).join('／'), 'meta'), el('strong', n.title,'raw'), el('div', date(n.published_at), 'muted')); }
 $('graph').addEventListener('pointermove', e => { const box = $('preview'), r = $('stage').getBoundingClientRect(); if (!box.hidden) { box.style.left = Math.max(8, Math.min(r.width - box.offsetWidth - 8, e.clientX - r.left + 18)) + 'px'; box.style.top = Math.max(8, Math.min(r.height - box.offsetHeight - 8, e.clientY - r.top + 18)) + 'px'; } });
 function evidenceText(edge) {
+  if(globalThis.AtlasRelations)return AtlasRelations.evidence(edge);
   return (edge.evidence || []).map(e => e.entity ? `${e.entity}：${e.source.method === 'provider_ticker' ? AtlasI18n.t('來源標註') : AtlasI18n.t('文章文字')}「${e.source.evidence}」↔ ${e.target.method === 'provider_ticker' ? AtlasI18n.t('來源標註') : AtlasI18n.t('文章文字')}「${e.target.evidence}」` : `共同詞：${(e.title_terms || []).join('、')}；標題相似度 ${e.title_similarity}`).join('；');
 }
 function showArticle(n,pin=true) {
-  selected = n.id;if(pin){acquireRoot(n);touchFocus();}
+  selected = n.id;if(pin){acquireRoot(n);touchFocus();if(graph&&viewMode==='network'&&!graph.graphData().nodes.some(a=>a.id===n.id))renderNetwork();}
   const root = $('article'); root.replaceChildren(); const card = el('div', null, 'card');
   card.append(el('div', `${n.source.publisher || n.source.provider} · ${date(n.published_at)}`, 'meta raw'), el('h3', n.title,'raw'), el('p', n.summary || '來源未提供摘要。', n.summary?'muted raw':'muted'));
   for (const entity of n.entities || []) card.append(el('span', `${entity.id} · ${entity.method === 'provider_ticker' ? '來源標註' : '文字辨識'}`, 'tag'));
@@ -102,7 +170,7 @@ function showArticle(n,pin=true) {
   renderNodeJson(n);
   $('detail').classList.add('open');if(pin&&viewMode==='timeline')renderTimeline();
 }
-function rebuild(payload) {
+function rebuild(payload,relationUpdate=false) {
   rootSearchTicket++;
   interaction?.clear();
   const previousCount = articles.length;
@@ -111,7 +179,7 @@ function rebuild(payload) {
   renderChannelFilter();
   currentView = AtlasView.select(basePayload, viewSources(), isSeparate());
   currentView.relations=AtlasView.filterEdges(currentView.relations,exploration);
-  focusView=currentView;
+  focusView=currentView;refreshCategory();syncHighlightUI();
   syncTimelineRange(currentView.articles);
   syncTimeFocus();
   if(viewMode==='timeline') currentView=AtlasTimeline.filter(currentView,channelFilter,timelineCutoff);
@@ -124,24 +192,35 @@ function rebuild(payload) {
   const groups = AtlasView.groups(basePayload);
   for (const p of providers) $('view-count-'+p).textContent = groups[p]?.articles.length || 0;
   const total = viewSources().reduce((n,p)=>n+(groups[p]?.total_articles ?? groups[p]?.articles.length ?? 0),0);
-  $('viewLimit').textContent = `顯示 ${articles.length} 節點 · 所選來源共 ${total} 筆 · 上限 800`;
+  $('viewLimit').textContent = `${AtlasI18n.t('所選來源')} ${total} · ${AtlasI18n.t('完整資料保留')}`;
   const list = $('list'); list.replaceChildren();
   for (const a of articles) { const b = el('button'); b.append(el('div', (a.display_sources || []).map(p=>sourceNames[p]).join('／') + ' · ' + date(a.published_at), 'meta'), el('div', a.title,'raw')); b.addEventListener('click', () => showArticle(a)); list.append(b); }
   if (selected) { const n = articles.find(a => a.id === selected); if (n) showArticle(n,false); else { selected = null; $('nodeJson').replaceChildren(); $('article').replaceChildren(el('p', '點擊新聞查看來源與關聯依據。', 'muted')); } }
+  renderNetwork();
+  refreshFocus();if(viewMode==='timeline')renderTimeline();
+  if(payload&&!relationUpdate)relationUI?.onPayload(payload);
+}
+function renderNetwork(){
   if (graph && viewMode==='network') {
+   try {
     rememberNetwork();
-    const old = new Map((graph.graphData()?.nodes || []).map(n => [n.id, n]));
-    const nodes = articles.map(a => {
+    const old = new Map((graph?.graphData()?.nodes || []).map(n => [n.id, n]));
+    const priority=[selected,...lockedRoots,...(highlightMode==='category'?categoryTrace.nodes.keys():AtlasView.traceMany(focusView.relations,lockedRoots,exploration).nodes.keys())].filter(Boolean);
+    const slice=AtlasView.renderSlice(currentView,renderBudget,priority);
+    renderedCount=slice.articles.length;renderedEdges=slice.relations.length;
+    $('viewLimit').textContent=`3D ${renderedCount}/${currentView.articles.length} · ${AtlasI18n.t('連線')} ${renderedEdges}/${currentView.relations.length}`;
+    const nodes = slice.articles.map(a => {
       const pos=restoredPositions.get(a.id)||networkPositions.get(a.id)||networkPositions.get(a.display_provider+'::'+a.article_id)||networkPositions.get(a.article_id);
       const n=Object.assign(old.get(a.id)||{},a,pos||{});
       if(pos)n.anchor={x:pos.x,y:pos.y,z:pos.z};
       return n;
     });
     restoredPositions.clear();
-    graph.graphData({ nodes, links: relations.map(r => ({ ...r, from: r.source, to: r.target })) });
-    if (articles.length && !old.size) { clearTimeout(fitTimer); fitTimer = setTimeout(() => graph.zoomToFit(reducedMotion ? 0 : 500, 65), 1000); }
+    graph.graphData({ nodes, links: slice.relations.map(r => ({ ...r, from: r.source, to: r.target })) });
+    if (articles.length && !old.size) { clearTimeout(fitTimer); fitTimer = setTimeout(() => graph?.zoomToFit(reducedMotion ? 0 : 500, 65), 1000); }
+   } catch(error) {reportGraphFailure('context-lost',error.message||String(error));}
   }
-  refreshFocus();if(viewMode==='timeline')renderTimeline();
+  updateActivity();
 }
 function rememberNetwork(distances=false){
   if(!graph)return;
@@ -154,13 +233,16 @@ function renderChannelFilter(){
   for(const c of channelDefinitions){const option=el('option',c.name,c.id.startsWith('custom-')?'raw':'');option.value=c.id;select.append(option);}
   if(channelFilter!=='all'&&!channelDefinitions.some(c=>c.id===channelFilter))channelFilter='all';
   select.value=channelFilter;
+  const graphSelect=$('graphChannel');graphSelect.replaceChildren();const placeholder=el('option','選擇分類');placeholder.value='';graphSelect.append(placeholder);
+  for(const c of channelDefinitions){const option=el('option',c.name,c.id.startsWith('custom-')?'raw':'');option.value=c.id;graphSelect.append(option);}
+  if(!channelDefinitions.some(c=>c.id===graphChannel))graphChannel='';graphSelect.value=graphChannel;
 }
 function syncTimelineRange(rows){
   const range=AtlasTimeline.range(rows,{start:exportMeta.start,end:exportMeta.end});timelineBounds=range;
   const slider=$('timelineCutoff');slider.min=0;slider.max=range.days;
   if(!timelineCutoff||timelineCutoff<range.startDate||timelineCutoff>range.endDate)timelineCutoff=range.endDate;
   slider.value=Math.round((AtlasTimeline.day(timelineCutoff)-range.start)/86400000);slider.disabled=!rows.length;
-  $('cutoffLabel').textContent=timelineCutoff+' UTC';$('timelinePlay').disabled=!rows.length;
+  $('cutoffLabel').textContent=timelineCutoff+' UTC';
 }
 function syncTimeFocus(){
   const bounds=timelineBounds||AtlasTimeline.range([],{start:$('start').value,end:$('end').value});
@@ -204,11 +286,12 @@ function renderTimeline(){
   showPreview(null);
   $('timeline').style.top=(($('graphTools').offsetHeight||220)+25)+'px';
   const width=Math.max(900,$('stage').getBoundingClientRect().width)*(Number($('timelineZoom').value)||1);
-  const renderer=timelineStyle==='density'?AtlasTimeline.renderDensity:AtlasTimeline.render;
+  $('timelineZoomValue').textContent=(Number($('timelineZoom').value)||1)+'×';
+  $('timelineZoomValue').setAttribute('data-zoom',Number($('timelineZoom').value)||1);
+  const renderer=AtlasTimeline.renderDensity;
   const model=renderer($('timeline'),currentView,channelDefinitions,{width,start:timelineBounds?.startDate,end:timelineBounds?.endDate,channel:channelFilter,zoom:Number($('timelineZoom').value)||1,colors,exploration,glow:glowConfig,rootId:pinnedRoot,getRoots:()=>lockedRoots,getTrace:()=>activeTrace,nodeScale:n=>AtlasTimeline.timeScale(n,timeFocus,timelineBounds),getPreviewRoot:()=>hovered,onTrace:showTrace,onBucketSelect:showBucket,onBucketHover:previewBucket,onSelect:showArticle,onHover:(n,e)=>{setHovered(n);positionPreview(e);}});
   if(timelineFocusRequested&&model.nodes.length){const focused=model.nodes.filter(n=>(n.articles||[n.article]).some(a=>lockedRoots.includes(a.id)));const related=model.nodes.filter(n=>(n.articles||[n.article]).some(a=>activeTrace.nodes.has(a.id)));const candidates=focused.length?focused:related.length?related:model.nodes;const anchor=candidates.reduce((a,b)=>a.x<b.x?a:b);$('timeline').scrollLeft=Math.max(0,anchor.x-210);$('timeline').scrollTop=Math.max(0,anchor.y-Math.max(56,(($('timeline').clientHeight||156)+48)/2));timelineFocusRequested=false;}
 }
-function stopPlayback(){if(timelineTimer){clearInterval(timelineTimer);timelineTimer=null;}$('timelinePlay').textContent='播放';}
 function applyMode(){
   if(graphFailure)viewMode='timeline';
   const timeline=viewMode==='timeline';$('timeBellEditor').open=!timeline&&AtlasUI.read('timeCurveOpen',true);layoutTimeBar();$('graph').hidden=timeline;$('glowCanvas').hidden=timeline;glowLayer?.refresh();$('timeline').hidden=!timeline;$('timelineControls').hidden=!timeline;
@@ -216,9 +299,9 @@ function applyMode(){
   $('modeNetwork').setAttribute('aria-pressed',String(!timeline));$('modeTimeline').setAttribute('aria-pressed',String(timeline));
   $('stageHint').textContent=timeline?'橫向捲動／縮放 · 發布日期（UTC）× 主要分類 · 連線非因果':'拖曳節點牽動關聯 · 空白旋轉 · Ctrl＋左鍵拖拉平移 · 金色線跨來源';
   if(graph){if(timeline)graph.pauseAnimation();else graph.resumeAnimation();}
-  updateGraphMessage();
+  syncHighlightUI();updateGraphMessage();
 }
-function switchMode(mode){interaction?.clear();rememberNetwork(true);stopPlayback();timelineFocusRequested=true;viewMode=mode;applyMode();rebuild();}
+function switchMode(mode){if(mode==='network'&&(graphFailure||!graph)){retryGraph();return;}interaction?.clear();rememberNetwork(true);timelineFocusRequested=true;viewMode=mode;applyMode();rebuild();}
 
 function updateDB(stats) { if (stats) $('dbStatus').textContent = `DB ${stats.articles} 筆 · 圖譜快照 ${stats.snapshots || 0} 份`; }
 function paintProgress() {
@@ -240,8 +323,22 @@ function paintProgress() {
   }
   composition.setAttribute('aria-label',values.map(([s,v])=>`${sourceNames[s]}：DB ${v.cached||0}，新增 ${v.new||0}`).join('；') || '尚無資料');
 }
+function acceptSearchGraph(payload,final=false){
+  const count=payload.total_articles??Object.values(AtlasView.groups(payload)).reduce((n,g)=>n+g.articles.length,0);
+  if(pendingSearchMeta){
+    if(!count&&!final&&focusView.articles.length)return;
+    exportMeta=pendingSearchMeta;pendingSearchMeta=null;clearFocus();timelineCutoff=null;
+    networkPositions.clear();internalLengths.clear();selected=null;$('nodeJson').replaceChildren();$('article').replaceChildren();
+  }
+  rebuild(payload);
+}
 function handleEvent(msg) {
-  if (msg.type === 'heartbeat') { $('elapsed').textContent = `處理中 · ${msg.elapsed} 秒`; return; }
+  if(msg.type==='phase'||msg.type==='heartbeat'){
+    if(msg.phase)searchPhase=msg.phase;
+    $('elapsed').textContent=AtlasI18n.t(searchPhase==='relations'?'新聞已載入，正在計算關聯':'正在讀取新聞')+' · '+(msg.elapsed||0)+'s';updateActivity();return;
+  }
+  if(msg.type==='graph'){acceptSearchGraph(msg.graph,true);updateActivity();return;}
+  if(msg.type==='graph_error'){operationNotice=AtlasI18n.t(msg.message);updateActivity();return;}
   if (msg.type === 'status') {
     const v=sourceStates[msg.source] ||= {cached:0,new:0,total:0};
     v.phase=msg.phase==='fetching' ? `讀取中 · ${msg.requests || 0} 次請求` : '檢查／補抓中';
@@ -250,18 +347,18 @@ function handleEvent(msg) {
   }
   if (msg.type === 'cache') {
     for(const [s,count] of Object.entries(msg.counts || {})) sourceStates[s]={cached:count,new:0,total:count,phase:'檢查快取'};
-    rebuild(msg.graph);paintProgress(); return;
+    acceptSearchGraph(msg.graph);paintProgress(); return;
   }
   if (msg.type === 'source') {
     sourceArticles.set(msg.source, msg.articles);
-    rebuild(msg.graph || { articles: [...sourceArticles.values()].flat(), relations: [] });
+    acceptSearchGraph(msg.graph || { articles: [...sourceArticles.values()].flat(), relations: [] });
     const c=msg.cache, v=sourceStates[msg.source] ||= {};
     const cached=c?.existing_articles ?? v.cached ?? 0;
     Object.assign(v,{cached,new:c?.new_articles ?? Math.max(0,msg.articles.length-cached),total:msg.articles.length,done:true,error:msg.error,
       phase:msg.error ? (msg.error_code==='missing_ticker'?'已略過':'部分／失敗') : c?.reused?'快取完成':'完成',
       details:[...(c?[`API 完整 ${c.complete_days}/${c.requested_days} 天 · RSS 快照 ${c.snapshot_days} 天`,...(c.missing_ranges?.length?['仍有未覆蓋日期，可稍後補抓']:[])]:[]),...(msg.warnings||[])]});
     paintProgress();
-    exportMeta.sources ||= {}; exportMeta.sources[msg.source] = { cache:c,error:msg.error,warnings:msg.warnings };
+    const meta=pendingSearchMeta||exportMeta;meta.sources ||= {}; meta.sources[msg.source] = { cache:c,error:msg.error,warnings:msg.warnings };
   }
   if (msg.type === 'done') { updateDB(msg.db); $('elapsed').textContent = `搜尋完成 · ${msg.elapsed ?? 0} 秒`; }
 }
@@ -282,32 +379,38 @@ $('form').addEventListener('submit', async e => {
   persistKey();
   const status = $('status'); status.replaceChildren(); sourceStates = {};
   if (!sources.length || (!query && !ticker)) { status.append(el('p', '請選擇來源並填寫關鍵字或股票代碼。', 'error')); return; }
-  stopPlayback();clearFocus();timelineFocusRequested=true;timelineCutoff=null;networkPositions.clear();internalLengths.clear();if(graph)graph.graphData({nodes:[],links:[]});
-  const request = ++currentSearch; controller = new AbortController(); sourceArticles = new Map();
-  exportMeta = { query, ticker, rss_region:$('rssRegion').value||'TW', start: $('start').value, end: $('end').value, sources: {} };
-  selected = null; $('nodeJson').replaceChildren(); $('article').replaceChildren(); rebuild({ articles: [], relations: [] });
+  const request = ++currentSearch;controller = new AbortController();const searchController=controller;sourceArticles=new Map();
+  const preferred=relationUI?.preferred();relationUI?.setSearchBusy(true);
+  pendingSearchMeta={query,ticker,rss_region:$('rssRegion').value||'TW',start:$('start').value,end:$('end').value,sources:{}};
+  const searchBody={...pendingSearchMeta,sources,massive_key:key,force_refresh:$('forceRefresh').checked,relation_settings:preferred};
+  searchPhase='sources';searchStarted=Date.now();operationNotice='';timelineFocusRequested=true;
+  clearInterval(searchClock);searchClock=setInterval(updateActivity,1000);updateGraphMessage();
   $('submit').disabled = true; $('cancel').hidden = false; $('progress').hidden = false; $('progress').max = sources.length; $('progress').value = 0;
   $('elapsed').textContent = '正在檢查本地日期覆蓋…';
   for (const s of sources) sourceStates[s]={cached:0,new:0,total:0,phase:'等待中'};
   paintProgress();
-  const abortTimer = setTimeout(() => controller?.abort(), 180000);
+  const abortTimer = setTimeout(() => searchController.abort(), 600000);
   try {
-    const response = await fetch('/api/search', { method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...exportMeta, sources, massive_key: key, force_refresh: $('forceRefresh').checked }) });
+    const response = await fetch('/api/search', { method: 'POST', signal: searchController.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(searchBody) });
     if (!response.ok || !response.body) { let detail = `搜尋服務回應異常（${response.status}）`; try { detail = (await response.json()).error || detail; } catch {} throw new Error(detail); }
     const reader = response.body.getReader(), decoder = new TextDecoder(); let buffer = '', finished = false;
     while (true) {
-      const { value, done } = await reader.read(); buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+      const { value, done } = await reader.read();if(request!==currentSearch||searchController.signal.aborted){await reader.cancel();return;} buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
       let idx;
       while ((idx = buffer.indexOf('\n')) >= 0) { const line = buffer.slice(0, idx); buffer = buffer.slice(idx + 1); if (!line) continue; const msg = JSON.parse(line); if (msg.type === 'done') finished = true; handleEvent(msg); }
       if (done) break;
     }
     if (!finished) throw new Error('搜尋連線提早中斷；已載入資料仍保留');
-    $('empty').textContent = graph ? '這段日期沒有取得新聞。請查看來源狀態或調整日期。' : '3D 無法啟動，請使用新聞清單。';
-  } catch (err) { status.append(el('p', err.name === 'AbortError' ? '已停止等待或連線超時。已取得資料保留；伺服器可能仍在完成本次補抓並寫入 DB。' : '搜尋失敗：' + err.message, 'error')); }
-  finally { clearTimeout(abortTimer); if (request === currentSearch) { controller = null; $('submit').disabled = false; $('cancel').hidden = true; $('saveDB').disabled = !focusView.articles.length || saving; } }
+    if(pendingSearchMeta)acceptSearchGraph({articles:[],relations:[],relation_settings:preferred},true);
+  } catch(err){if(request===currentSearch){operationNotice=AtlasI18n.t(err.name==='AbortError'?'已停止等待；已載入資料保留，伺服器可能繼續處理。':'搜尋失敗；目前圖譜保留。')+(err.name==='AbortError'?'':' '+err.message);status.append(el('p',operationNotice,'error'));}}
+  finally{clearTimeout(abortTimer);if(request===currentSearch){controller=null;pendingSearchMeta=null;clearInterval(searchClock);relationUI?.setSearchBusy(false);$('submit').disabled=false;$('cancel').hidden=true;$('saveDB').disabled=!focusView.articles.length||saving;updateGraphMessage();}}
 });
-$('cancel').onclick = () => controller?.abort();
-$('export').onclick = () => { const data = { schema_version: '2.0', search: exportMeta, articles:focusView.articles, relations:focusView.relations, view: {sources:viewSources(),separate:isSeparate(),mode:viewMode,channel_filter:channelFilter,cutoff:timelineCutoff,timeline_style:timelineStyle,exploration,glow:glowConfig,time_focus:timeFocus,focus:{mode:lockedRoots.length?(keywordLocked?'keyword':'single'):'overview',root_ids:lockedRoots,query:keywordLocked?rootSearchState?.query||'':'',limit:rootSearchState?.limit||3},channel_definitions:channelDefinitions}, relation_note: '關聯來自明確代碼、文字實體、主題與標題相似規則；分數不是機率，連線不是因果。' }; const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })); const a = el('a'); a.href = url; a.download = 'news-atlas.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 10000); };
+$('cancel').onclick=()=>{
+  if(!controller)return;const previous=controller;controller=null;currentSearch++;previous.abort();pendingSearchMeta=null;clearInterval(searchClock);
+  relationUI?.setSearchBusy(false);$('submit').disabled=false;$('cancel').hidden=true;$('saveDB').disabled=!focusView.articles.length||saving;
+  operationNotice=AtlasI18n.t('已停止等待；已載入資料保留，伺服器可能繼續處理。');updateGraphMessage();
+};
+$('export').onclick = () => { const data = { schema_version: '2.0', search: exportMeta, articles:focusView.articles, relations:focusView.relations, view: {sources:viewSources(),separate:isSeparate(),mode:viewMode,channel_filter:channelFilter,cutoff:timelineCutoff,timeline_style:timelineStyle,exploration,glow:glowConfig,time_focus:timeFocus,relation_settings:basePayload.relation_settings||relationUI?.applied(),focus:{mode:lockedRoots.length?(keywordLocked?'keyword':'single'):'overview',root_ids:lockedRoots,query:keywordLocked?rootSearchState?.query||'':'',limit:rootSearchState?.limit||3},channel_definitions:channelDefinitions}, relation_note: '關聯來自明確代碼、文字實體、主題與標題相似規則；分數不是機率，連線不是因果。' }; const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })); const a = el('a'); a.href = url; a.download = 'news-atlas.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 10000); };
 $('fit').onclick = () => {if(viewMode==='timeline'){$('timelineZoom').value=1;$('timeline').scrollLeft=0;renderTimeline();}else graph?.zoomToFit(reducedMotion ? 0 : 600, 60);};
 $('openSearch').onclick = () => $('searchPanel').classList.add('open'); $('closeSearch').onclick = () => $('searchPanel').classList.remove('open'); $('closeDetail').onclick = () => $('detail').classList.remove('open'); $('openResults').onclick = () => $('detail').classList.add('open');
 fetch('/api/status').then(r => r.json()).then(info => { updateDB(info.db); if (info.massive_configured){$('key').placeholder = '伺服器已設定 key，可留白';if(!$('key').value)$('keyStatus').textContent='主機已有金鑰，搜尋會自動沿用。';} }).catch(() => {});
@@ -318,7 +421,7 @@ function savedPayload() {
   rememberNetwork();for(const [id,pos] of restoredPositions)networkPositions.set(id,pos);const ids=new Set(focusView.articles.map(a=>a.id));
   const positions=[...networkPositions].filter(([id])=>ids.has(id)).map(([id,p])=>({id,...p}));
   const payload=AtlasView.snapshot(basePayload,focusView,viewSources(),isSeparate(),exportMeta,positions);
-  Object.assign(payload.view,{mode:viewMode,channel_filter:channelFilter,cutoff:timelineCutoff,timeline_zoom:Number($('timelineZoom').value)||1,timeline_style:timelineStyle,exploration,glow:glowConfig,time_focus:timeFocus,focus:{mode:lockedRoots.length?(keywordLocked?'keyword':'single'):'overview',root_ids:lockedRoots,query:keywordLocked?rootSearchState?.query||'':'',limit:rootSearchState?.limit||3},channel_definitions:channelDefinitions});
+  Object.assign(payload.view,{mode:viewMode,channel_filter:channelFilter,cutoff:timelineCutoff,timeline_zoom:Number($('timelineZoom').value)||1,timeline_style:timelineStyle,exploration,glow:glowConfig,time_focus:timeFocus,relation_settings:basePayload.relation_settings||relationUI?.applied(),focus:{mode:lockedRoots.length?(keywordLocked?'keyword':'single'):'overview',root_ids:lockedRoots,query:keywordLocked?rootSearchState?.query||'':'',limit:rootSearchState?.limit||3},channel_definitions:channelDefinitions});
   return payload;
 }
 $('saveDB').onclick = async () => {
@@ -335,14 +438,14 @@ async function restoreSnapshot(id) {
   if(controller || saving){$('saveStatus').textContent='請等待目前搜尋／儲存完成。';return;}
   try {
     const response=await fetch('/api/snapshots/'+encodeURIComponent(id));const saved=await response.json();if(!response.ok)throw new Error(saved.error);
-    stopPlayback();networkPositions.clear();internalLengths.clear();
+    networkPositions.clear();internalLengths.clear();
     for(const p of providers)$('view-'+p).checked=saved.view.sources.includes(p);
     $('separateSources').checked=saved.view.separate;exportMeta={...saved.search,sources:{}};
     // Restoring a graph must not overwrite the user's editable search draft.
     restoredPositions=new Map(saved.view.positions.map(p=>[p.id,p]));for(const [id,p] of restoredPositions)networkPositions.set(id,p);
     timelineFocusRequested=true;viewMode=saved.view.mode||'network';channelFilter=saved.view.channel_filter||'all';timelineCutoff=saved.view.cutoff||null;$('timelineZoom').value=saved.view.timeline_zoom||1;
-    clearFocus();timeFocus=AtlasTimeline.timeSettings(saved.view.time_focus||{enabled:false});AtlasUI.write('timeFocus',timeFocus);glowConfig=AtlasGlow.settings(saved.view.glow||{});syncGlowControls();exploration=AtlasView.settings(saved.view.exploration||{});syncRelationControls();timelineStyle=saved.view.timeline_style||'density';$('timelineStyle').value=timelineStyle;
-    selected=null;$('article').replaceChildren(el('p','點擊新聞查看來源與關聯依據。','muted'));$('nodeJson').replaceChildren();applyMode();rebuild({source_graphs:saved.source_graphs,cross_relations:saved.cross_relations,channel_definitions:saved.view.channel_definitions?.length?saved.view.channel_definitions:channelCatalog});
+    clearFocus();timeFocus=AtlasTimeline.timeSettings(saved.view.time_focus||{enabled:false});AtlasUI.write('timeFocus',timeFocus);glowConfig=AtlasGlow.settings(saved.view.glow||{});syncGlowControls();exploration=AtlasView.settings(saved.view.exploration||{});syncRelationControls();
+    relationUI?.restore(saved.view.relation_settings);selected=null;$('article').replaceChildren(el('p','點擊新聞查看來源與關聯依據。','muted'));$('nodeJson').replaceChildren();applyMode();rebuild({relation_settings:saved.view.relation_settings,source_graphs:saved.source_graphs,cross_relations:saved.cross_relations,channel_definitions:saved.view.channel_definitions?.length?saved.view.channel_definitions:channelCatalog});
     const focus=saved.view.focus;if(focus?.root_ids?.length){lockedRoots=focus.root_ids.filter(id=>focusView.articles.some(a=>a.id===id));keywordLocked=focus.mode==='keyword'&&lockedRoots.length>0;$('rootQuery').value=focus.query||'';$('rootLimit').value=focus.limit||3;if(keywordLocked){rootSearchState={query:focus.query,limit:focus.limit,matches:lockedRoots.map(id=>({id,title:focusView.articles.find(a=>a.id===id).title,evidence:[]}))};renderRootResults();}refreshFocus();if(viewMode==='timeline')renderTimeline();touchFocus();}
     $('saveStatus').textContent=`已載入「${saved.name}」· ${date(saved.created_at)}`;sourceStates={};
     for(const [s,g] of Object.entries(saved.source_graphs))sourceStates[s]={cached:g.articles.length,new:0,total:g.articles.length,done:true,phase:'已存圖譜'};
@@ -352,9 +455,18 @@ async function restoreSnapshot(id) {
 }
 $('modeNetwork').onclick=()=>switchMode('network');$('modeTimeline').onclick=()=>switchMode('timeline');
 $('channelFilter').onchange=()=>{channelFilter=$('channelFilter').value;timelineFocusRequested=true;rebuild();};
-$('timelineZoom').oninput=renderTimeline;
+function zoomTimeline(value){
+  const scroller=$('timeline'),old=Number($('timelineZoomValue').dataset?.zoom)||1;
+  const next=Math.max(1,Math.min(4,Number(value)||1));
+  const center=(scroller.scrollLeft+(scroller.clientWidth||0)/2-170)/old;
+  $('timelineZoom').value=next;$('timelineZoomValue').textContent=next+'×';
+  $('timelineZoomValue').setAttribute('data-zoom',next);renderTimeline();
+  scroller.scrollLeft=Math.max(0,170+center*next-(scroller.clientWidth||0)/2);
+}
+$('timelineZoom').oninput=()=>zoomTimeline($('timelineZoom').value);
+$('timelineZoomOut').onclick=()=>zoomTimeline(Number($('timelineZoom').value)-.5);
+$('timelineZoomIn').onclick=()=>zoomTimeline(Number($('timelineZoom').value)+.5);
 $('timelineCutoff').oninput=()=>{const range=timelineBounds||AtlasTimeline.range([],{start:exportMeta.start,end:exportMeta.end});timelineCutoff=new Date(range.start+Number($('timelineCutoff').value)*86400000).toISOString().slice(0,10);rebuild();};
-$('timelinePlay').onclick=()=>{if(timelineTimer){stopPlayback();return;}const slider=$('timelineCutoff');if(+slider.value>=+slider.max)slider.value=0;slider.oninput();$('timelinePlay').textContent='暫停';timelineTimer=setInterval(()=>{slider.value=Math.min(+slider.max,+slider.value+1);slider.oninput();if(+slider.value>=+slider.max)stopPlayback();},900);};
 $('timeline').addEventListener('click',e=>{if(!e.target.closest?.('[data-node-id], [data-bucket-id], button'))clearFocus();});
 $('timeline').addEventListener('pointermove',e=>{if(!$('preview').hidden)positionPreview(e);});
 function resetChannelForm(){editingChannel=null;$('channelName').value='';$('channelKeywords').value='';$('channelMatch').value='any';$('channelColor').value='#9dd6c4';$('channelSubmit').textContent='新增 Channel';$('channelCancel').hidden=true;}
@@ -378,7 +490,7 @@ $('channelCancel').onclick=resetChannelForm;$('reclassify').onclick=reclassifyCu
 loadSnapshots();loadChannels();applyMode();
 $('graphFallback').addEventListener('toggle',()=>{if(viewMode==='timeline')renderTimeline();});
 
-$('manageChannels').onclick=()=>{$('searchPanel').classList.add('open');$('channelManager').open=true;$('channelManager').scrollIntoView({block:'nearest',behavior:reducedMotion?'instant':'smooth'});};
+$('manageChannels').onclick=()=>{$('searchPanel').classList.add('open');$('channelManager').open=true;$('channelForm').scrollIntoView({block:'start',behavior:reducedMotion?'instant':'smooth'});$('channelName').focus({preventScroll:true});};
 
 function renderNodeJson(n){
   const fields=['id','title','summary','url','published_at','source','symbols','language','fetched_at','entities','topics','analysis_version','origins','channels','primary_channel','channel_version'];
@@ -396,7 +508,6 @@ function previewBucket(bucket,event){const box=$('preview');box.replaceChildren(
 function syncRelationControls(){if($('glowLegend'))syncGlowControls();for(const k of ['internalMin','crossMin','depth','branchLimit','pathMin']){$('rel-'+k).value=exploration[k];$('out-'+k).textContent=exploration[k];}}
 for(const k of ['internalMin','crossMin','depth','branchLimit','pathMin'])$('rel-'+k).oninput=()=>{rememberNetwork(true);exploration=AtlasView.settings({...exploration,[k]:Number($('rel-'+k).value)});syncRelationControls();AtlasUI.write('exploration',exploration);rebuild();};
 $('resetRelations').onclick=()=>{exploration=AtlasView.settings();syncRelationControls();AtlasUI.write('exploration',exploration);rememberNetwork(true);rebuild();};
-$('timelineStyle').value=timelineStyle;$('timelineStyle').onchange=()=>{timelineStyle=$('timelineStyle').value;AtlasUI.write('timelineStyle',timelineStyle);timelineFocusRequested=true;renderTimeline();};
 syncRelationControls();
 const persistKey=AtlasUI.initKey($,{
   persist:async key=>{const response=await fetch('/api/settings/massive-key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})});if(!response.ok)throw Error('Key persistence failed');$('keyStatus').textContent='已保存於本機；重啟或換 port 會沿用。';},
@@ -415,13 +526,17 @@ function updateGlow(){glowConfig=AtlasGlow.settings({enabled:$('glow-enabled').c
 for(const key of ['brightness','radius','decay','background'])$('glow-'+key).oninput=updateGlow;$('glow-enabled').onchange=updateGlow;
 $('resetGlow').onclick=()=>{glowConfig=AtlasGlow.settings();AtlasUI.write('glow',glowConfig);syncGlowControls();refreshFocus();if(viewMode==='timeline')renderTimeline();};
 $('clearRoot').onclick=clearFocus;
-function glowState(){const preview=focusRoot()===null&&hovered!==null;return {graph,trace:preview?candidateTrace:activeTrace,config:preview?{...glowConfig,brightness:glowConfig.brightness*.3,radius:glowConfig.radius*.7}:glowConfig,colors,active:viewMode==='network'&&(focusRoot()!==null||preview),visible:viewMode==='network',reducedMotion,nodeStyle:nodeColor,edgeStyle,hitGuide:preview?interaction?.guide(hovered):Date.now()<stickyGuideUntil?interaction?.guide(focusRoot()):null};}
-glowLayer=AtlasGlow.attach($('glowCanvas'),glowState);syncGlowControls();
-if(timeLensAvailable)timeSizer=AtlasTimeLens.attach(graph,()=>({config:timeFocus,dates:timelineBounds}));
+function glowState(){const category=highlightMode==='category'&&viewMode==='network',preview=!category&&focusRoot()===null&&hovered!==null;return {graph,trace:category?categoryTrace:preview?candidateTrace:activeTrace,config:preview?{...glowConfig,brightness:glowConfig.brightness*.3,radius:glowConfig.radius*.7}:glowConfig,colors,active:viewMode==='network'&&(graphHasHighlight()||preview),visible:viewMode==='network',reducedMotion,nodeStyle:nodeColor,edgeStyle,hitGuide:preview?interaction?.guide(hovered):Date.now()<stickyGuideUntil?interaction?.guide(focusRoot()):null};}
+syncGlowControls();
 new ResizeObserver(layoutTimeBar).observe($('timeFocusBar'));
 
-idleFocus=AtlasInteraction.idleFocus(clearFocus,{isBusy:()=>interaction?.isDragging()===true||timeLens?.isDragging()===true});
-interaction=AtlasInteraction.attach($('graph'),{getGraph:()=>graph,enabled:()=>viewMode==='network'&&!!graph,onHover:setHovered,onSelect:showArticle,onDragEnd:()=>rememberNetwork(),onBackground:clearFocus,onActivity:touchFocus,strength:()=>Number($('stickyStrength').value)});
+idleFocus=AtlasInteraction.idleFocus(clearFocus,{isBusy:()=>highlightMode==='category'||$('relationDialog')?.open===true||interaction?.isDragging()===true||timeLens?.isDragging()===true});
+function attachGraphBehaviors(){
+  glowLayer=AtlasGlow.attach($('glowCanvas'),glowState);
+  if(timeLensAvailable)timeSizer=AtlasTimeLens.attach(graph,()=>({config:timeFocus,dates:timelineBounds}));
+  interaction=AtlasInteraction.attach($('graph'),{getGraph:()=>graph,enabled:()=>viewMode==='network'&&!!graph,onHover:setHovered,onSelect:showArticle,onDragEnd:()=>rememberNetwork(),onBackground:clearGraphSelection,onActivity:touchFocus,strength:()=>Number($('stickyStrength').value)});
+}
+attachGraphBehaviors();
 $('stickyStrength').value=AtlasUI.read('stickyStrength',65);$('stickyStrengthValue').textContent=$('stickyStrength').value+'%';
 $('stickyStrength').oninput=()=>{$('stickyStrengthValue').textContent=$('stickyStrength').value+'%';AtlasUI.write('stickyStrength',Number($('stickyStrength').value));stickyGuideUntil=Date.now()+2000;touchFocus();interaction?.refresh();glowLayer?.refresh();};
 for(const name of ['pointermove','pointerdown','pointerup','wheel','keydown'])document.addEventListener?.(name,touchFocus,{capture:true,passive:true});
@@ -434,6 +549,7 @@ function rootFeedback(message,state='info'){
   const box=$('rootSearchStatus');box.textContent=message;box.className='root-search-status '+state;
 }
 async function searchRuntimeRoots(event){
+  if(highlightMode==='category'&&viewMode==='network')return;
   event?.preventDefault();event?.stopPropagation?.();if(rootSearchBusy)return;
   const query=$('rootQuery').value.trim(),limit=Number($('rootLimit').value);
   if(!query){rootFeedback(AtlasI18n.t('請輸入圖內搜尋關鍵字。'),'warning');return;}
@@ -448,7 +564,7 @@ async function searchRuntimeRoots(event){
     if(ticket!==rootSearchTicket){rootFeedback(AtlasI18n.t('圖譜或選取已變更，請重新搜尋。'),'warning');return;}
     const result=AtlasView.rankRoots(articles,query,limit);
     if(!result.roots.length){rootFeedback(`「${query}」 · ${AtlasI18n.t('已掃描')} ${result.scanned_articles} · ${AtlasI18n.t('命中')} 0 · `+AtlasI18n.t('沒有符合的 roots；保留目前圖譜與星系。'),'warning');return;}
-    lockedRoots=result.roots.map(r=>r.id);keywordLocked=true;rootSearchState={query,limit,matches:result.roots,total:result.matched_articles};
+    lockedRoots=result.roots.map(r=>r.id);if(focusView.articles.length>renderBudget)renderNetwork();keywordLocked=true;rootSearchState={query,limit,matches:result.roots,total:result.matched_articles};
     refreshFocus();renderRootResults();if(viewMode==='timeline'){timelineFocusRequested=true;renderTimeline();}
     const warnings=[];
     if(!glowConfig.enabled||glowConfig.brightness===0)warnings.push(AtlasI18n.t('光暈已關閉或亮度為 0，請至光暈設定開啟。'));
@@ -458,7 +574,7 @@ async function searchRuntimeRoots(event){
     if(viewMode==='timeline'&&timelineStyle==='density')warnings.push(AtlasI18n.t('密度格以最淺關聯深度高亮；★ 表示 root，比例表示格內命中篇數。'));
     rootFeedback(`「${query}」 · ${AtlasI18n.t('已掃描')} ${result.scanned_articles} · ${AtlasI18n.t('命中')} ${result.matched_articles} · roots ${lockedRoots.length} · ${AtlasI18n.t('高亮節點')} ${activeTrace.nodes.size}`+(warnings.length?' · '+warnings.join(' '):' · '+AtlasI18n.t('已套用星系；視角保持不變。')),warnings.length?'warning':'success');
   }catch(error){rootFeedback(AtlasI18n.t('圖內搜尋失敗；目前圖譜保留。')+' '+String(error?.message||error),'error');}
-  finally{rootSearchBusy=false;button.disabled=false;button.setAttribute('aria-busy','false');$('rootSearchSpinner').hidden=true;touchFocus();}
+  finally{rootSearchBusy=false;button.disabled=false;button.setAttribute('aria-busy','false');$('rootSearchSpinner').hidden=true;syncHighlightUI();touchFocus();}
 }
 $('rootSearchSubmit').onclick=searchRuntimeRoots;
 $('rootSearch').addEventListener('keydown',event=>{if(event.key==='Enter'&&(!event.target||['rootQuery','rootLimit'].includes(event.target.id))){event.preventDefault();return searchRuntimeRoots(event);}});
@@ -474,4 +590,22 @@ timePanel=AtlasUI.initTimePanel($,()=>{timeLens?.paint();layoutTimeBar();});
 function syncRSSRegion(){const languages={TW:'zh-TW',US:'en-US',HK:'zh-HK',JP:'ja',GB:'en-GB'},region=$('rssRegion').value||'TW';$('yahooRegion').textContent=region+' · '+languages[region];}
 $('rssRegion').addEventListener('change',syncRSSRegion);syncRSSRegion();
 
-document.addEventListener?.('keydown',event=>{if(event.key==='Escape'&&!['INPUT','TEXTAREA','SELECT'].includes(event.target?.tagName))clearFocus();});
+document.addEventListener?.('keydown',event=>{if(event.key==='Escape'&&!$('relationDialog')?.open&&!['INPUT','TEXTAREA','SELECT'].includes(event.target?.tagName))clearGraphSelection();});
+
+if(globalThis.AtlasRelations)relationUI=AtlasRelations.init($,{
+  status:state=>{relationActivity=state;updateActivity();},
+  get:()=>basePayload,
+  put:payload=>{rememberNetwork(true);rebuild(payload,true);},
+  view:payload=>{const view=AtlasView.select(payload,viewSources(),isSeparate());return {...view,relations:AtlasView.filterEdges(view.relations,exploration)};}
+});
+
+function syncSourceColors(){
+  for(const p of providers){$('color-'+p).value=colors[p];$('view-color-'+p).style.backgroundColor=colors[p];}
+  graph?.nodeColor(nodeColor);glowLayer?.refresh();paintProgress();if(viewMode==='timeline')renderTimeline();
+}
+for(const p of providers)$('color-'+p).addEventListener('input',()=>{
+  const value=$('color-'+p).value;if(!/^#[0-9a-f]{6}$/i.test(value))return;
+  colors[p]=value;AtlasUI.write('sourceColors',colors);syncSourceColors();
+});
+$('resetSourceColors').onclick=()=>{Object.assign(colors,defaultColors);AtlasUI.write('sourceColors',colors);syncSourceColors();};
+syncSourceColors();

@@ -5,7 +5,7 @@ import re
 import unicodedata
 from .model import mention
 
-LIMITS = {'articles':800,'relations':6000,'roots':10,'nodes_per_tree':150}
+LIMITS = {'articles':None,'relations':None,'roots':10,'nodes_per_tree':150}
 DEFAULTS = {'internalMin':0,'crossMin':0,'depth':2,'branchLimit':4,'pathMin':.25,'maxNodes':150}
 
 def settings(value=None):
@@ -24,7 +24,7 @@ def settings(value=None):
 def graph_input(value):
     if not isinstance(value,dict): raise ValueError('graph 必須是 object')
     articles,edges=value.get('articles'),value.get('relations',[])
-    if not isinstance(articles,list) or len(articles)>800 or not isinstance(edges,list) or len(edges)>6000: raise ValueError('圖譜最多 800 節點／6000 關聯')
+    if not isinstance(articles,list) or not isinstance(edges,list): raise ValueError('articles 與 relations 必須是陣列')
     ids=set()
     for row in articles:
         if not isinstance(row,dict) or not isinstance(row.get('id'),str) or not 1<=len(row['id'])<=100 or row['id'] in ids or not isinstance(row.get('title'),str) or len(row['title'])>2000 or not isinstance(row.get('summary',''),str) or len(row.get('summary',''))>12000: raise ValueError('無效或重複的文章')

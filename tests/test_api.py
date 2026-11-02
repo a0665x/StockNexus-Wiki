@@ -15,6 +15,21 @@ class APIContractTests(unittest.TestCase):
         self.assertIn(b'200 OK',head,data)
         return json.loads(data)
 
+    def test_all_articles_rebuild_classify_and_snapshot_over_old_limit(self):
+        from news_atlas.model import article
+        from news_atlas.relation_settings import DEFAULTS
+        rows=[article('google','Archive item',f'https://example.test/full/{i}','2025-12-31T23:30:00Z') for i in range(1001)]
+        graph=self.post('/api/graph/build',{'articles':rows,'relation_settings':{**DEFAULTS,'entity':False,'topic':False,'title':False}})
+        self.assertEqual(len(graph['articles']),1001)
+        self.assertIsNone(graph['display_limit'])
+        classified=self.post('/api/classify',{'articles':rows*3})
+        self.assertEqual(len(classified['annotations']),3003)
+        body={'view':{'sources':['google'],'separate':False},'source_graphs':{'google':graph['source_graphs']['google']},'search':{}}
+        head,data=self.request('POST','/api/snapshots',body)
+        self.assertIn(b'201',head)
+        restored=self.store.load_snapshot(json.loads(data)['id'])
+        self.assertEqual(len(restored['source_graphs']['google']['articles']),1001)
+
     def test_contract_and_local_docs(self):
         spec=specification();names=[]
         for path,methods in spec['paths'].items():

@@ -38,37 +38,86 @@
       for(const [id,max]of [['query',200],['ticker',20]])if(typeof saved[id]==='string')$(id).value=saved[id].slice(0,max);
       if(Array.isArray(saved.sources)&&saved.sources.every(p=>providers.includes(p)))for(const p of providers)$('source-'+p).checked=saved.sources.includes(p);
       if(['TW','US','HK','JP','GB'].includes(saved.rss_region))$('rssRegion').value=saved.rss_region;
-      if(typeof saved.forceRefresh==='boolean')$('forceRefresh').checked=saved.forceRefresh;
+
       dates.restore(saved.dates);
     }
+    $('forceRefresh').checked=false;
     function save(){
-      const draft={rss_region:$('rssRegion').value||'TW',query:$('query').value,ticker:$('ticker').value,sources:providers.filter(p=>$('source-'+p).checked),forceRefresh:$('forceRefresh').checked===true,dates:dates.state()};
+      const draft={rss_region:$('rssRegion').value||'TW',query:$('query').value,ticker:$('ticker').value,sources:providers.filter(p=>$('source-'+p).checked),dates:dates.state()};
       const ok=write('searchDraft',draft);$('searchDraftStatus').textContent=ok?'搜尋設定已自動保存在此瀏覽器。':'瀏覽器儲存不可用；重新整理後無法保留搜尋設定。';return ok;
     }
     for(const id of ['query','ticker','rssRegion','forceRefresh',...providers.map(p=>'source-'+p)])for(const event of ['input','change'])$(id).addEventListener(event,save);
     dates.onChange(save);save();return save;
   }
+  // Each stage coordinates its tools, including restored and resized geometry.
+  const floatingStages=new WeakMap();
   function initFloatingPanel($,{key,panelId,bodyId,handleId,toggleId,resetId,onChange=()=>{}}){
     const panel=$(panelId),body=$(bodyId),handle=$(handleId),toggle=$(toggleId),stage=$('stage');
+    let group=floatingStages.get(stage);if(!group){group={panels:[],busy:false};floatingStages.set(stage,group);}
     const saved=read(key,{});let x=Number(saved?.x)||0,y=Number(saved?.y)||0,collapsed=saved?.collapsed===true,drag=null,suppressClick=false;
     const persist=()=>write(key,{x,y,collapsed});
+    const rectOf=()=>panel.getBoundingClientRect();
+    const overlaps=(a,b)=>a.left<b.left+b.width+8&&a.left+a.width+8>b.left&&a.top<b.top+b.height+8&&a.top+a.height+8>b.top;
+    function avoid(){
+      if(group.busy)return;
+      group.busy=true;
+      try{
+        for(const other of group.panels){
+          if(other.panel===panel)continue;
+          let a=rectOf(),b=other.rect();if(!overlaps(a,b))continue;
+          const area=stage.getBoundingClientRect();
+          const place=()=>{
+            a=rectOf();b=other.rect();
+            const clampX=v=>Math.max(area.left,Math.min(area.right-a.width,v));
+            const clampY=v=>Math.max(area.top,Math.min(area.bottom-a.height,v));
+            const candidates=[[b.left-a.width-8,clampY(a.top)],[b.left+b.width+8,clampY(a.top)],[clampX(a.left),b.top-a.height-8],[clampX(a.left),b.top+b.height+8]];
+            const valid=candidates.filter(([left,top])=>left>=area.left&&top>=area.top&&left+a.width<=area.right&&top+a.height<=area.bottom&&!overlaps({left,top,width:a.width,height:a.height},b));
+            valid.sort((u,v)=>Math.hypot(u[0]-a.left,u[1]-a.top)-Math.hypot(v[0]-a.left,v[1]-a.top));
+            if(!valid.length)return false;
+            x+=valid[0][0]-a.left;y+=valid[0][1]-a.top;panel.style.transform=`translate(${x}px,${y}px)`;persist();return true;
+          };
+          if(!place()){
+            other.compact();
+            if(!place()){
+              // A compact sibling in the middle must yield to the tool being opened.
+              const small=other.rect();let placed=false;
+              for(const [left,top] of [[area.left,area.top],[area.right-small.width,area.top],[area.left,area.bottom-small.height],[area.right-small.width,area.bottom-small.height]]){
+                other.moveTo(left,top);if(place()){placed=true;break;}
+              }
+              if(!placed){collapsed=true;paint();place();persist();}
+            }
+          }
+        }
+      }finally{group.busy=false;}
+    }
     function constrain(){
       const area=stage.getBoundingClientRect(),rect=panel.getBoundingClientRect(),baseX=rect.left-x,baseY=rect.top-y;
       x=Math.max(area.left-baseX,Math.min(area.right-baseX-rect.width,x));
       y=Math.max(area.top-baseY,Math.min(area.bottom-baseY-Math.min(rect.height,area.height),y));
-      panel.style.transform=`translate(${x}px,${y}px)`;onChange();
+      panel.style.transform=`translate(${x}px,${y}px)`;avoid();onChange();
     }
     function paint(){body.hidden=collapsed;panel.classList.toggle('collapsed',collapsed);toggle.setAttribute('aria-expanded',String(!collapsed));handle.setAttribute('aria-expanded',String(!collapsed));panel.style.transform=`translate(${x}px,${y}px)`;constrain();}
     function fold(){const before=panel.getBoundingClientRect();collapsed=!collapsed;paint();const after=panel.getBoundingClientRect();x+=before.left-after.left;y+=before.top-after.top;panel.style.transform=`translate(${x}px,${y}px)`;constrain();persist();}
     toggle.onclick=fold;
-    $(resetId).onclick=()=>{x=0;y=0;panel.style.transform='';persist();onChange();};
+    $(resetId).onclick=()=>{x=0;y=0;panel.style.transform='';constrain();if(x===0&&y===0)panel.style.transform='';persist();};
+    panel.addEventListener('click',e=>{if(e.target===panel&&collapsed&&!suppressClick)fold();});
     handle.onclick=e=>{if(suppressClick&&e?.detail!==0){suppressClick=false;return;}if(collapsed)fold();};
-    handle.addEventListener('pointerdown',e=>{if(e.button!==0)return;drag={id:e.pointerId,cx:e.clientX,cy:e.clientY,x,y,moved:false};handle.setPointerCapture(e.pointerId);e.preventDefault();e.stopPropagation();});
-    handle.addEventListener('pointermove',e=>{if(!drag||drag.id!==e.pointerId)return;drag.moved ||= Math.hypot(e.clientX-drag.cx,e.clientY-drag.cy)>4;x=drag.x+e.clientX-drag.cx;y=drag.y+e.clientY-drag.cy;panel.style.transform=`translate(${x}px,${y}px)`;constrain();});
-    const end=e=>{if(!drag||drag.id!==e.pointerId)return;suppressClick=drag.moved;if(suppressClick)setTimeout(()=>{suppressClick=false;},0);drag=null;if(handle.hasPointerCapture?.(e.pointerId))handle.releasePointerCapture(e.pointerId);persist();};
-    for(const event of ['pointerup','pointercancel','lostpointercapture'])handle.addEventListener(event,end);
+    const start=e=>{
+      if(e.button!==0)return;
+      const control=e.target?.closest?.('button,input,select,textarea,a,label,summary,svg,[role="slider"],[contenteditable="true"]');
+      if(control&&control!==handle)return;
+      drag={id:e.pointerId,cx:e.clientX,cy:e.clientY,x,y,moved:false};panel.setPointerCapture(e.pointerId);e.preventDefault();e.stopPropagation();
+    };
+    const move=e=>{if(!drag||drag.id!==e.pointerId)return;drag.moved ||= Math.hypot(e.clientX-drag.cx,e.clientY-drag.cy)>4;if(!drag.moved)return;x=drag.x+e.clientX-drag.cx;y=drag.y+e.clientY-drag.cy;panel.style.transform=`translate(${x}px,${y}px)`;constrain();};
+    const end=e=>{if(!drag||drag.id!==e.pointerId)return;suppressClick=drag.moved;if(suppressClick)setTimeout(()=>{suppressClick=false;},0);drag=null;if(panel.hasPointerCapture?.(e.pointerId))panel.releasePointerCapture(e.pointerId);persist();};
+    // Keep handle listeners for keyboard/legacy integrations; stop bubbling on start.
+    for(const surface of [panel,handle]){
+      surface.addEventListener('pointerdown',start);surface.addEventListener('pointermove',move);
+      for(const event of ['pointerup','pointercancel','lostpointercapture'])surface.addEventListener(event,end);
+    }
     handle.addEventListener('keydown',e=>{const delta={ArrowLeft:[-20,0],ArrowRight:[20,0],ArrowUp:[0,-20],ArrowDown:[0,20]}[e.key];if(!delta)return;e.preventDefault();x+=delta[0];y+=delta[1];panel.style.transform=`translate(${x}px,${y}px)`;constrain();persist();});
     if(typeof ResizeObserver!=='undefined'){const observer=new ResizeObserver(constrain);observer.observe(stage);observer.observe(panel);}
+    group.panels.push({panel,rect:rectOf,moveTo(left,top){const rect=rectOf();x+=left-rect.left;y+=top-rect.top;panel.style.transform=`translate(${x}px,${y}px)`;constrain();persist();},compact(){if(collapsed)return;const before=rectOf();collapsed=true;paint();const after=rectOf();x+=before.left-after.left;y+=before.top-after.top;panel.style.transform=`translate(${x}px,${y}px)`;constrain();persist();}});
     paint();return {constrain,state:()=>({x,y,collapsed})};
   }
   const initSourcePanel=$=>initFloatingPanel($,{key:'sourcePanel',panelId:'sourcePanel',bodyId:'sourcePanelBody',handleId:'sourcePanelDrag',toggleId:'sourcePanelToggle',resetId:'sourcePanelReset'});

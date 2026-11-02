@@ -36,7 +36,7 @@ python3 tests/browser_runtime_search.py /tmp/graphnews-runtime-regression.html
 
 [產生器](../tests/browser_runtime_search.py) 只讀目前本地 NVDA memberships，各來源最多取 800，再以真實快取建立離線 HTML；需要 DB 及已有 NVDA 資料，不自造替代資料。用 WebGL 瀏覽器開啟，檢查 `document.body.dataset.qa`。
 
-目前腳本實際測 IPO、三來源、800 節點限制、spinner／成功提示、零筆命中、Enter 隔離、無網路／graphData 寫入及光暈像素、實際 WebGL 半徑變化、12 個月刻度、相機不變、密度格／逐篇同步森林。腳本開頭部分描述可能仍寫 robot，應以實際測試程式為準。日期目前固定為 2025-10-28 至 2026-10-28；跨日期／資料環境需明確更新測試條件，不能無條件把它當 live search 驗證。
+目前腳本實際測 IPO、三來源、完整節點保留、spinner／成功提示、零筆命中、Enter 隔離、無網路／graphData 寫入及光暈像素、實際 WebGL 半徑變化、12 個月刻度、相機不變、密度格同步森林與縮放按鈕。腳本開頭部分描述可能仍寫 robot，應以實際測試程式為準。日期目前固定為 2025-10-28 至 2026-10-28；跨日期／資料環境需明確更新測試條件，不能無條件把它當 live search 驗證。
 
 回放會在 /tmp 產生含真實新聞的檔案，不要提交這些 HTML 或 DB。先前 session 的 /tmp 其他 QA 腳本不是專案依賴，不保證存在。
 
@@ -66,3 +66,47 @@ python3 tests/browser_startup.py /tmp/graphnews-startup-degraded.html /time-lens
 測試不能只記「通過」：變更摘要寫入 [CHANGELOG.md](CHANGELOG.md)，事故的失敗證據、修復、實測與未驗證項目寫入 [啟動事故紀錄](references/bugfix-20261029-frontend-asset-startup.md) 等 references。新 JS 必須跑實際 Handler 資源檢查與正常／缺模組兩種瀏覽器啟動情境。
 
 本輪追加：`test_regions.py` 測共享版區／cache key、同 URL 跨地區與併發 origins、SQLite 3→4 相容；`test_credentials.py` 測重啟沿用、權限、錯誤輸入、HTTP/DB 不洩漏；`test_key_persistence.cjs` 測在途保存與忘記順序。browser_startup 同時量測兩面板收合 36px、移動／展開、不同寬度下圓點比例、Quick range、地區標示／提交。真實快取 replay 包含純水平調寬且另一側不變，以及收合兩面板不改 graph。
+
+
+Edge 定義回歸：`python3 -m unittest discover -s tests -p test_relation_settings.py -v`、`node tests/test_relation_settings.cjs`。實際 HTTP assets／API 回應的離線瀏覽器回放：`python3 tests/browser_relations.py /tmp/atlas-relations.html`，以 Chrome 開啟，body.dataset.qa 應 PASS。涵蓋單一套用／spinner／progress、孤立點、同一 3D node 物件、roots、快照 metadata、失敗保留及每條線的證據。所有 fixture 使用隔離測試資料，不寫正式 DB。
+
+
+原生瀏覽器互動回歸：`python3 tests/browser_native_controls.py`（需 google-chrome 與測試用 websocket-client）。以 CDP Input 真正派送滑鼠／鍵盤，不使用 element.click() 代替：兩工具收合→點開→拖曳→再點開、單一套用、tooltip 顯示／靜止淡出／移動恢復必須全 true。舊 synthetic smoke 未涵蓋 pointer capture click retargeting 與 select input→change 順序，不能單靠它宣稱這些操作正確。
+
+Docker 啟動器：`python3 -m unittest discover -s tests -p test_docker_launcher.py -v`，含固定專案／互斥鎖、重複 up、殘留清理、失敗清理、外部 port 衝突、不安裝 Tailscale 不問、已有 Serve 沿用／衝突不覆寫，以及 mock PTY 左右鍵確認＋雙 URL。實際部署驗證兩次 up 後容器 ID 不變，測試不得停止其他專案。
+
+資料路徑：`python3 -m unittest discover -s tests -p test_storage_paths.py -v`；隔離資料驗證 WAL、私有檔權限、備份及連結、非空目標拒絕、啟用連結／保存設定失敗復原、缺席磁碟拒絕、其他磁碟篩選及自訂入口。磁碟候選測試模擬掛載，不代表實體外接磁碟已驗證。
+
+跨年回歸：`python3 -m unittest discover -s tests -p test_year_boundary.py -v`，涵蓋來源 UTC 跨年格式、含尾日／排他上限、SQLite 覆蓋、Massive 分頁、RSS 日期參數、全年窗口先行以及完整圖譜保留跨年文章。`test_graph_view.cjs` 驗證前端保留全部 1600 筆多來源文章。原生瀏覽器新增固定密度格、無播放／呈現選單、Channel 右方縮放、完整年份與自訂分類入口。來源現況證據與未驗證範圍見 SOURCES_AND_CACHE。
+
+完整資料與偏好回歸：API 1001 節點重算／快照、3003 筆分類；原生 Chrome 1201 節點時間軸／3D、來源調色盤保存與重設、forceRefresh 舊偏好不恢復。Docker 測試包含英文訊息、網路離線 WARN 與 storage write/fsync。
+
+### Graph recovery and concurrent user journeys (2026-11-02)
+
+Run `python3 tests/browser_user_journeys.py` (Chrome and websocket-client required).
+Uses isolated fixtures served through the real handler, real pointer clicks and a real
+WebGL renderer. It prints a verdict for each action and exits nonzero on failure.
+Covers delayed search/edges, view/source switching while waiting, Apply cancellation,
+stale responses, search cancellation and replacement, category/root isolation,
+7,106 retained records with an 800-node GPU budget, offscreen article selection,
+`WEBGL_lose_context`, reduced-budget reconstruction, failed retry then successful retry.
+Screenshot: `/tmp/atlas-user-journeys.png`. No production DB writes or news-provider calls.
+
+`node tests/test_render_budget.cjs` verifies deterministic slicing, retained full data,
+priority selection and endpoint integrity. `tests/test_progressive_search.py` verifies
+news before edge computation, heartbeat, requested settings and edge failure recovery.
+These deterministic fault tests do not establish a universal safe GPU capacity.
+
+`python3 tests/browser_user_journeys.py --no-webgl` disables WebGL in an isolated
+Chrome profile. It verifies explicit failure, retained news, available retry and no
+replacement renderer. The normal journey verifies cleanup exceptions do not block
+3D reconstruction and recovery succeeds once the constructor is available again.
+
+持久圖譜快取：`python3 -m unittest discover -s tests -p test_graph_cache.py -v`。
+隔離 DB 驗證獨立 Python 程序重啟命中、完整結果一致、內容／順序／規則／版本失效、
+同時請求合併、呼叫者物件隔離、損壞／不可寫快取回退及保留數量／payload 大小預算。
+搜尋與 HTTP API 路由仍由完整 Python suite 驗證。快取不代表來源覆蓋已更新。
+
+早期關聯：`test_progressive_search.py` 驗證第一事件已有 warm edges、provider 尚未開始、
+來源完成不清空既有線、內容變更端點不沿用舊 evidence；`test_feature_cache.py` 驗證純特徵
+內容／定義失效、結果物件隔離與 fetched_at 等 metadata 不被覆寫。

@@ -114,7 +114,7 @@ vm.createContext(context);vm.runInContext(fs.readFileSync('dist/i18n.js','utf8')
   vm.runInContext('rebuild()',context);assert.equal(get('graphFallback').hidden,false,'Rebuild cannot hide context loss');
   assert.equal(vm.runInContext('graphFailure.kind',context),'context-lost');
   get('modeTimeline').onclick();assert.equal(get('empty').hidden,true);
-  get('modeNetwork').onclick();assert.equal(vm.runInContext('viewMode',context),'timeline');
+  assert.equal(get('modeNetwork').disabled,false,'Recovery remains available');
   const restoredNodes=data.nodes;get('graph').handlers.webglcontextrestored();
   assert.equal(get('empty').hidden,true);assert.equal(vm.runInContext('graphFailure',context),null);
   assert.equal(data.nodes,restoredNodes,'Restoring a WebGL context does not replace the graph');

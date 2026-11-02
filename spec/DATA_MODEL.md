@@ -39,3 +39,5 @@ Store 每次連線有 transaction context、WAL、15 秒 SQLite timeout。資料
 [snapshots.py](../news_atlas/snapshots.py) 同時服務儲存和 `/api/view/validate`。來源分區、cross 邊、位置 ID、focus 模式／root IDs 需一致。保存只接受白名單欄位，不能把 Three.js mesh／循環物件或 key 序列化進去。
 
 來源新增可選 `source.country`、`source.language`、`source.sites`；同網址跨地區觀測累積於 origins。SQLite 4 以 CREATE TABLE IF NOT EXISTS 加上 membership_origins，不刪資料／不改舊新聞 payload；舊查詢沒有該表記錄時 fallback 原 source。快照 search.rss_region 保存歷史地區，但還原不覆寫正在編輯的地區草稿。Massive key 位於 DB 之外的私有設定檔。
+
+自適應關聯：relation_settings.adaptive 預設 false（API 舊行為相容），WebUI unified 偏好設 true。先以不寬於原始 30／7／3 天與 .18／.5、至少四詞的條件建立 strict edges；再用使用者的較寬條件只補 degree=0 節點，受同一連線預算限制，不做額外密集填線。evidence.adaptive_stage 區分 strict／expanded。

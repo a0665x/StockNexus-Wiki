@@ -1,0 +1,15 @@
+*
+!Dockerfile
+!server.py
+!news_atlas/
+!news_atlas/**
+!dist/
+!dist/**
+!schema/
+!schema/**
+**/__pycache__
+**/*.pyc
+**/*.sqlite3*
+**/*.db*
+**/*.massive-key
+**/.env*

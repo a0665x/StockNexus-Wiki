@@ -70,19 +70,36 @@ window.fetch=async(url,options)=>{
    const panel=byId(prefix==='sourcePanel'?'sourcePanel':'timeFocusBar'),handle=byId(prefix+'Drag'),body=byId(prefix==='sourcePanel'?'sourcePanelBody':'timeFocusBody');
    byId(prefix+'Toggle').click();await wait(30);const folded=panel.getBoundingClientRect();
    checks[prefix+'Compact']=body.hidden&&folded.width<=40&&folded.height<=40;
-   handle.setPointerCapture=()=>{};handle.hasPointerCapture=()=>false;
+   panel.setPointerCapture=()=>{};panel.hasPointerCapture=()=>false;
    const pointer=(name,x,y)=>new PointerEvent(name,{pointerId:7,button:0,clientX:x,clientY:y,bubbles:true,cancelable:true});
    handle.dispatchEvent(pointer('pointerdown',folded.left+18,folded.top+18));handle.dispatchEvent(pointer('pointermove',folded.left-32,folded.top-32));handle.dispatchEvent(pointer('pointerup',folded.left-32,folded.top-32));
    const moved=panel.getBoundingClientRect();checks[prefix+'Move']=Math.hypot(moved.left-folded.left,moved.top-folded.top)>5;
    handle.click();await wait(30);checks[prefix+'Expand']=!body.hidden;
    byId(prefix+'Reset').click();
  }
+ const source=byId('sourcePanel'),time=byId('timeFocusBar');
+ const separate=()=>{const a=source.getBoundingClientRect(),b=time.getBoundingClientRect();return a.right+7.5<=b.left||b.right+7.5<=a.left||a.bottom+7.5<=b.top||b.bottom+7.5<=a.top;};
+ const dragPanel=(panel,dx,dy,target=panel)=>{panel.setPointerCapture=()=>{};panel.hasPointerCapture=()=>false;for(const [name,x,y] of [['pointerdown',0,0],['pointermove',dx,dy],['pointerup',dx,dy]])target.dispatchEvent(new PointerEvent(name,{pointerId:8,button:0,clientX:x,clientY:y,bubbles:true,cancelable:true}));};
+ let before=source.getBoundingClientRect();dragPanel(source,30,20);let after=source.getBoundingClientRect();
+ checks.backgroundDrag=Math.hypot(after.left-before.left,after.top-before.top)>5;
+ before=source.getBoundingClientRect();dragPanel(source,100,80,byId('rootQuery'));after=source.getBoundingClientRect();checks.inputNotDragged=before.left===after.left&&before.top===after.top;
+ const target=time.getBoundingClientRect();dragPanel(source,target.left-after.left,target.top-after.top);checks.expandedCollision=separate();
+ for(const [id,body] of [['sourcePanelToggle','sourcePanelBody'],['timePanelToggle','timeFocusBody']])if(!byId(body).hidden)byId(id).click();
+ before=source.getBoundingClientRect();const compactTarget=time.getBoundingClientRect();dragPanel(source,compactTarget.left-before.left,compactTarget.top-before.top);checks.compactCollision=separate();
+ byId('sourcePanelDrag').click();await wait(30);checks.expandCollision=separate();
+ byId('timePanelDrag').click();await wait(30);checks.secondExpandCollision=separate();
+ byId('sourcePanelReset').click();byId('timePanelReset').click();
  if(!startupAssets.some(x=>x.status!==200)){
    const panel=byId('timeFocusBar');let round=true;
    for(const width of [310,480]){panel.style.width=width+'px';timeLens.paint();await wait(40);const dot=byId('timeBellHandle').getBoundingClientRect();round&&=Math.abs(dot.width-dot.height)<.6&&dot.width>14;}
    panel.style.width='';timeLens.paint();checks.roundHandle=round;
  }
 
+ const stage=byId('stage'),originalStyle=stage.getAttribute('style')||'';
+ stage.style.width='280px';stage.style.height='200px';byId('sourcePanelReset').click();timePanel.constrain();await wait(100);
+ checks.smallStageCollision=separate();
+ checks.smallStageCompact=byId('sourcePanelBody').hidden||byId('timeFocusBody').hidden;
+ stage.setAttribute('style',originalStyle);timePanel.constrain();await wait(100);checks.restoredStageCollision=separate();
  byId('massiveHelpButton').click();checks.help=byId('massiveHelp').open&&byId('massiveDashboard').href==='https://massive.com/dashboard';
  byId('closeMassiveHelp').click();checks.helpClose=!byId('massiveHelp').open;
  let intercepted=false;byId('form').addEventListener('submit',e=>{intercepted=e.defaultPrevented;e.preventDefault();});
