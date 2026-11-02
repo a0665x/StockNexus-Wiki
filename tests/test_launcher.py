@@ -58,11 +58,11 @@ class LauncherTests(unittest.TestCase):
         self.assertFalse(launch.serves({}, 'test.tail.ts.net', 8443, 'http://127.0.0.1:8765'))
 
     def test_tailscale_requirements(self):
-        with patch.object(launch.shutil, 'which', return_value=None), self.assertRaisesRegex(RuntimeError, '找不到'):
+        with patch.object(launch.shutil, 'which', return_value=None), self.assertRaisesRegex(RuntimeError, 'not found'):
             launch.tailnet_name()
         with patch.object(launch.shutil, 'which', return_value='/bin/tailscale'), \
              patch.object(launch, 'tailscale_json', return_value={'BackendState': 'NeedsLogin'}), \
-             self.assertRaisesRegex(RuntimeError, '尚未連線'):
+             self.assertRaisesRegex(RuntimeError, 'not connected'):
             launch.tailnet_name()
         with patch.object(launch.shutil, 'which', return_value='/bin/tailscale'), \
              patch.object(launch, 'tailscale_json', return_value={'BackendState': 'Running', 'Self': {'DNSName': 'test.tail.ts.net.'}}):
@@ -79,7 +79,7 @@ class LauncherTests(unittest.TestCase):
             self.assertEqual(launch.main([]), 0)
             self.assertEqual(make.call_args_list[-1].args, ('0.0.0.0', 8766))
             run.assert_called_once_with(httpd, 'local', None, None)
-            self.assertIn('剛被其他程序占用', output.getvalue())
+            self.assertIn('was just claimed by another process', output.getvalue())
 
     def test_setup_cancel_never_binds(self):
         with patch.object(sys.stdin, 'isatty', return_value=True), patch.object(launch, 'choose', side_effect=[0, 2]), \
@@ -123,7 +123,7 @@ class LauncherTests(unittest.TestCase):
              patch.object(launch.urllib.request, 'build_opener') as opener, patch.object(launch, 'tailscale_json', return_value={}), \
              patch.object(launch.subprocess, 'Popen', return_value=proxy), contextlib.redirect_stdout(io.StringIO()):
             opener.return_value.open.return_value = response
-            with self.assertRaisesRegex(RuntimeError, '未能保持執行'):
+            with self.assertRaisesRegex(RuntimeError, 'Serve exited'):
                 launch.run_server(httpd, 'tailscale', 'test.tail.ts.net', 8443)
             httpd.shutdown.assert_called_once()
             httpd.server_close.assert_called_once()
@@ -158,12 +158,12 @@ raise SystemExit(launch.main([]))
             os.write(master, b'\x1b[C\x1b[D\r')
             until('[ 8766 ]')
             os.write(master, b'\x1b[C\r')
-            until('[ 啟動 ]')
+            until('[ Start ]')
             os.write(master, b'\r')
             until('URL: http://127.0.0.1:8767')
             self.assertEqual(child.wait(timeout=3), 0)
             self.assertEqual(termios.tcgetattr(slave), before, 'Restore terminal modes after selecting')
-            self.assertIn('8765 已被占用', output.decode(errors='replace'))
+            self.assertIn('8765 is occupied', output.decode(errors='replace'))
         finally:
             if child.poll() is None:
                 child.kill()

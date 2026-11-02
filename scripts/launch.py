@@ -25,16 +25,16 @@ def port_number(text):
     try:
         value = int(text)
     except (TypeError, ValueError):
-        raise argparse.ArgumentTypeError('port 必須是 1–65535 的整數') from None
+        raise argparse.ArgumentTypeError('Port must be an integer from 1 to 65535') from None
     if not 1 <= value <= 65535:
-        raise argparse.ArgumentTypeError('port 必須是 1–65535 的整數')
+        raise argparse.ArgumentTypeError('Port must be an integer from 1 to 65535')
     return value
 
 
 def read_key(fd):
     key = os.read(fd, 1)
     if not key:
-        raise EOFError('終端輸入已關閉')
+        raise EOFError('Terminal input closed')
     if key == b'\x1b':
         # Accept both normal cursor keys (CSI) and application cursor keys (SS3).
         if not select.select([fd], [], [], .15)[0]:
@@ -58,7 +58,7 @@ def choose(label, options, initial=0):
     fd = sys.stdin.fileno()
     old = termios.tcgetattr(fd)
     index = initial
-    print('\n' + label + '  （← → 選擇 · Enter 確認 · q 取消）', flush=True)
+    print('\n' + label + '  (Left/Right: select · Enter: confirm · q: cancel)', flush=True)
     try:
         tty.setcbreak(fd)
         sys.stdout.write('\033[?25l')
@@ -113,16 +113,16 @@ def choose_port(label, preferred, host, excluded=(), interactive=True):
     while True:
         if not interactive:
             if preferred in excluded or not available(preferred, host):
-                raise RuntimeError(f'{label} {preferred} 已被占用或無法使用；請指定其他 port。')
+                raise RuntimeError(f'{label} {preferred} is occupied or unavailable; specify another port.')
             return preferred
         options = candidates(preferred, host, excluded)
         if preferred not in options:
-            print(f'{label} {preferred} 已被占用或無法使用，請選其他候選。', flush=True)
-        selected = choose(label, [str(p) for p in options] + ['自訂輸入'])
+            print(f'{label} {preferred} is occupied or unavailable; choose another port.', flush=True)
+        selected = choose(label, [str(p) for p in options] + ['Custom port'])
         if selected < len(options):
             return options[selected]
         try:
-            preferred = port_number(input('輸入 port（1–65535）：').strip())
+            preferred = port_number(input('Enter port (1-65535): ').strip())
         except argparse.ArgumentTypeError as error:
             print(error)
 
@@ -132,24 +132,24 @@ def tailscale_json(*arguments):
         result = subprocess.run(['tailscale', *arguments], capture_output=True, text=True,
                                 timeout=5, check=False)
     except subprocess.TimeoutExpired:
-        raise RuntimeError('讀取 Tailscale 狀態逾時，請檢查 tailscale status。') from None
+        raise RuntimeError('Tailscale status timed out; check tailscale status.') from None
     if result.returncode:
-        raise RuntimeError('Tailscale 無法使用：' + (result.stderr.strip() or result.stdout.strip()))
+        raise RuntimeError('Tailscale unavailable: ' + (result.stderr.strip() or result.stdout.strip()))
     try:
         return json.loads(result.stdout) or {}
     except ValueError:
-        raise RuntimeError('Tailscale 回傳無效狀態，請檢查 tailscale status。') from None
+        raise RuntimeError('Invalid Tailscale status; check tailscale status.') from None
 
 
 def tailnet_name():
     if not shutil.which('tailscale'):
-        raise RuntimeError('找不到 tailscale；請先安裝並登入，或選 Local。')
+        raise RuntimeError('Tailscale not found; install and sign in, or choose Local.')
     state = tailscale_json('status', '--json')
     if state.get('BackendState') != 'Running':
-        raise RuntimeError('Tailscale 尚未連線，請先完成登入，或選 Local。')
+        raise RuntimeError('Tailscale is not connected; sign in or choose Local.')
     name = (state.get('Self', {}).get('DNSName') or '').rstrip('.')
     if not re.fullmatch(r'[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?', name):
-        raise RuntimeError('Tailscale 尚未提供 HTTPS 主機名稱，請檢查 MagicDNS／HTTPS 設定。')
+        raise RuntimeError('Tailscale has no HTTPS hostname; check MagicDNS/HTTPS settings.')
     return name
 
 
@@ -217,36 +217,36 @@ def run_server(httpd, mode, name=None, https_port=None):
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         with opener.open(local_url + '/api/status', timeout=5) as response:
             if response.status != 200:
-                raise RuntimeError('本機服務未正常啟動。')
+                raise RuntimeError('Local service failed to start.')
         url = local_url
         if mode == 'tailscale':
             # Foreground Serve is tied to this child process. No --bg, reset, or global off.
             if https_port in serve_ports(tailscale_json('serve', 'status', '--json')):
-                raise RuntimeError(f'Tailscale HTTPS {https_port} 已被其他服務占用，請重新選擇。')
-            print('正在啟動 Tailscale HTTPS；如顯示授權連結，請依提示開啟。', flush=True)
+                raise RuntimeError(f'Tailscale HTTPS {https_port} is occupied by another service; choose another port.')
+            print('Starting Tailscale HTTPS; follow any authorization link shown.', flush=True)
             proxy = subprocess.Popen(['tailscale', 'serve', f'--https={https_port}', local_url],
                                      stdin=subprocess.DEVNULL, start_new_session=True)
             deadline = time.monotonic() + 30
             while True:
                 if proxy.poll() is not None:
-                    raise RuntimeError('Tailscale Serve 未能保持執行；請查看上方權限／HTTPS 提示。')
+                    raise RuntimeError('Tailscale Serve exited; check the permission/HTTPS messages above.')
                 if serves(tailscale_json('serve', 'status', '--json'), name, https_port, local_url):
                     break
                 if time.monotonic() >= deadline:
-                    raise RuntimeError('Tailscale HTTPS 尚未就緒；請完成上方設定後重新執行。')
+                    raise RuntimeError('Tailscale HTTPS is not ready; complete setup and retry.')
                 time.sleep(.25)
             url = f'https://{name}' + (f':{https_port}' if https_port != 443 else '')
-        print(f'\n✓ GraphNews 已啟動\nURL: {url}', flush=True)
+        print(f'\n✓ GraphNews started\nURL: {url}', flush=True)
         if mode == 'tailscale':
-            print(f'Local: {local_url}\nTailscale 裝置須連到同一 tailnet。', flush=True)
+            print(f'Local: {local_url}\nTailscale devices must use the same tailnet.', flush=True)
         else:
-            print(f'LAN: http://<主機區網 IP>:{port}', flush=True)
-        print('按 Ctrl+C 停止本次服務。', flush=True)
+            print(f'LAN: http://<host-LAN-IP>:{port}', flush=True)
+        print('Press Ctrl+C to stop this service.', flush=True)
         while worker.is_alive():
             if proxy and proxy.poll() is not None:
-                raise RuntimeError('Tailscale Serve 已停止，本次本機服務也將關閉。')
+                raise RuntimeError('Tailscale Serve stopped; stopping this local service.')
             time.sleep(.25)
-        raise RuntimeError('HTTP 服務已停止。')
+        raise RuntimeError('HTTP service stopped.')
     finally:
         try:
             stop_process(proxy)
@@ -260,22 +260,22 @@ def run_server(httpd, mode, name=None, https_port=None):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(prog='run.sh', description='GraphNews：左右鍵選模式與 port，Enter 啟動。')
-    parser.add_argument('--port', type=port_number, default=os.environ.get('PORT', '8765'), help='本機 HTTP port，預設 8765 或 PORT')
-    parser.add_argument('--mode', choices=['local', 'tailscale'], default='local', help='預選啟動模式')
-    parser.add_argument('--https-port', type=port_number, default=8443, help='Tailscale HTTPS port，預設 8443')
-    parser.add_argument('--non-interactive', action='store_true', help='直接使用指定設定；衝突時回報錯誤，不自動換 port')
+    parser = argparse.ArgumentParser(prog='run.sh', description='GraphNews: select mode and port with arrow keys; Enter to start.')
+    parser.add_argument('--port', type=port_number, default=os.environ.get('PORT', '8765'), help='Local HTTP port; default 8765 or PORT')
+    parser.add_argument('--mode', choices=['local', 'tailscale'], default='local', help='Initial startup mode')
+    parser.add_argument('--https-port', type=port_number, default=8443, help='Tailscale HTTPS port; default 8443')
+    parser.add_argument('--non-interactive', action='store_true', help='Use specified settings; report conflicts without changing ports')
     args = parser.parse_args(argv)
     if sys.version_info < (3, 10):
-        parser.error('需要 Python 3.10 以上版本')
+        parser.error('Python 3.10 or newer is required')
     interactive = not args.non_interactive
     if interactive and not (sys.stdin.isatty() and sys.stdout.isatty()):
-        parser.error('互動選單需要終端；自動化請使用 --non-interactive --mode local --port 8765')
+        parser.error('Interactive setup requires a terminal; for automation use --non-interactive --mode local --port 8765')
     if interactive and os.name != 'posix':
-        parser.error('左右鍵選單需要 Linux／macOS／WSL 終端')
-    print('GraphNews 啟動設定', flush=True)
+        parser.error('Arrow-key setup requires a Linux/macOS/WSL terminal')
+    print('GraphNews startup configuration', flush=True)
     while True:
-        mode = ['local', 'tailscale'][choose('啟動方式', ['Local', 'Tailscale HTTPS'], args.mode == 'tailscale')] if interactive else args.mode
+        mode = ['local', 'tailscale'][choose('Startup mode', ['Local', 'Tailscale HTTPS'], args.mode == 'tailscale')] if interactive else args.mode
         name = None
         if mode == 'tailscale':
             try:
@@ -287,24 +287,24 @@ def main(argv=None):
                 args.mode = 'local'
                 continue
         host = '127.0.0.1' if mode == 'tailscale' else '0.0.0.0'
-        port = choose_port('本機 HTTP port', args.port, host, interactive=interactive)
+        port = choose_port('Local HTTP port', args.port, host, interactive=interactive)
         https_port = None
         if mode == 'tailscale':
             occupied = serve_ports(tailscale_json('serve', 'status', '--json')) | {port}
             https_port = choose_port('Tailscale HTTPS port', args.https_port, '0.0.0.0', occupied, interactive)
-        print(f'\n設定：{mode} · HTTP {port}' + (f' · HTTPS {https_port}' if https_port else ''), flush=True)
+        print(f'\nSettings: {mode} · HTTP {port}' + (f' · HTTPS {https_port}' if https_port else ''), flush=True)
         if interactive:
-            action = choose('確認設定', ['啟動', '重新設定', '取消'])
+            action = choose('Confirm settings', ['Start', 'Reconfigure', 'Cancel'])
             if action == 1:
                 continue
             if action == 2:
-                print('已取消，未啟動服務。')
+                print('Cancelled; service was not started.')
                 return 0
         try:
             httpd = make_server(host, port)
         except OSError as error:
             if error.errno == errno.EADDRINUSE and interactive:
-                print(f'HTTP {port} 剛被其他程序占用，請重新選擇。', flush=True)
+                print(f'HTTP {port} was just claimed by another process; choose another port.', flush=True)
                 args.port = port
                 args.mode = mode
                 continue
@@ -322,8 +322,8 @@ if __name__ == '__main__':
     try:
         sys.exit(main())
     except (KeyboardInterrupt, EOFError):
-        print('\n已停止／取消。', flush=True)
+        print('\nStopped/cancelled.', flush=True)
         sys.exit(130)
     except (OSError, RuntimeError) as error:
-        print(f'\n啟動失敗：{error}', file=sys.stderr)
+        print(f'\nStartup failed: {error}', file=sys.stderr)
         sys.exit(1)

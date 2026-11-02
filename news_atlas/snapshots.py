@@ -4,6 +4,7 @@ import datetime as dt
 import re
 from .model import canonical_url
 from .regions import validate_region
+from .relation_settings import settings as relation_settings
 
 PROVIDERS = ('google', 'yahoo', 'massive')
 ARTICLE_FIELDS = ('id','title','summary','url','published_at','source','symbols','language','fetched_at','entities','topics','analysis_version','origins','channels','primary_channel','channel_version')
@@ -24,8 +25,8 @@ def validate_snapshot(body):
     normalized, all_ids = {}, set()
     for provider in sources:
         group = groups[provider]
-        if not isinstance(group, dict) or not isinstance(group.get('articles'), list) or len(group['articles']) > 800:
-            raise ValueError('每個來源最多儲存 800 篇新聞')
+        if not isinstance(group, dict) or not isinstance(group.get('articles'), list):
+            raise ValueError('來源 articles 必須是陣列')
         articles, ids = [], set()
         for row in group['articles']:
             if not isinstance(row, dict) or not re.fullmatch(r'[a-f0-9]{24}', str(row.get('id',''))) or row['id'] in ids:
@@ -135,12 +136,12 @@ def validate_snapshot(body):
     search = {k: str(search[k])[:200] for k in ('query','ticker','start','end') if k in search}
     if rss_region is not None:search['rss_region']=rss_region
     return {'name': str(body.get('name') or search.get('query') or search.get('ticker') or '新聞圖譜')[:120],
-            'search': search, 'view': {'sources': sources, 'separate': view['separate'], 'positions': positions, 'mode':mode, 'channel_filter':channel_filter, 'cutoff':cutoff, 'timeline_zoom':zoom, 'channel_definitions':frozen_defs, 'timeline_style':timeline_style, 'exploration':exploration, 'glow':normalized_glow, 'focus':focus, 'time_focus':time_focus},
+            'search': search, 'view': {'sources': sources, 'separate': view['separate'], 'positions': positions, 'mode':mode, 'channel_filter':channel_filter, 'cutoff':cutoff, 'timeline_zoom':zoom, 'channel_definitions':frozen_defs, 'timeline_style':timeline_style, 'exploration':exploration, 'glow':normalized_glow, 'focus':focus, 'time_focus':time_focus, 'relation_settings':relation_settings(view.get('relation_settings'))},
             'source_graphs': normalized, 'cross_relations': cross}
 
 def validate_edges(edges, ids):
-    if not isinstance(edges,list) or len(edges)>6000:
-        raise ValueError('快照關聯數量超過限制')
+    if not isinstance(edges,list):
+        raise ValueError('relations 必須是陣列')
     out, seen = [], set()
     for edge in edges:
         if not isinstance(edge,dict) or edge.get('source') not in ids or edge.get('target') not in ids or edge['source']==edge['target']:

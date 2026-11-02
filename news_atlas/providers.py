@@ -8,6 +8,7 @@ import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
+from collections import deque
 
 from .model import TICKER, article
 from .regions import edition
@@ -126,7 +127,7 @@ def massive_window(ticker, key, start, end, budget, batch, progress):
     else:
         batch.windows.append((start, end, 'complete'))
 
-def rss_window(provider, query, start, end, budget, batch, progress, rss_region=None):
+def rss_window(provider, query, start, end, budget, batch, progress, rss_region=None, pending=None):
     # Query one extra boundary day, then filter exact UTC publication timestamps locally.
     # Google RSS date operators/indexing have no completeness contract.
     selected=edition(provider,rss_region)
@@ -157,8 +158,11 @@ def rss_window(provider, query, start, end, budget, batch, progress, rss_region=
         days = (dt.date.fromisoformat(end) - dt.date.fromisoformat(start)).days
         if days > 1:
             mid = (dt.date.fromisoformat(start) + dt.timedelta(days=days // 2)).isoformat()
-            rss_window(provider, query, start, mid, budget, batch, progress, rss_region)
-            rss_window(provider, query, mid, end, budget, batch, progress, rss_region)
+            if pending is not None:
+                pending.extend([(start,mid),(mid,end)])
+            else:
+                rss_window(provider, query, start, mid, budget, batch, progress, rss_region)
+                rss_window(provider, query, mid, end, budget, batch, progress, rss_region)
         else:
             batch.warnings.append(f'{start} RSS 可能達筆數上限；保留結果但不標為已覆蓋')
     else:
@@ -167,11 +171,22 @@ def rss_window(provider, query, start, end, budget, batch, progress, rss_region=
 def acquire(provider, term, key, gaps, progress=lambda _: None, rss_region=None):
     batch, budget = Batch(), Budget()
     try:
-        for start, end in gaps:
-            if provider == 'massive':
+        if provider == 'massive':
+            for start, end in gaps:
                 massive_window(term, key, start, end, budget, batch, progress)
-            else:
-                rss_window(provider, term, start, end, budget, batch, progress, rss_region)
+        else:
+            # Visit the entire requested period before spending the budget on dense days.
+            # At most twelve initial windows for a 366-day contiguous range.
+            pending=deque()
+            for start,end in gaps:
+                cursor,stop=dt.date.fromisoformat(start),dt.date.fromisoformat(end)
+                while cursor<stop:
+                    boundary=min(stop,cursor+dt.timedelta(days=31))
+                    pending.append((cursor.isoformat(),boundary.isoformat()))
+                    cursor=boundary
+            while pending:
+                start,end=pending.popleft()
+                rss_window(provider, term, start, end, budget, batch, progress, rss_region, pending)
     except SourceError as exc:
         batch.error, batch.error_code, batch.retry_after = str(exc), exc.code, exc.retry_after
     except (ValueError, TypeError, AttributeError):

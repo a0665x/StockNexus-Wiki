@@ -16,3 +16,31 @@ Thumbs.db
 data/private/
 *.massive-key
 .massive-*
+
+.atlas-storage.json
+.atlas-storage-*
+.data-backup-*
+.data-link-*
+
+# Local development and test output
+node_modules/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage/
+playwright-report/
+test-results/
+*.prof
+*.tmp
+*.bak
+.vscode/
+.idea/
+
+# Private credentials and local data
+*.pem
+*.key
+*.p12
+*.pfx
+data/*
+!data/README.md

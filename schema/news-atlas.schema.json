@@ -119,8 +119,14 @@
         },
         "time_focus": {
           "$ref": "#/$defs/time_focus"
+        },
+        "relation_settings": {
+          "$ref": "#/$defs/relation_settings"
         }
       }
+    },
+    "relation_settings": {
+      "$ref": "#/$defs/relation_settings"
     }
   },
   "$defs": {
@@ -394,7 +400,10 @@
           "maximum": 1
         },
         "method": {
-          "const": "rules-v1"
+          "enum": [
+            "rules-v1",
+            "rules-v2"
+          ]
         },
         "evidence": {
           "type": "array",
@@ -406,7 +415,7 @@
         "days_apart": {
           "type": "number",
           "minimum": 0,
-          "maximum": 30
+          "maximum": 366
         }
       }
     },
@@ -564,6 +573,86 @@
         }
       },
       "additionalProperties": false
+    },
+    "relation_settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "entity": {
+          "type": "boolean",
+          "default": true
+        },
+        "topic": {
+          "type": "boolean",
+          "default": true
+        },
+        "title": {
+          "type": "boolean",
+          "default": true
+        },
+        "entity_days": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 366,
+          "default": 30
+        },
+        "topic_days": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 366,
+          "default": 7
+        },
+        "title_days": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 366,
+          "default": 3
+        },
+        "topic_similarity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.18
+        },
+        "title_similarity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.5
+        },
+        "internal_neighbors": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 6,
+          "default": 6
+        },
+        "cross_neighbors": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2,
+          "default": 2
+        },
+        "half_life": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 366,
+          "default": 0
+        },
+        "title_terms_min": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 6,
+          "default": 4
+        },
+        "coverage_first": {
+          "type": "boolean",
+          "default": false
+        },
+        "adaptive": {
+          "type": "boolean",
+          "default": false
+        }
+      }
     }
   }
 }

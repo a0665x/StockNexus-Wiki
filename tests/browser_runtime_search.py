@@ -17,7 +17,7 @@ def generate(destination):
     with sqlite3.connect(f'file:{ROOT / "data/news-atlas.sqlite3"}?mode=ro',uri=True) as db:
         rows=[]
         for provider in ['google','yahoo','massive']:
-            records=db.execute("SELECT DISTINCT a.payload FROM articles a JOIN memberships m ON a.provider=m.provider AND a.id=m.article_id WHERE m.query_key LIKE '%:NVDA' AND a.published_at>='2025-10-28' AND a.published_at<'2026-10-29' AND a.provider=? ORDER BY a.published_at DESC LIMIT 800",(provider,)).fetchall()
+            records=db.execute("SELECT DISTINCT a.payload FROM articles a JOIN memberships m ON a.provider=m.provider AND a.id=m.article_id WHERE m.query_key LIKE '%:NVDA' AND a.published_at>='2025-10-28' AND a.published_at<'2026-10-29' AND a.provider=? ORDER BY a.published_at DESC",(provider,)).fetchall()
             rows.extend(json.loads(r[0]) for r in records)
     if not rows: raise SystemExit('Requires real NVDA cached news; no synthetic substitute.')
     payload=graph_payload(rows)
@@ -125,9 +125,9 @@ const wait=ms=>new Promise(r=>setTimeout(r,ms)),check=(v,m)=>{if(!v)throw Error(
  const unrelated=$('timeline').querySelector('[data-focus-depth=""]');
  if(unrelated)unrelated.dispatchEvent(new PointerEvent('pointerenter'));
  check(lockedRoots.join()===forestRoots,'density hover cannot replace roots');
- $('timelineStyle').value='nodes';$('timelineStyle').dispatchEvent(new Event('change'));
- check($('timeline').querySelector('[data-node-id][data-focus-depth="0"]'),'individual timeline roots highlighted');
- $('timelineStyle').value='density';$('timelineStyle').dispatchEvent(new Event('change'));
+ check(!$('timelineStyle')&&!$('timelinePlay'),'density only, no playback controls');
+ $('timelineZoomIn').click();check($('timelineZoom').value==='1.5','timeline zoom button');
+ $('timelineZoomOut').click();check($('timelineZoom').value==='1','timeline zoom reset');
  check(!qaErrors.length,qaErrors.join(';'));
  $('modeNetwork').click();$('sourcePanelToggle').click();$('timeBellUndo').click();await wait(80);
  const beforePanels=graph.graphData().nodes,beforePanelWrites=graphWrites;$('timePanelToggle').click();await wait(50);

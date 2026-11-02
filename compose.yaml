@@ -1,0 +1,30 @@
+name: news-atlas
+services:
+  atlas:
+    build: .
+    image: news-atlas:${ATLAS_IMAGE_TAG:-local}
+    restart: unless-stopped
+    user: "${ATLAS_UID:-1000}:${ATLAS_GID:-1000}"
+    environment:
+      PORT: "8765"
+      NEWS_ATLAS_DB: /app/data/news-atlas.sqlite3
+      MASSIVE_API_KEY: ${MASSIVE_API_KEY:-}
+    ports:
+      - "${ATLAS_BIND:-127.0.0.1}:8765:8765"
+    volumes:
+      - type: bind
+        source: ${ATLAS_DATA_DIR:-./data}
+        target: /app/data
+        bind:
+          create_host_path: false
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    cap_drop:
+      - ALL
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"

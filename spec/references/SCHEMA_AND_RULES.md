@@ -22,7 +22,9 @@ Merged UI 用 canonical ID；來源分組時用 `provider::id` 並保留 article
 | shared_topic | ≤7 日、共同 topic、≥2 標題重疊詞、Jaccard≥.18 | .40 + min(.25, Jaccard) |
 | similar_title | ≤3 日、≥4 重疊詞、Jaccard≥.5 | .45 + min(.3, Jaccard/2) |
 
-if/elif 優先順序如上，不是累加三種 edge。普通 degree budget 預設 6；graph_payload 對來源內獨立建圖，再以各來源配對、交錯候選最多 800、每端 budget 2 補 cross 關聯。cross_only 排除 origins 重疊的 pair。不能為了圖更密而虛構 evidence。
+if/elif 優先順序如上，不是累加三種 edge。規則可由 `relation_settings` 切換或調整；未提供時完整保留上表 defaults（rules-v1）。自訂為 rules-v2：三類開關、各自 1–366 天窗口、topic/title Jaccard、來源內 0–6／跨來源 0–2 預算；half_life 0 關閉，1–366 時乘 `2^(-days/half_life)`，證據附 base_score、time_factor 及完整設定。始終保留孤立點，無 embedding 或 channel 加權。權威設定與驗證在 `news_atlas/relation_settings.py`。
+
+普通 degree budget 預設 6；graph_payload 對來源內獨立建圖，再以各來源配對、交錯候選最多 800、每端 budget 2 補 cross 關聯。cross_only 排除 origins 重疊的 pair。不能為了圖更密而虛構 evidence。
 
 Channel 對 title/summary literal keywords 作 any/all，多標籤且有 primary_channel；內建晶片製造、生產供應鏈、財報、股價、產品、政策及 fallback other。自訂分類／版本與詳細限制以 channels.py 為準。
 
@@ -41,3 +43,6 @@ Channel 對 title/summary literal keywords 作 any/all，多標籤且有 primary
 view：sources/separate/positions/mode/channel_filter/cutoff/timeline_zoom/timeline_style/channel_definitions/exploration/glow/focus/time_focus。time_focus 包含 boolean enabled 與 UTC date（或 null）、peak（1–12，預設 2）、width（.01–.5，預設 .12）及可選 profile（129 個 1–12 有限數字，拒絕 boolean/null/錯誤長度）。profile 在相對焦點日期的 [-1,1] 日期跨度等距取樣，用 log 倍率線性插值，優先於 peak/width；不更改文章或 edge schema。focus 包含 mode（overview/single/keyword）、root_ids、query、limit。overview 不帶 roots，single 一個，keyword 必須有 query 和 roots。所有 root／位置 ID 必須在對應 view 範圍。
 
 canonical schema 是結構合約；HTTP handler 及 snapshots.py 另有語義驗證。調整其中一層時需同時檢查另一層，不能假定只通過 JSON Schema 就能儲存。
+
+
+通用探索 B 參數：entity_days=180、topic_days=60、title_days=30、topic_similarity=.10、title_similarity=.25、title_terms_min=3、coverage_first=true，其他沿用 A。新增 title_terms_min（2–6，預設4）與 coverage_first（boolean，預設false）。覆蓋優先先匹配兩端尚無連線的合格候選，再補一端孤立者，最後按原排序填滿剩餘預算；不為缺乏證據的 pair 造邊。最大天數及 days_apart schema 上限 366，A 的原始 30／7／3 天行為不變。

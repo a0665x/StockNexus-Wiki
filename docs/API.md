@@ -114,3 +114,11 @@ POST 使用 `Content-Type: application/json`。輸入錯誤為 400，未知資�
 `view.time_focus` 由 `/api/view/validate` 驗證，`/api/snapshots` 存取並由 OpenAPI 引用 canonical schema。滑動本身在瀏覽器 runtime 完成；REST 不遠端操控滑桿。快照保留來源／edge 門檻篩選後的圖，時間／channel 只保存為顯示設定，避免丟失隱藏 roots 的完整路徑。
 
 搜尋與 cache graph 支援 rss_region：TW／US／HK／JP／GB；UI 預設 TW、Google/Yahoo 同步。API 省略時保留舊版 Google TW／Yahoo US Finance 行為。country/language/sites 為 source 的可選取得背景，快取依地區隔離且保存每個 query 的 source JSON，詳見 schema。新增地區與 key endpoints 後需重啟 server。
+
+
+### 可調整的 edge 定義
+
+`POST /api/graph/build` 現在接受 `relation_settings`：entity/topic/title 三種 boolean 開關；entity_days/topic_days/title_days（1–366）；topic_similarity/title_similarity（0–1）；internal_neighbors（0–6）；cross_neighbors（0–2）；half_life（0–366，0 關閉時間衰減）。可傳原有 articles，或 source_graphs（google/yahoo/massive，各最多 800 篇），二選一。所有孤立新聞保留；不使用 embedding／產業加權。預設完整維持 rules-v1，自訂方法標示 rules-v2，evidence 附設定、基礎分數及時間係數。半衰期使用 `2^(-相隔天數/half_life)`。回傳 relation_settings；快照與匯出 view 也保存該欄位。詳細結構由 `/openapi.json` 提供。
+
+
+通用探索 B 參數：entity_days=180、topic_days=60、title_days=30、topic_similarity=.10、title_similarity=.25、title_terms_min=3、coverage_first=true，其他沿用 A。新增 title_terms_min（2–6，預設4）與 coverage_first（boolean，預設false）。覆蓋優先先匹配兩端尚無連線的合格候選，再補一端孤立者，最後按原排序填滿剩餘預算；不為缺乏證據的 pair 造邊。最大天數及 days_apart schema 上限 366，A 的原始 30／7／3 天行為不變。

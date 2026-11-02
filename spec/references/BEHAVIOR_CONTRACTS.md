@@ -10,7 +10,7 @@
 
 ## 未命中不等於沒有相關新聞
 
-曾以真實 NVDA 快取發現 robot 完整單字匹配召回不到 robots/robotics，故目前使用受限詞首匹配。改規則要維持 Python/JS parity。來源範圍、未取得全文、800 可見節點限制與 query/date 都可能造成缺漏；不得以合成結果掩蓋。
+曾以真實 NVDA 快取發現 robot 完整單字匹配召回不到 robots/robotics，故目前使用受限詞首匹配。改規則要維持 Python/JS parity。來源範圍、未取得全文與 query/date 都可能造成召回缺漏；GPU 預算只限制繪製，不應縮小圖內排名的完整資料範圍；不得以合成結果掩蓋。
 
 ## 焦點與互動
 
@@ -51,3 +51,8 @@ query/ticker/source/date 的 input/change 即時存草稿；不等待 submit。�
 完整事故證據與交付檢查見 [2026-10-29 前端資源事故](bugfix-20261029-frontend-asset-startup.md)；曲線直接塑形與舊快照相容見 [塑形紀錄](lesson-20261029-curve-sculpting.md)。
 
 跨地區同 URL 保存不可改寫其他查詢的 source 背景，舊缺欄位不能補成新搜尋的國家；金鑰保存／忘記需依序執行，主機回應不包含金鑰。浮動面板收成小圖示後仍可操作，圓點以畫面尺寸驗收。詳見 [本輪紀錄](bugfix-20261029-floating-regions-persistence.md)。
+
+
+## 現行快取與設定合約
+
+見 [標準流程](../WORKFLOWS.md) 與 [2026-11-02 紀錄](lesson-20261102-rendering-cache-settings.md)：快取鍵包含內容／規則，首事件優先完整快取；暫存線只能沿用未變動端點並明示 pending；已套用偏好不可在刷新時自動改為預設；GPU 預算預設 800、上限 2400。

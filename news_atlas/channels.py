@@ -1,4 +1,6 @@
 """Explainable multi-label news channels. Definitions are persisted independently of articles."""
+import copy
+import functools
 import hashlib
 import json
 import re
@@ -39,7 +41,7 @@ def validate_custom(body):
         raise ValueError('分類顏色格式錯誤')
     return {'name':name.strip(),'keywords':list(dict.fromkeys(t.strip() for t in terms)),'match':mode,'color':color,'builtin':False}
 
-def classify(article, channels):
+def _classify(article, channels):
     hits = []
     for order, channel in enumerate(channels):
         if channel['id'] == 'other':
@@ -64,5 +66,16 @@ def classify(article, channels):
         hits = [{'id':'other','name':OTHER['name'],'score':0,'method':'unclassified','evidence':[]}]
     return {'channels':hits,'primary_channel':hits[0]['id'],'channel_version':version(channels)}
 
+@functools.lru_cache(maxsize=8192)
+def _classification(title, summary, encoded):
+    return _classify({'title':title,'summary':summary},json.loads(encoded))
+
+
+def classify(article, channels):
+    encoded=json.dumps(channels,sort_keys=True,ensure_ascii=False)
+    return copy.deepcopy(_classification(article.get('title') or '',article.get('summary') or '',encoded))
+
+
 def annotate(rows, channels):
-    return [{**r, **classify(r,channels)} for r in rows]
+    encoded=json.dumps(channels,sort_keys=True,ensure_ascii=False)
+    return [{**r, **copy.deepcopy(_classification(r.get('title') or '',r.get('summary') or '',encoded))} for r in rows]

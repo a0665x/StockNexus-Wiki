@@ -12,8 +12,12 @@ flowchart LR
   Search --> Providers[providers.py：真實來源]
   Providers --> Normalize[model.py：標準化]
   Normalize --> Search
-  HTTP --> Build[graph_payload：去重、分類、建圖]
-  Build --> View[瀏覽器 runtime graph]
+  HTTP --> Cache[graph_cache：完整圖譜快取／相同請求合併]
+  Cache <--> GraphDB[(衍生 SQLite 快取)]
+  Cache --> Build[graph_payload：去重、分類、建圖]
+  Cache --> View[瀏覽器完整 runtime graph]
+  Build --> View
+  View --> Slice[GPU 顯示切片：預設800／最高2400]
   View --> Local[圖內 Search：本地排名與多樹]
   View --> Snapshot[手動快照 API]
   Snapshot --> DB
@@ -62,3 +66,8 @@ flowchart LR
 `dist/time-lens.js`：日期鐘形增益編輯器及同幀 mesh scale 更新；依賴 AtlasTimeline.timeSettings/timeScale，調整 node 尺寸而不改 graphData、物理或相機。
 
 `run.sh`／`scripts/launch.py`：終端選單與程序生命週期。引用 server.Handler／ThreadingHTTPServer，不啟動第二份 HTTP 實作；Local 綁 0.0.0.0，Tailscale 綁 loopback 並管理單一前景 Serve 子程序。
+
+`news_atlas/graph_cache.py`：HTTP 建圖及搜尋最後關聯計算的持久結果快取、程序內相同請求合併，
+與新聞 DB 分開保存；key、預算、失效與計時語義見 SOURCES_AND_CACHE。
+
+首事件、來源更新與最終建圖的順序以 [WORKFLOWS.md](WORKFLOWS.md) 為準。快取加速不等於省略資料新鮮度檢查；整體圖譜快取和瀏覽器物理排列是不同責任。

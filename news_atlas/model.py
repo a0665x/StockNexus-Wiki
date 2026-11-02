@@ -1,5 +1,9 @@
 """Source-independent article normalization and evidence-based relation rules."""
 import datetime as dt
+import bisect
+import copy
+import functools
+import json
 import email.utils
 import hashlib
 import html
@@ -68,7 +72,7 @@ def mention(text, alias):
     match = re.search(pattern, text, re.I)
     return match.group(0) if match else None
 
-def enrich(raw):
+def _enrich(raw):
     result = dict(raw)
     entities = {}
     for symbol in raw.get('symbols', []):
@@ -91,6 +95,17 @@ def enrich(raw):
             topics.append({'id': topic, 'label': TOPIC_LABELS[topic], 'evidence': hits})
     result.update(entities=list(entities.values()), topics=topics, analysis_version='rules-v1')
     return result
+
+@functools.lru_cache(maxsize=8192)
+def _enrichment(title, summary, symbols):
+    result=_enrich({'title':title,'summary':summary,'symbols':list(symbols)})
+    return {key:result[key] for key in ('entities','topics','analysis_version')}
+
+
+def enrich(raw):
+    # Cache derived features only; provenance and retrieval metadata stay current.
+    return {**raw, **copy.deepcopy(_enrichment(raw['title'],raw.get('summary',''),tuple(raw.get('symbols',[]))))}
+
 
 def deduplicate(rows):
     """Merge identical URLs only; keep publisher and provider provenance."""
@@ -116,46 +131,96 @@ def title_tokens(title):
         tokens.update(run[i:i+2] for i in range(len(run)-1))
     return tokens
 
-def build_relations(rows, max_neighbors=6, cross_only=False):
+def build_relations(rows, max_neighbors=None, cross_only=False, relation_settings=None):
+    from .relation_settings import settings
+    # Repeated cache/source updates must not repeat the same large calculation.
+    # Copy cached evidence so callers cannot mutate another graph's rules or scores.
+    encoded=json.dumps(rows,sort_keys=True,ensure_ascii=False,separators=(',',':'))
+    cfg=json.dumps(settings(relation_settings),sort_keys=True)
+    return copy.deepcopy(_cached_relations(encoded,max_neighbors,cross_only,cfg))
+
+
+@functools.lru_cache(maxsize=8)
+def _cached_relations(encoded,max_neighbors,cross_only,cfg):
+    return _build_relations(json.loads(encoded),max_neighbors,cross_only,json.loads(cfg))
+
+
+def _build_relations(rows, max_neighbors=None, cross_only=False, relation_settings=None):
+    from .relation_settings import settings, DEFAULTS
+    cfg=settings(relation_settings)
+    if max_neighbors is None: max_neighbors=cfg['cross_neighbors' if cross_only else 'internal_neighbors']
     # All candidate pairs are considered; keep strongest edges first with bounded degree.
+    if not rows or max_neighbors == 0 or not any(cfg[k] for k in ('entity','topic','title')):
+        return []
     candidates, degree = [], {}
-    features = [(r, {e['id']: e for e in r['entities']}, {t['id'] for t in r['topics']}, title_tokens(r['title'])) for r in rows]
-    for i, (a, ae, at, aw) in enumerate(features):
-        if not a.get('published_at'):
-            continue
-        for b, be, bt, bw in features[i+1:]:
-            if cross_only:
-                a_sources = {s['provider'] for s in a.get('origins',[a['source']])}
-                b_sources = {s['provider'] for s in b.get('origins',[b['source']])}
-                if a_sources & b_sources:
-                    continue
-            if not b.get('published_at'):
-                continue
-            days = abs((dt.datetime.fromisoformat(a['published_at'].replace('Z', '+00:00')) - dt.datetime.fromisoformat(b['published_at'].replace('Z', '+00:00'))).total_seconds()) / 86400
-            if days > 30:
-                continue
-            common = sorted(ae.keys() & be.keys())
-            overlap = aw & bw
-            similarity = len(overlap) / max(1, len(aw | bw))
-            topics = sorted(at & bt)
-            if common:
-                kind, score = 'shared_entity', .72 + min(.2, .07 * len(common))
-                evidence = [{'entity': entity, 'source': ae[entity], 'target': be[entity]} for entity in common]
-            elif days <= 7 and topics and len(overlap) >= 2 and similarity >= .18:
-                kind, score = 'shared_topic', .40 + min(.25, similarity)
-                evidence = [{'topics': topics, 'title_terms': sorted(overlap)[:12], 'title_similarity': round(similarity, 3)}]
-            elif days <= 3 and len(overlap) >= 4 and similarity >= .5:
-                kind, score = 'similar_title', .45 + min(.3, similarity / 2)
-                evidence = [{'title_terms': sorted(overlap)[:12], 'title_similarity': round(similarity, 3)}]
-            else:
-                continue
-            candidates.append({'id': a['id'] + ':' + b['id'], 'source': a['id'], 'target': b['id'], 'type': kind,
-                               'weight': round(score, 3), 'method': 'rules-v1', 'evidence': evidence, 'days_apart': round(days, 2)})
-    result = []
-    for edge in sorted(candidates, key=lambda e: (-e['weight'], e['days_apart'], e['id'])):
-        if degree.get(edge['source'], 0) >= max_neighbors or degree.get(edge['target'], 0) >= max_neighbors:
-            continue
-        result.append(edge)
-        for key in (edge['source'], edge['target']):
-            degree[key] = degree.get(key, 0) + 1
+    result, selected = [], set()
+    if cfg['adaptive']:
+        strict={**cfg,'adaptive':False,'coverage_first':False}
+        for key in ('entity_days','topic_days','title_days'):strict[key]=min(cfg[key],DEFAULTS[key])
+        for key in ('topic_similarity','title_similarity','title_terms_min'):strict[key]=max(cfg[key],DEFAULTS[key])
+        result=_build_relations(rows,max_neighbors,cross_only,strict)
+        for edge in result:
+            edge['evidence'].append({'adaptive_stage':'strict'})
+            selected.add(edge['id'])
+            for key in ('source','target'):degree[edge[key]]=degree.get(edge[key],0)+1
+    features = [(r, {e['id']: e for e in r['entities']}, {t['id'] for t in r['topics']}, title_tokens(r['title']),
+                 dt.datetime.fromisoformat(r['published_at'].replace('Z','+00:00')) if r.get('published_at') else None,
+                 {o['provider'] for o in r.get('origins',[r['source']])}) for r in rows]
+    def evaluate(i,j,materialize=False):
+        a,ae,at,aw,astamp,asources=features[i]
+        b,be,bt,bw,bstamp,bsources=features[j]
+        if astamp is None or bstamp is None or (cross_only and asources & bsources):return None
+        days=abs((astamp-bstamp).total_seconds())/86400
+        if days>max(cfg['entity_days'],cfg['topic_days'],cfg['title_days']):return None
+        common=ae.keys() & be.keys()
+        overlap=set();topics=set();similarity=0
+        if cfg['entity'] and common and days<=cfg['entity_days']:
+            kind,score='shared_entity',.72+min(.2,.07*len(common))
+        else:
+            if not ((cfg['topic'] and days<=cfg['topic_days'] and at & bt) or (cfg['title'] and days<=cfg['title_days'])):return None
+            overlap=aw & bw
+            similarity=len(overlap)/max(1,len(aw)+len(bw)-len(overlap))
+            topics=at & bt
+            if cfg['topic'] and days<=cfg['topic_days'] and topics and len(overlap)>=2 and similarity>=cfg['topic_similarity']:
+                kind,score='shared_topic',.40+min(.25,similarity)
+            elif cfg['title'] and days<=cfg['title_days'] and len(overlap)>=cfg['title_terms_min'] and similarity>=cfg['title_similarity']:
+                kind,score='similar_title',.45+min(.3,similarity/2)
+            else:return None
+        base_score=score;factor=2**(-days/cfg['half_life']) if cfg['half_life'] else 1;score*=factor
+        if not materialize:return (-round(score,3),round(days,2),a['id']+':'+b['id'],i,j)
+        if kind=='shared_entity':evidence=[{'entity':entity,'source':ae[entity],'target':be[entity]} for entity in sorted(common)]
+        else:
+            item={'title_terms':sorted(overlap)[:12],'title_similarity':round(similarity,3)}
+            if kind=='shared_topic':item={'topics':sorted(topics),**item}
+            evidence=[item]
+        if cfg!=DEFAULTS:evidence.append({'rule_settings':cfg,'base_score':round(base_score,3),'time_factor':round(factor,6)})
+        if cfg['adaptive']:evidence.append({'adaptive_stage':'expanded'})
+        return {'id':a['id']+':'+b['id'],'source':a['id'],'target':b['id'],'type':kind,'weight':round(score,3),'method':'rules-v1' if cfg==DEFAULTS else 'rules-v2','evidence':evidence,'days_apart':round(days,2)}
+    # Date index skips pairs outside every enabled window without dropping candidates.
+    dated=sorted((f[4],i) for i,f in enumerate(features) if f[4] is not None)
+    isolated=[entry for entry in dated if not degree.get(rows[entry[1]]['id'],0)]
+    window=dt.timedelta(days=max(cfg[k+'_days'] for k in ('entity','topic','title') if cfg[k]))
+    for i,feature in enumerate(features):
+        if feature[4] is None:continue
+        index=isolated if cfg['adaptive'] and degree.get(rows[i]['id'],0) else dated
+        lo=bisect.bisect_left(index,(feature[4]-window,-1))
+        hi=bisect.bisect_right(index,(feature[4]+window,len(features)))
+        for _,j in index[lo:hi]:
+            if j<=i:continue
+            candidate=evaluate(i,j)
+            if candidate is not None:candidates.append(candidate)
+    ranked=sorted(candidates)
+    def take(candidate):
+        _,_,identity,i,j=candidate
+        if identity in selected or any(degree.get(rows[k]['id'],0)>=max_neighbors for k in (i,j)):return
+        edge=evaluate(i,j,True)
+        result.append(edge);selected.add(identity)
+        for key in ('source','target'):degree[edge[key]]=degree.get(edge[key],0)+1
+    if cfg['coverage_first'] or cfg['adaptive']:
+        for candidate in ranked:
+            if all(degree.get(rows[k]['id'],0)==0 for k in candidate[3:]):take(candidate)
+        for candidate in ranked:
+            if any(degree.get(rows[k]['id'],0)==0 for k in candidate[3:]):take(candidate)
+    if not cfg['adaptive']:
+        for candidate in ranked:take(candidate)
     return result

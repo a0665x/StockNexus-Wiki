@@ -2,12 +2,18 @@
 
 入口：[PROJECT_MAP.md](PROJECT_MAP.md)。
 
+## Docker／Compose
+
+`./run.sh up` 先互動確認、再建置及背景啟動，`status`／`logs`／`restart`／`down` 管理容器；`down` 保留資料。設定見根目錄 `.env.example` 和 `compose.yaml`。預設只發布 127.0.0.1:8765，`ATLAS_BIND=0.0.0.0` 開放區網；Docker 的主機與容器 port 都固定 8765；PORT 僅影響本機 Python。data bind mount 沿用既有資料，切換前停止本機 Python。容器非 root，UID/GID 預設由 run.sh 取得，直接 Compose 預設 1000:1000；選單可建立新的可寫資料目錄。不要以正式 DB 做容器測試。
+
+單一 SQLite 服務尚不支援多副本；擴容需先分離共享 DB、抓取佇列、限流及憑證。映像使用 Python 3.12 slim，僅複製 runtime 程式／schema／前端，健康檢查 `/api/status`，server.py 處理 SIGTERM 關閉服務。Python 直接接收停止訊號，不依賴 Docker init。此主機的 Snap Docker 在設定 no-new-privileges 時連 python --version 都回 operation not permitted，因此 Compose 不預設此選項；保留非 root、唯讀 root filesystem 與 cap_drop ALL。標準操作見 [WORKFLOWS.md](WORKFLOWS.md)。
+
 ## 啟動
 
 Python 3.10+，正式執行僅用標準函式庫；瀏覽器需 WebGL。Node.js 用於測試，前端不用 npm 安裝／build。
 
 ```bash
-./run.sh
+./run.sh local
 # 可預選 port／模式
 ./run.sh --port 9000 --mode tailscale --https-port 8444
 # 自動化：指定 port，衝突就失敗
@@ -16,7 +22,7 @@ Python 3.10+，正式執行僅用標準函式庫；瀏覽器需 WebGL。Node.js 
 python3 server.py
 ```
 
-`run.sh` → `scripts/launch.py` 提供 ←／→／Enter 模式與 port 選單、自訂輸入及最後確認。候選 port 會實際 bind/listen 探測；占用時提供其他候選，權限錯誤不誤報占用。建立 HTTPServer 後保留 socket，再初始化 DB，防止檢查與使用之間被搶占；若最後綁定失敗則重新選擇。q／Esc／Ctrl+C 會還原終端模式與游標。
+`run.sh local` → `scripts/launch.py` 提供 ←／→／Enter 模式與 port 選單、自訂輸入及最後確認。候選 port 會實際 bind/listen 探測；占用時提供其他候選，權限錯誤不誤報占用。建立 HTTPServer 後保留 socket，再初始化 DB，防止檢查與使用之間被搶占；若最後綁定失敗則重新選擇。q／Esc／Ctrl+C 會還原終端模式與游標。
 
 Local 預設開啟 `http://127.0.0.1:8765`，程序需保持執行。Ctrl+C 停止。這是直接 Python + SQLite，不建立 Docker bridge。
 
@@ -49,7 +55,7 @@ DB 是跨重啟累積的單一 SQLite，不是每次搜尋一份。備份先停�
 
 讀取 Massive key 的測試／除錯不得列印環境或 localStorage 憑證。一般搜尋草稿不含 key，key 由獨立記住／忘記控制管理。
 
-交付前自行確認 `git rev-parse --show-toplevel`、分支、remote、status；目前可見的 `.git` 可能只是空的唯讀目錄，不是可提交 checkout。不要假設過往 push 仍代表當前 workspace；不要改寫 `.gitignore` 加入 agent 使用痕跡。README 的遠端是 `a0665x/GraphNews`，不構成自動發布新變更的指示。
+提交前確認 Git 根目錄、分支、remote 與工作目錄狀態。專案展示名稱為 StockNexus-Wiki，建議 repository slug 為 stocknexus-wiki；遠端目前為 a0665x/GraphNews，文件命名不會自動變更遠端名稱。
 
 前端整頁失去互動時，先檢查 HTTP script 回應與第一個 JavaScript 例外；不要先把問題歸因於 API key 或來源。參閱 [前端資源事故及重啟驗證](references/bugfix-20261029-frontend-asset-startup.md)。塑形 profile 的後端驗證也需要重啟 Python，否則舊程序可能丟棄新欄位。
 
@@ -58,3 +64,44 @@ DB 是跨重啟累積的單一 SQLite，不是每次搜尋一份。備份先停�
 ## 有新聞但 3D 空白
 
 WebGL 初始化失敗或使用中 context lost 時，前端自動改用時間軸，診斷提示可展開；資料與 roots 搜尋保留。恢復 context 後可手動返回 3D。Chrome 的 GPU 必須在瀏覽器所在裝置上排查，不能以 server GPU 取代；先查 chrome://gpu 與原始 Console 錯誤。詳見 [WebGL 降級與驗證紀錄](references/bugfix-20261029-webgl-fallback.md)。
+
+### Docker 啟動器驗證與 Tailscale
+
+`run.sh` → `scripts/docker_launch.py`，主機 Python 3.10+ 標準函式庫。固定 -p news-atlas、HTTP 8765、scale atlas=1；fcntl 主機鎖序列化不同 checkout 的啟停。preflight 驗證資料、port、project working_dir；占用者屬其他程序／專案時拒絕啟動，不停止它。建置在清理之前，避免建置失敗中斷舊服務；異常／多副本／殘留會 scoped down，健康單一容器由 Compose 沿用或更新。檢查完成後恰好一個 healthy，主機 `/api/status` 200。
+
+已安裝且連線的 Tailscale 顯示左右鍵選單，沒有安裝不問；非互動預設不新增，可用 --tailscale on/off 明確指定。--https-port 預設 8443，與 HTTP 8765 分開。使用 --bg 及持久路由所有權記錄，down 只清理自己建立且未被別人加上其他 handlers 的路由。不得以 serve reset 清理。實際主機驗證未新增／修改 Tailscale 路由，互動選擇、確認及 HTTPS URL 以 PTY mock 驗證。
+
+## 資料位置選擇
+
+無參數 `./run.sh` 等同 Docker up。`scripts/storage_paths.py` 每次 up 檢查已掛載的其他實體磁碟、容量，提供沿用／磁碟／自訂路徑。選定後且確認啟動才停止容器、複製及驗證 SQLite/WAL 和一般檔案，切換 data 符號連結，保留原資料備份。`.atlas-storage.json` 優先於環境設定；磁碟缺席拒絕啟動，down/status 仍可使用。非互動換位置需同時指定 `--data-dir` 與 `--migrate-data`。只接受空目標、不掛載、不格式化、不改 owner；連結或狀態保存失敗回復原連結／目錄。自動化命令與設定見下表。
+
+啟動器英文輸出：Docker／Compose／Python、project owner、容器數／健康、8765 ownership、storage mount/free/write+fsync、三個服務的 DNS/TLS/HTTPS reachability。網路失敗 WARN 不阻止快取操作；無憑證探測不宣稱 account/data 授權可用。互動箭頭選單、搬移與本機模式同樣英文。
+
+全量資料不截斷。相同文章／設定的關聯結果最多快取 8 組，回傳複製以避免不同圖譜共享可變 evidence。第一次大圖計算仍可能較久，前端關聯等待 300 秒、搜尋 600 秒；逾時回報並保留當前資料。
+
+
+## 常用命令與環境設定
+
+```bash
+./run.sh up --non-interactive
+./run.sh status
+./run.sh logs
+./run.sh down
+# 明確指定新位置並同意搬移；目標必須為空
+./run.sh up --non-interactive --data-dir /mnt/storage/stocknexus-data --migrate-data
+```
+
+可選擇從 [.env.example](../.env.example) 複製 `.env`；不提交金鑰。
+
+| 設定 | 行為 |
+| --- | --- |
+| ATLAS_BIND | Docker 發布位址，預設 127.0.0.1；0.0.0.0 開放區網 |
+| ATLAS_DATA_DIR | 未保存路徑時的 Docker 資料位置；保存狀態優先 |
+| ATLAS_UID / ATLAS_GID | data 的執行者權限；啟動器預設取目前使用者 |
+| ATLAS_IMAGE_TAG | 映像標籤，預設 local |
+| PORT | 只影響本機 Python；Docker 固定 8765 |
+
+`restart` 不重建映像；原始碼更新必須 `up`。新增的 `.graphs.sqlite3` 是可丟棄的衍生快取，
+正式新聞與快照仍在主 DB；詳見 [快取語義](SOURCES_AND_CACHE.md)。
+同 IP 不代表同 GPU 程序／設定；App、headless SwiftShader 與使用者 Chrome 必須分別驗證。
+診斷順序與證據限制見 [渲染事故紀錄](references/lesson-20261102-rendering-cache-settings.md)。
