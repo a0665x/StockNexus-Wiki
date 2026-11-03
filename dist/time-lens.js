@@ -11,13 +11,13 @@
     const renderer=graph?.renderer?.();if(!renderer?.render)return {refresh(){},dispose(){}};
     const original=renderer.render;
     function refresh(){
-      const {config,dates}=getState(),sizeAt=root.AtlasTimeline.timeEvaluator(config,dates),camera=graph.camera();camera.updateMatrixWorld?.();
+      const {config,dates,scale}=getState(),sizeAt=root.AtlasTimeline.timeEvaluator(config,dates),camera=graph.camera();camera.updateMatrixWorld?.();
       const matrix=camera.matrixWorldInverse?.elements;
       const depth=p=>matrix?-(matrix[2]*(p.x||0)+matrix[6]*(p.y||0)+matrix[10]*(p.z||0)+matrix[14]):0;
       const reference=depth(graph.controls?.()?.target||{x:0,y:0,z:0}),amount=compensation(config);
       for(const node of graph.graphData().nodes||[]){
         const object=node.__threeObj;if(!object?.scale?.setScalar)continue;
-        const size=sizeAt(node)*depthScale(depth(node),reference,amount);
+        const size=(scale?scale(node,sizeAt(node)):sizeAt(node))*depthScale(depth(node),reference,amount);
         object.scale.setScalar(Number.isFinite(size)&&size>0?size:1);
       }
     }
@@ -57,22 +57,30 @@
     const svg=$('timeBell'),handle=$('timeBellHandle'),t=text=>root.AtlasI18n?.t(text)||text;
     let drag=null,selected=null,undo=null;
     function paint(){
-      const {config,dates}=getState();if(!dates)return;const model=curve(config,dates),at=selected??model.center;
-      const x=v=>12+v*976,path=model.points.map(([a,b],i)=>(i?'L':'M')+x(a).toFixed(2)+' '+b.toFixed(2)).join(' ');
-      $('timeBellLine').setAttribute('d',path);$('timeBellHit').setAttribute('d',path);$('timeBellFill').setAttribute('d',path+' L988 88 L12 88 Z');
+      const {config,dates,viewport=dates,components}=getState();if(!dates)return;const model=curve(config,dates),at=selected??model.center;
+      const x=v=>12+((dates.start+v*dates.days*86400000-viewport.start)/Math.max(86400000,viewport.end-viewport.start))*976,path=model.points.map(([a,b],i)=>(i?'L':'M')+x(a).toFixed(2)+' '+b.toFixed(2)).join(' ');
+      if(components){
+        const fractions=model.points.map(([a,b])=>{const date=new Date(dates.start+Math.round(a*dates.days)*86400000).toISOString().slice(0,10),part=components(date,model.gain(a));return [x(a),88-(88-b)*part.priceShare];});
+        const boundary=fractions.map(([a,b],i)=>(i?'L':'M')+a.toFixed(2)+' '+b.toFixed(2)).join(' ');
+        for(const [id,color,d] of [['timeContribution','#65aaf5',path+' '+fractions.slice().reverse().map(([a,b])=>'L'+a.toFixed(2)+' '+b.toFixed(2)).join(' ')+' Z'],['priceContribution','#f1ba59',boundary+' L'+x(1)+' 88 L'+x(0)+' 88 Z']]){let n=$(id);if(!n){n=document.createElementNS('http://www.w3.org/2000/svg','path');n.id=id;n.setAttribute('fill',color);n.setAttribute('opacity','.65');n.style.pointerEvents='none';$('timeBellLine').before(n);}n.setAttribute('d',d);}
+        $('timeBellFill').style.opacity='0';
+      }
+      $('timeBellLine').setAttribute('d',path);$('timeBellHit').setAttribute('d',path);$('timeBellFill').setAttribute('d',path+' L'+x(1)+' 88 L'+x(0)+' 88 Z');
       $('timeBellCenter').setAttribute('x1',x(model.center));$('timeBellCenter').setAttribute('x2',x(model.center));
       const rect=svg.getBoundingClientRect();handle.setAttribute('rx',8000/Math.max(1,rect.width));handle.setAttribute('ry',800/Math.max(1,rect.height));
       handle.setAttribute('cx',x(at));handle.setAttribute('cy',model.y(at));handle.setAttribute('aria-disabled',String(!config.enabled));handle.setAttribute('tabindex',config.enabled?'0':'-1');
       const date=new Date(dates.start+Math.round(at*dates.days)*86400000).toISOString().slice(0,10),value=model.gain(at).toFixed(1)+'×';
       handle.setAttribute('aria-valuenow',model.gain(at).toFixed(1));handle.setAttribute('aria-valuetext',date+' · '+value);
       $('timeCurvePoint').textContent=date+' · '+value;
+      if(components){const part=components(date,model.gain(at));$('timeCurvePoint').textContent+=` · ${t('時間')} ${((1-part.priceShare)*100).toFixed(0)}% / ${t('股價')} ${(part.priceShare*100).toFixed(0)}% · ${t('混合倍率')} ${part.total.toFixed(2)}× · Δ ${part.delta===null?'—':(part.delta*100).toFixed(2)+'%'} · z ${part.normalized===null?'—':part.normalized.toFixed(2)}`;}
+
       $('timePeakValue').textContent=maximum(config).toFixed(1)+'×';
       $('timePerspective').textContent=t('遠近補償')+' '+Math.round(compensation(config)*100)+'%';
       $('timeBellUndo').disabled=!config.enabled||!undo||!!drag;$('timeBellReset').disabled=!config.enabled||!!drag;
       svg.classList.toggle('inactive',!config.enabled);
     }
     function change(values){onChange(values);paint();}
-    const position=(event,rect)=>clamp(((event.clientX-rect.left)/Math.max(1,rect.width)*1000-12)/976,0,1);
+    const position=(event,rect)=>{const {dates,viewport=dates}=getState(),fraction=clamp(((event.clientX-rect.left)/Math.max(1,rect.width)*1000-12)/976,0,1);return clamp((viewport.start+fraction*(viewport.end-viewport.start)-dates.start)/Math.max(86400000,dates.end-dates.start),0,1);};
     function begin(event){
       if(event.button!==0||!getState().config.enabled||drag)return;
       event.preventDefault();event.stopPropagation();
@@ -86,7 +94,7 @@
       if(!drag){if(getState().config.enabled){selected=position(event,svg.getBoundingClientRect());paint();}return;}
       if(event.pointerId!==drag.id)return;event.preventDefault();event.stopPropagation();
       const delta=(drag.y-event.clientY)/Math.max(1,drag.rect.height)*100/72*Math.log(12);
-      const dx=(event.clientX-drag.x)/Math.max(1,drag.rect.width)*1000/976;
+      const state=getState(),view=state.viewport||drag.dates;const dx=(event.clientX-drag.x)/Math.max(1,drag.rect.width)*1000/976*(view.end-view.start)/Math.max(86400000,drag.dates.end-drag.dates.start);
       if(!delta&&!dx&&!drag.changed)return;
       if(!drag.changed){undo=drag.config;drag.changed=true;}
       // Returning to the grab height restores the exact pre-stroke curve.

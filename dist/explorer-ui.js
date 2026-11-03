@@ -57,15 +57,16 @@
     const saved=read(key,{});let x=Number(saved?.x)||0,y=Number(saved?.y)||0,collapsed=saved?.collapsed===true,drag=null,suppressClick=false;
     const persist=()=>write(key,{x,y,collapsed});
     const rectOf=()=>panel.getBoundingClientRect();
+    const areaOf=()=>{const r=stage.getBoundingClientRect(),gap=Math.min(114,r.height*.25);return {left:r.left,right:r.right,top:r.top+gap,bottom:r.bottom,width:r.width,height:r.height-gap};};
     const overlaps=(a,b)=>a.left<b.left+b.width+8&&a.left+a.width+8>b.left&&a.top<b.top+b.height+8&&a.top+a.height+8>b.top;
     function avoid(){
       if(group.busy)return;
       group.busy=true;
       try{
         for(const other of group.panels){
-          if(other.panel===panel)continue;
+          if(other.panel===panel||root.AtlasDock?.docked(other.panel))continue;
           let a=rectOf(),b=other.rect();if(!overlaps(a,b))continue;
-          const area=stage.getBoundingClientRect();
+          const area=areaOf();
           const place=()=>{
             a=rectOf();b=other.rect();
             const clampX=v=>Math.max(area.left,Math.min(area.right-a.width,v));
@@ -91,12 +92,13 @@
       }finally{group.busy=false;}
     }
     function constrain(){
-      const area=stage.getBoundingClientRect(),rect=panel.getBoundingClientRect(),baseX=rect.left-x,baseY=rect.top-y;
+      if(root.AtlasDock?.docked(panel)){onChange();return;}
+      const area=areaOf(),rect=panel.getBoundingClientRect(),baseX=rect.left-x,baseY=rect.top-y;
       x=Math.max(area.left-baseX,Math.min(area.right-baseX-rect.width,x));
       y=Math.max(area.top-baseY,Math.min(area.bottom-baseY-Math.min(rect.height,area.height),y));
       panel.style.transform=`translate(${x}px,${y}px)`;avoid();onChange();
     }
-    function paint(){body.hidden=collapsed;panel.classList.toggle('collapsed',collapsed);toggle.setAttribute('aria-expanded',String(!collapsed));handle.setAttribute('aria-expanded',String(!collapsed));panel.style.transform=`translate(${x}px,${y}px)`;constrain();}
+    function paint(){body.hidden=collapsed;panel.classList.toggle('collapsed',collapsed);toggle.setAttribute('aria-expanded',String(!collapsed));handle.setAttribute('aria-expanded',String(!collapsed));panel.style.transform=`translate(${x}px,${y}px)`;constrain();root.AtlasDock?.reflow(panel);}
     function fold(){const before=panel.getBoundingClientRect();collapsed=!collapsed;paint();const after=panel.getBoundingClientRect();x+=before.left-after.left;y+=before.top-after.top;panel.style.transform=`translate(${x}px,${y}px)`;constrain();persist();}
     toggle.onclick=fold;
     $(resetId).onclick=()=>{x=0;y=0;panel.style.transform='';constrain();if(x===0&&y===0)panel.style.transform='';persist();};
@@ -106,17 +108,17 @@
       if(e.button!==0)return;
       const control=e.target?.closest?.('button,input,select,textarea,a,label,summary,svg,[role="slider"],[contenteditable="true"]');
       if(control&&control!==handle)return;
-      drag={id:e.pointerId,cx:e.clientX,cy:e.clientY,x,y,moved:false};panel.setPointerCapture(e.pointerId);e.preventDefault();e.stopPropagation();
+      drag={id:e.pointerId,cx:e.clientX,cy:e.clientY,x,y,moved:false,docked:root.AtlasDock?.docked(panel),grabX:e.clientX-rectOf().left,grabY:e.clientY-rectOf().top};panel.setPointerCapture(e.pointerId);e.preventDefault();e.stopPropagation();
     };
-    const move=e=>{if(!drag||drag.id!==e.pointerId)return;drag.moved ||= Math.hypot(e.clientX-drag.cx,e.clientY-drag.cy)>4;if(!drag.moved)return;x=drag.x+e.clientX-drag.cx;y=drag.y+e.clientY-drag.cy;panel.style.transform=`translate(${x}px,${y}px)`;constrain();};
-    const end=e=>{if(!drag||drag.id!==e.pointerId)return;suppressClick=drag.moved;if(suppressClick)setTimeout(()=>{suppressClick=false;},0);drag=null;if(panel.hasPointerCapture?.(e.pointerId))panel.releasePointerCapture(e.pointerId);persist();};
+    const move=e=>{if(!drag||drag.id!==e.pointerId)return;drag.moved ||= Math.hypot(e.clientX-drag.cx,e.clientY-drag.cy)>4;if(!drag.moved)return;if(drag.docked){root.AtlasDock.undock(panel);x=0;y=0;panel.style.transform='';const r=rectOf();drag.x=e.clientX-r.left-Math.min(drag.grabX,r.width-20);drag.y=e.clientY-r.top-Math.min(drag.grabY,24);drag.cx=e.clientX;drag.cy=e.clientY;drag.docked=false;}root.AtlasDock?.preview(e);x=drag.x+e.clientX-drag.cx;y=drag.y+e.clientY-drag.cy;panel.style.transform=`translate(${x}px,${y}px)`;constrain();};
+    const end=e=>{if(!drag||drag.id!==e.pointerId)return;suppressClick=drag.moved;if(drag.moved)root.AtlasDock?.finish(panel,e,e.type!=='pointerup');if(suppressClick)setTimeout(()=>{suppressClick=false;},0);drag=null;if(panel.hasPointerCapture?.(e.pointerId))panel.releasePointerCapture(e.pointerId);persist();};
     // Keep handle listeners for keyboard/legacy integrations; stop bubbling on start.
     for(const surface of [panel,handle]){
       surface.addEventListener('pointerdown',start);surface.addEventListener('pointermove',move);
       for(const event of ['pointerup','pointercancel','lostpointercapture'])surface.addEventListener(event,end);
     }
     handle.addEventListener('keydown',e=>{const delta={ArrowLeft:[-20,0],ArrowRight:[20,0],ArrowUp:[0,-20],ArrowDown:[0,20]}[e.key];if(!delta)return;e.preventDefault();x+=delta[0];y+=delta[1];panel.style.transform=`translate(${x}px,${y}px)`;constrain();persist();});
-    if(typeof ResizeObserver!=='undefined'){const observer=new ResizeObserver(constrain);observer.observe(stage);observer.observe(panel);}
+    if(typeof ResizeObserver!=='undefined'){let queued=false;const observer=new ResizeObserver(()=>{if(queued)return;queued=true;requestAnimationFrame(()=>{queued=false;constrain();});});observer.observe(stage);observer.observe(panel);}
     group.panels.push({panel,rect:rectOf,moveTo(left,top){const rect=rectOf();x+=left-rect.left;y+=top-rect.top;panel.style.transform=`translate(${x}px,${y}px)`;constrain();persist();},compact(){if(collapsed)return;const before=rectOf();collapsed=true;paint();const after=rectOf();x+=before.left-after.left;y+=before.top-after.top;panel.style.transform=`translate(${x}px,${y}px)`;constrain();persist();}});
     paint();return {constrain,state:()=>({x,y,collapsed})};
   }

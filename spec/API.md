@@ -9,7 +9,7 @@
 - `/api/schema` 與 `/schema/news-atlas.schema.json`：canonical JSON Schema。
 - `/api/status` 與 `/api/capabilities`：DB／功能資訊，不回傳 key。
 
-目前 22 個 API 操作，分為新聞（串流／單 JSON 搜尋、唯讀快取、article observations）、純圖譜轉換（normalize/build/filter/explore/timeline）、channels/classify、snapshots/view validate。實際 dispatch 在 [server.py](../server.py)、[api.py](../news_atlas/api.py)。
+目前 29 個 API 操作（含 6 個本機 Chat 操作），分為新聞（串流／單 JSON 搜尋、唯讀快取、article observations）、純圖譜轉換（normalize/build/filter/explore/timeline）、channels/classify、snapshots/view validate。實際 dispatch 在 [server.py](../server.py)、[api.py](../news_atlas/api.py)。
 
 ## 合約要點
 
@@ -23,11 +23,11 @@ POST 需 application/json。一般 body 上限 16384 bytes；snapshots、classif
 
 ## 未來 MCP
 
-OpenAPI operationId 與 x-mcp annotations 提供候選 tools 提示，但**目前沒有 MCP server transport**。包裝時保留只讀、寫 DB、刪自訂分類及外連的差異；單 JSON 搜尋適合不處理 NDJSON 的 client。REST 不遠端控制已開頁面的 DOM／相機／瀏覽器 localStorage。公開 gateway 需另有認證與授權設計。
+OpenAPI operationId 與 x-mcp annotations 提供候選 tools 提示，一般新聞 API 尚未包裝成 MCP；Chat 的 stdio MCP 已實作，見 [CHAT_AGENT](CHAT_AGENT.md)。包裝時保留只讀、寫 DB、刪自訂分類及外連的差異；單 JSON 搜尋適合不處理 NDJSON 的 client。REST 不遠端控制已開頁面的 DOM／相機／瀏覽器 localStorage。公開 gateway 需另有認證與授權設計。
 
 增加 API 時同步 server 路由、api dispatch、OpenAPI request/response、驗證測試；涉及 schema 改動再更新 canonical schema 與舊快照相容性。不要只改 Swagger 畫面而未實作路由。
 
-`POST /api/settings/massive-key`（key writeOnly）與 DELETE 用於主機明確記住／忘記，僅回 configured。SearchRequest／快照 metadata 支援 rss_region；`/api/capabilities` 提供 regions 對照。完整 OpenAPI 現有 22 個 operationId。
+`POST /api/settings/massive-key`（key writeOnly）與 DELETE 用於主機明確記住／忘記，僅回 configured。SearchRequest／快照 metadata 支援 rss_region；`/api/capabilities` 提供 regions 對照。完整 OpenAPI 現有 29 個 operationId。
 
 `POST /api/graph/build` 可傳 `articles`（全部已提供）或 `source_graphs`（google/yahoo/massive，各全部已提供，二選一），並帶可選 relation_settings。重算只讀傳入文章，不外連／不寫 DB；未知日期 null 保留為孤立點。返回 GraphPayload.relation_settings，預設 rules-v1，自訂 rules-v2，schema 同時接受兩者。快照 view.relation_settings 經同一驗證器清理並持久化；省略時 defaults。具體欄位見 OpenAPI 的 relation_settings schema。
 
@@ -39,3 +39,9 @@ and `source` graph payloads have `relations_pending: true` and empty edges. Afte
 `relations_pending: false`. On computation failure `graph_error` retains the prior news,
 then `done` closes the stream. `/api/search/result` reports `partial: true` for incomplete
 relations as well as provider coverage errors. GPU budgets are client-only.
+
+Chat 同源代理：GET `/api/chat/status`；POST `/api/chat/session|sync|turn|cancel|reset`。
+`turn` 為 NDJSON；其他為 JSON。工作階段 capability 保存在記憶體，以 Authorization bearer 傳遞。
+詳細 runtime 與安全邊界見 [CHAT_AGENT](CHAT_AGENT.md)。
+
+股價大小證據：`POST /api/prices/lens`；交易日公式、ticker 邊界與六小時快取見 [PRICE_LENS.md](PRICE_LENS.md)。

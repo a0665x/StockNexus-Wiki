@@ -17,7 +17,7 @@ from pathlib import Path
 from news_atlas.model import SCHEMA_VERSION, article, clean, timestamp, deduplicate, build_relations
 from news_atlas.search import normalize_request, query_key, search_source
 from news_atlas.storage import Store
-from news_atlas import api, credentials
+from news_atlas import api, credentials, chat_proxy, price_lens
 from news_atlas.graph_cache import build_cached, lookup_cached
 from news_atlas.openapi import specification
 from news_atlas.channels import definitions, annotate, classify, version as channel_version
@@ -161,6 +161,8 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_GET(self):
+        if self.path.startswith('/api/chat/'):
+            chat_proxy.handle(self);return
         path = urllib.parse.urlsplit(self.path).path
         if path == '/api/capabilities':
             self.json_response(200,api.capabilities());return
@@ -190,7 +192,7 @@ class Handler(BaseHTTPRequestHandler):
             saved = self.store.load_snapshot(path.rsplit('/',1)[-1])
             self.json_response(200 if saved else 404, saved or {'error':'快照不存在'})
             return
-        files = {'/relation-settings.js': ('dist/relation-settings.js','text/javascript; charset=utf-8'), '/time-lens.js': ('dist/time-lens.js','text/javascript; charset=utf-8'), '/docs': ('dist/docs.html','text/html; charset=utf-8'), '/docs/': ('dist/docs.html','text/html; charset=utf-8'), '/vendor/swagger-ui-bundle.js': ('dist/vendor/swagger-ui-bundle.js','text/javascript; charset=utf-8'), '/vendor/swagger-ui.css': ('dist/vendor/swagger-ui.css','text/css; charset=utf-8'), '/interaction.js': ('dist/interaction.js','text/javascript; charset=utf-8'), '/date-range.js': ('dist/date-range.js','text/javascript; charset=utf-8'), '/glow.js': ('dist/glow.js','text/javascript; charset=utf-8'), '/i18n.js': ('dist/i18n.js','text/javascript; charset=utf-8'), '/explorer-ui.js': ('dist/explorer-ui.js','text/javascript; charset=utf-8'), '/schema/news-atlas.schema.json': ('schema/news-atlas.schema.json','application/json; charset=utf-8'), '/': ('dist/index.html', 'text/html; charset=utf-8'), '/3d-force-graph.min.js': ('dist/3d-force-graph.min.js', 'text/javascript; charset=utf-8'), '/app.js': ('dist/app.js', 'text/javascript; charset=utf-8'), '/graph-view.js': ('dist/graph-view.js', 'text/javascript; charset=utf-8'), '/timeline.js': ('dist/timeline.js', 'text/javascript; charset=utf-8')}
+        files = {'/price-chart.js': ('dist/price-chart.js','text/javascript; charset=utf-8'), '/docking.js': ('dist/docking.js','text/javascript; charset=utf-8'), '/price-lens.js': ('dist/price-lens.js','text/javascript; charset=utf-8'), '/chat-panel.js': ('dist/chat-panel.js','text/javascript; charset=utf-8'), '/chat-panel.css': ('dist/chat-panel.css','text/css; charset=utf-8'), '/relation-settings.js': ('dist/relation-settings.js','text/javascript; charset=utf-8'), '/time-lens.js': ('dist/time-lens.js','text/javascript; charset=utf-8'), '/docs': ('dist/docs.html','text/html; charset=utf-8'), '/docs/': ('dist/docs.html','text/html; charset=utf-8'), '/vendor/swagger-ui-bundle.js': ('dist/vendor/swagger-ui-bundle.js','text/javascript; charset=utf-8'), '/vendor/swagger-ui.css': ('dist/vendor/swagger-ui.css','text/css; charset=utf-8'), '/interaction.js': ('dist/interaction.js','text/javascript; charset=utf-8'), '/date-range.js': ('dist/date-range.js','text/javascript; charset=utf-8'), '/glow.js': ('dist/glow.js','text/javascript; charset=utf-8'), '/i18n.js': ('dist/i18n.js','text/javascript; charset=utf-8'), '/explorer-ui.js': ('dist/explorer-ui.js','text/javascript; charset=utf-8'), '/schema/news-atlas.schema.json': ('schema/news-atlas.schema.json','application/json; charset=utf-8'), '/': ('dist/index.html', 'text/html; charset=utf-8'), '/3d-force-graph.min.js': ('dist/3d-force-graph.min.js', 'text/javascript; charset=utf-8'), '/app.js': ('dist/app.js', 'text/javascript; charset=utf-8'), '/graph-view.js': ('dist/graph-view.js', 'text/javascript; charset=utf-8'), '/timeline.js': ('dist/timeline.js', 'text/javascript; charset=utf-8')}
         if path not in files:
             self.send_error(404)
             return
@@ -217,6 +219,20 @@ class Handler(BaseHTTPRequestHandler):
         self.json_response(200 if removed else 404, {'channels':self.store.list_channels()} if removed else {'error':'自訂 channel 不存在'})
 
     def do_POST(self):
+        if self.path=='/api/prices/lens':
+            try:
+                length=int(self.headers.get('Content-Length','0'))
+                if self.headers.get('Content-Type','').split(';')[0]!='application/json' or not 0<length<=32*1024*1024:raise ValueError('Invalid price request')
+                body=json.loads(self.rfile.read(length))
+                if not isinstance(body,dict):raise ValueError('Invalid price request')
+                key=body.get('massive_key') or credentials.load_key(self.store.path) or os.environ.get('MASSIVE_API_KEY','')
+                if not isinstance(key,str) or len(key)>512 or any(ord(c)<32 or ord(c)>126 for c in key):raise ValueError('Invalid Massive key')
+                self.json_response(200,price_lens.load(self.store,body,key))
+            except (ValueError,TypeError) as error:self.json_response(400,{'error':str(error)})
+            except price_lens.SourceError as error:self.json_response(502,{'error':str(error),'code':error.code})
+            return
+        if self.path.startswith('/api/chat/'):
+            chat_proxy.handle(self);return
         if self.path not in ('/api/settings/massive-key','/api/search', '/api/search/result', '/api/snapshots', '/api/channels', '/api/classify', *api.POST_PATHS):
             self.send_error(404)
             return

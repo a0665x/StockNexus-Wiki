@@ -110,3 +110,15 @@ replacement renderer. The normal journey verifies cleanup exceptions do not bloc
 早期關聯：`test_progressive_search.py` 驗證第一事件已有 warm edges、provider 尚未開始、
 來源完成不清空既有線、內容變更端點不沿用舊 evidence；`test_feature_cache.py` 驗證純特徵
 內容／定義失效、結果物件隔離與 fetched_at 等 metadata 不被覆寫。
+
+## Chat Agent
+
+`npm run test:chat` verifies session isolation, cancellation, continuation/reset and UI acknowledgements.
+`python3 tests/browser_chat.py` verifies the deployed UI in an isolated Chrome profile;
+`--live` additionally uses the signed-in model and account usage. See [CHAT_AGENT](CHAT_AGENT.md).
+
+股價混合及詳情語言：見 [PRICE_LENS.md](PRICE_LENS.md)。`python3 tests/browser_detail_language.py` 使用隔離 Chrome、現有快照及僅瀏覽器 fixture，無模型請求。
+
+K 線／視窗分割：`node tests/price-chart.test.cjs`、`python3 tests/browser_price_dock.py`，後者在隔離 Chrome 用 CDP 滑鼠拖曳；使用現有快照及真實 Massive 行情／快取，不寫入正式新聞 DB；可能消耗行情 API 額度。另跑 `tests/browser_user_journeys.py` 檢查工具不遮擋導覽與來源控制。
+
+2026-11-03 驗收：132 項 Python 測試、全部 CJS 測試、Chat session／取消／MCP acknowledgement 測試通過。實際 Chrome 驗證中英切換／紅框、標準化後正負完整報酬 16:1 的實際 mesh 比例、十字線／同步軸縮放不改 time_focus、雙擊還原、正負方向高亮、邊緣停留及巢狀拖出比例補位、保存重載；既有 2,400 節點、WebGL 遺失／重試流程亦通過。這些是隔離瀏覽器驗收，不代表所有主機 GPU 容量。socket 與瀏覽器測試須在允許建立本機 socket 的環境執行。

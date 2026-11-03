@@ -23,7 +23,7 @@ let exploration=AtlasView.settings(AtlasUI.read('exploration',{})), activeTrace=
 let glowConfig=AtlasGlow.settings(AtlasUI.read('glow',{})), glowLayer=null, pinnedRoot=null, interaction=null, idleFocus=null, stickyGuideUntil=0;
 let lockedRoots=[], keywordLocked=false, rootSearchState=null, rootSearchTicket=0, rootSearchBusy=false;
 let focusView={articles:[],relations:[]};
-let timeLens=null,timeSizer=null,timePanel=null,relationUI=null;
+let timeLens=null,timeSizer=null,timePanel=null,relationUI=null,priceLens=null;
 const timeLensAvailable=typeof globalThis.AtlasTimeLens?.init==='function'&&typeof globalThis.AtlasTimeLens?.attach==='function';
 let timeFocus=AtlasTimeline.timeSettings(AtlasUI.read('timeFocus',{}));
 const focusRoot=()=>lockedRoots[0]??null;
@@ -148,14 +148,17 @@ function evidenceText(edge) {
   return (edge.evidence || []).map(e => e.entity ? `${e.entity}：${e.source.method === 'provider_ticker' ? AtlasI18n.t('來源標註') : AtlasI18n.t('文章文字')}「${e.source.evidence}」↔ ${e.target.method === 'provider_ticker' ? AtlasI18n.t('來源標註') : AtlasI18n.t('文章文字')}「${e.target.evidence}」` : `共同詞：${(e.title_terms || []).join('、')}；標題相似度 ${e.title_similarity}`).join('；');
 }
 function showArticle(n,pin=true) {
-  selected = n.id;if(pin){acquireRoot(n);touchFocus();if(graph&&viewMode==='network'&&!graph.graphData().nodes.some(a=>a.id===n.id))renderNetwork();}
-  const root = $('article'); root.replaceChildren(); const card = el('div', null, 'card');
+  if(pin)globalThis.AtlasRuntime?.record('article',n.id);
+  selected = n.id;if(pin){priceLens?.select(n);if(AtlasTimeline.day(n.published_at)!==null){timeFocus.date=new Date(AtlasTimeline.day(n.published_at)).toISOString().slice(0,10);syncTimeFocus();AtlasUI.write('timeFocus',timeFocus);}acquireRoot(n);touchFocus();if(graph&&viewMode==='network'&&!graph.graphData().nodes.some(a=>a.id===n.id))renderNetwork();}
+  const root = $('article'); root.replaceChildren(); const card = el('div', null, 'card selected-news');card.append(el('div',AtlasI18n.t('目前選取新聞'),'selected-news-label'));
   card.append(el('div', `${n.source.publisher || n.source.provider} · ${date(n.published_at)}`, 'meta raw'), el('h3', n.title,'raw'), el('p', n.summary || '來源未提供摘要。', n.summary?'muted raw':'muted'));
   for (const entity of n.entities || []) card.append(el('span', `${entity.id} · ${entity.method === 'provider_ticker' ? '來源標註' : '文字辨識'}`, 'tag'));
   const link = el('a', '閱讀原文 ↗'); link.href = n.url; link.target = '_blank'; link.rel = 'noopener noreferrer'; card.append(el('p'), link);
   if(n.source.country)card.append(el('p',AtlasI18n.t('RSS 搜尋版本')+': '+n.source.country+' · '+(n.source.language||''),'muted raw'));
   if (n.source.via) card.append(el('p', '取得途徑：' + n.source.via, 'muted'));
+  const priceNote=priceLens?.describe(n);if(priceNote)card.append(el('p',priceNote,'raw price-detail'));
   root.append(card, el('h3', 'Channel 分類依據'));
+  if(pin){const page=$('newsPage');if(page)page.scrollTop=0;else $('detail').scrollTop=0;}
   for(const c of n.channels||[]){const block=el('div',null,'channel-evidence');block.append(el('strong',c.name+(c.id===n.primary_channel?' · 主要分類':''),c.id.startsWith('custom-')?'raw':''),el('p',c.evidence.length?c.evidence.map(e=>`${e.field==='title'?AtlasI18n.t('標題'):AtlasI18n.t('摘要')}：${e.match}`).join('；'):'未命中目前分類規則',c.evidence.length?'raw':''));root.append(block);}
   root.append(el('h3', '與這篇新聞的關聯'));
   const related = relations.filter(r => r.source === n.id || r.target === n.id);
@@ -194,7 +197,7 @@ function rebuild(payload,relationUpdate=false) {
   const total = viewSources().reduce((n,p)=>n+(groups[p]?.total_articles ?? groups[p]?.articles.length ?? 0),0);
   $('viewLimit').textContent = `${AtlasI18n.t('所選來源')} ${total} · ${AtlasI18n.t('完整資料保留')}`;
   const list = $('list'); list.replaceChildren();
-  for (const a of articles) { const b = el('button'); b.append(el('div', (a.display_sources || []).map(p=>sourceNames[p]).join('／') + ' · ' + date(a.published_at), 'meta'), el('div', a.title,'raw')); b.addEventListener('click', () => showArticle(a)); list.append(b); }
+  for (const a of articles) { const b = el('button'); b.setAttribute('data-article-id',a.id); b.append(el('div', (a.display_sources || []).map(p=>sourceNames[p]).join('／') + ' · ' + date(a.published_at), 'meta'), el('div', a.title,'raw')); b.addEventListener('click', () => showArticle(a)); list.append(b); }
   if (selected) { const n = articles.find(a => a.id === selected); if (n) showArticle(n,false); else { selected = null; $('nodeJson').replaceChildren(); $('article').replaceChildren(el('p', '點擊新聞查看來源與關聯依據。', 'muted')); } }
   renderNetwork();
   refreshFocus();if(viewMode==='timeline')renderTimeline();
@@ -244,10 +247,12 @@ function syncTimelineRange(rows){
   slider.value=Math.round((AtlasTimeline.day(timelineCutoff)-range.start)/86400000);slider.disabled=!rows.length;
   $('cutoffLabel').textContent=timelineCutoff+' UTC';
 }
+function sizeBounds(){const base=timelineBounds||AtlasTimeline.range([],{start:$('start').value,end:$('end').value});return priceLens?.bounds(base)||base;}
+function displaySizeBounds(){return priceLens?.displayBounds(sizeBounds())||sizeBounds();}
 function syncTimeFocus(){
-  const bounds=timelineBounds||AtlasTimeline.range([],{start:$('start').value,end:$('end').value});
+  const bounds=displaySizeBounds(),full=sizeBounds();
   const stamp=AtlasTimeline.day(timeFocus.date);
-  timeFocus.date=new Date(stamp===null?bounds.end:Math.min(bounds.end,Math.max(bounds.start,stamp))).toISOString().slice(0,10);
+  timeFocus.date=new Date(stamp===null?full.end:Math.min(full.end,Math.max(full.start,stamp))).toISOString().slice(0,10);
   $('timeSizeEnabled').checked=timeFocus.enabled;$('timeSizeEnabled').disabled=!timeLensAvailable;
   const slider=$('timeFocusSlider');slider.min=0;slider.max=bounds.days;slider.value=Math.round((AtlasTimeline.day(timeFocus.date)-bounds.start)/86400000);
   slider.disabled=!timeLensAvailable||!timeFocus.enabled||!focusView.articles.length||!bounds.days;
@@ -257,11 +262,11 @@ function syncTimeFocus(){
   const ticks=$('timeFocusTicks');ticks.replaceChildren();
   for(const tick of AtlasTimeline.timeTicks(bounds)){const span=el('span',tick.label);span.style.left=tick.position+'%';ticks.append(span);}
   $('timeFocusBar').classList.toggle('disabled',!timeFocus.enabled||!timeLensAvailable);
-  timeLens?.paint();timeSizer?.refresh();
+  timeLens?.paint();timeSizer?.refresh();priceLens?.paint();
   layoutTimeBar();
 }
 function layoutTimeBar(){
-  const panel=timePanel?.state(),floating=panel&&(panel.collapsed||panel.x!==0||panel.y!==0);
+  const panel=timePanel?.state(),floating=panel&&(globalThis.AtlasDock?.docked($('timeFocusBar'))||panel.collapsed||panel.x!==0||panel.y!==0);
   const bottom=floating?54:($('timeFocusBar').offsetHeight||104)+64;
   $('timeline').style.bottom=(bottom+30)+'px';$('traceStatus').style.bottom=bottom+'px';
 }
@@ -272,7 +277,7 @@ function updateTimeCurve(values){
 }
 function updateTimeFocus(){
   timeFocus.enabled=$('timeSizeEnabled').checked;
-  if(timelineBounds)timeFocus.date=new Date(timelineBounds.start+Number($('timeFocusSlider').value)*86400000).toISOString().slice(0,10);
+  priceLens?.clearSelection();if(timelineBounds)timeFocus.date=new Date(displaySizeBounds().start+Number($('timeFocusSlider').value)*86400000).toISOString().slice(0,10);
   syncTimeFocus();AtlasUI.write('timeFocus',timeFocus);touchFocus();glowLayer?.refresh();
   if(viewMode==='timeline')renderTimeline();
 }
@@ -289,7 +294,7 @@ function renderTimeline(){
   $('timelineZoomValue').textContent=(Number($('timelineZoom').value)||1)+'×';
   $('timelineZoomValue').setAttribute('data-zoom',Number($('timelineZoom').value)||1);
   const renderer=AtlasTimeline.renderDensity;
-  const model=renderer($('timeline'),currentView,channelDefinitions,{width,start:timelineBounds?.startDate,end:timelineBounds?.endDate,channel:channelFilter,zoom:Number($('timelineZoom').value)||1,colors,exploration,glow:glowConfig,rootId:pinnedRoot,getRoots:()=>lockedRoots,getTrace:()=>activeTrace,nodeScale:n=>AtlasTimeline.timeScale(n,timeFocus,timelineBounds),getPreviewRoot:()=>hovered,onTrace:showTrace,onBucketSelect:showBucket,onBucketHover:previewBucket,onSelect:showArticle,onHover:(n,e)=>{setHovered(n);positionPreview(e);}});
+  const model=renderer($('timeline'),currentView,channelDefinitions,{width,start:timelineBounds?.startDate,end:timelineBounds?.endDate,channel:channelFilter,zoom:Number($('timelineZoom').value)||1,colors,exploration,glow:glowConfig,rootId:pinnedRoot,getRoots:()=>lockedRoots,getTrace:()=>activeTrace,nodeScale:n=>priceLens?.scale(n,AtlasTimeline.timeScale(n,timeFocus,sizeBounds()),timeFocus.enabled)??AtlasTimeline.timeScale(n,timeFocus,sizeBounds()),getPreviewRoot:()=>hovered,onTrace:showTrace,onBucketSelect:showBucket,onBucketHover:previewBucket,onSelect:showArticle,onHover:(n,e)=>{setHovered(n);positionPreview(e);}});
   if(timelineFocusRequested&&model.nodes.length){const focused=model.nodes.filter(n=>(n.articles||[n.article]).some(a=>lockedRoots.includes(a.id)));const related=model.nodes.filter(n=>(n.articles||[n.article]).some(a=>activeTrace.nodes.has(a.id)));const candidates=focused.length?focused:related.length?related:model.nodes;const anchor=candidates.reduce((a,b)=>a.x<b.x?a:b);$('timeline').scrollLeft=Math.max(0,anchor.x-210);$('timeline').scrollTop=Math.max(0,anchor.y-Math.max(56,(($('timeline').clientHeight||156)+48)/2));timelineFocusRequested=false;}
 }
 function applyMode(){
@@ -367,7 +372,7 @@ $('start').value = new Date(today.getTime() - 6 * 86400000).toISOString().slice(
 const dateRange=AtlasDates.init($);
 const persistSearchDraft=AtlasUI.initSearch($,dateRange);
 dateRange.onChange(()=>{persistSearchDraft();if(!focusView.articles.length){timelineBounds=AtlasTimeline.range([],{start:$('start').value,end:$('end').value});syncTimeFocus();}});
-if(timeLensAvailable)timeLens=AtlasTimeLens.init($,{getState:()=>({config:timeFocus,dates:timelineBounds||AtlasTimeline.range([],{start:$('start').value,end:$('end').value})}),onChange:updateTimeCurve,onBusy:busy=>{if(!busy)touchFocus();}});
+if(timeLensAvailable)timeLens=AtlasTimeLens.init($,{getState:()=>({config:timeFocus,dates:sizeBounds(),viewport:displaySizeBounds(),components:priceLens?.components}),onChange:updateTimeCurve,onBusy:busy=>{if(!busy)touchFocus();}});
 $('timeBellEditor').hidden=!timeLensAvailable;$('timeLensStatus').hidden=timeLensAvailable;
 $('timeBellEditor').open=AtlasUI.read('timeCurveOpen',true);$('timeBellEditor').addEventListener('toggle',()=>{if(viewMode==='network')AtlasUI.write('timeCurveOpen',$('timeBellEditor').open);layoutTimeBar();});
 $('timeSizeEnabled').onchange=updateTimeFocus;$('timeFocusSlider').oninput=updateTimeFocus;syncTimeFocus();
@@ -410,7 +415,7 @@ $('cancel').onclick=()=>{
   relationUI?.setSearchBusy(false);$('submit').disabled=false;$('cancel').hidden=true;$('saveDB').disabled=!focusView.articles.length||saving;
   operationNotice=AtlasI18n.t('已停止等待；已載入資料保留，伺服器可能繼續處理。');updateGraphMessage();
 };
-$('export').onclick = () => { const data = { schema_version: '2.0', search: exportMeta, articles:focusView.articles, relations:focusView.relations, view: {sources:viewSources(),separate:isSeparate(),mode:viewMode,channel_filter:channelFilter,cutoff:timelineCutoff,timeline_style:timelineStyle,exploration,glow:glowConfig,time_focus:timeFocus,relation_settings:basePayload.relation_settings||relationUI?.applied(),focus:{mode:lockedRoots.length?(keywordLocked?'keyword':'single'):'overview',root_ids:lockedRoots,query:keywordLocked?rootSearchState?.query||'':'',limit:rootSearchState?.limit||3},channel_definitions:channelDefinitions}, relation_note: '關聯來自明確代碼、文字實體、主題與標題相似規則；分數不是機率，連線不是因果。' }; const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })); const a = el('a'); a.href = url; a.download = 'news-atlas.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 10000); };
+$('export').onclick = () => { const data = { schema_version: '2.0', search: exportMeta, articles:focusView.articles, relations:focusView.relations, view: {sources:viewSources(),separate:isSeparate(),mode:viewMode,channel_filter:channelFilter,cutoff:timelineCutoff,timeline_style:timelineStyle,exploration,glow:glowConfig,time_focus:timeFocus,price_focus:priceLens?.snapshot(),relation_settings:basePayload.relation_settings||relationUI?.applied(),focus:{mode:lockedRoots.length?(keywordLocked?'keyword':'single'):'overview',root_ids:lockedRoots,query:keywordLocked?rootSearchState?.query||'':'',limit:rootSearchState?.limit||3},channel_definitions:channelDefinitions}, relation_note: '關聯來自明確代碼、文字實體、主題與標題相似規則；分數不是機率，連線不是因果。' }; const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })); const a = el('a'); a.href = url; a.download = 'news-atlas.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 10000); };
 $('fit').onclick = () => {if(viewMode==='timeline'){$('timelineZoom').value=1;$('timeline').scrollLeft=0;renderTimeline();}else graph?.zoomToFit(reducedMotion ? 0 : 600, 60);};
 $('openSearch').onclick = () => $('searchPanel').classList.add('open'); $('closeSearch').onclick = () => $('searchPanel').classList.remove('open'); $('closeDetail').onclick = () => $('detail').classList.remove('open'); $('openResults').onclick = () => $('detail').classList.add('open');
 fetch('/api/status').then(r => r.json()).then(info => { updateDB(info.db); if (info.massive_configured){$('key').placeholder = '伺服器已設定 key，可留白';if(!$('key').value)$('keyStatus').textContent='主機已有金鑰，搜尋會自動沿用。';} }).catch(() => {});
@@ -421,7 +426,7 @@ function savedPayload() {
   rememberNetwork();for(const [id,pos] of restoredPositions)networkPositions.set(id,pos);const ids=new Set(focusView.articles.map(a=>a.id));
   const positions=[...networkPositions].filter(([id])=>ids.has(id)).map(([id,p])=>({id,...p}));
   const payload=AtlasView.snapshot(basePayload,focusView,viewSources(),isSeparate(),exportMeta,positions);
-  Object.assign(payload.view,{mode:viewMode,channel_filter:channelFilter,cutoff:timelineCutoff,timeline_zoom:Number($('timelineZoom').value)||1,timeline_style:timelineStyle,exploration,glow:glowConfig,time_focus:timeFocus,relation_settings:basePayload.relation_settings||relationUI?.applied(),focus:{mode:lockedRoots.length?(keywordLocked?'keyword':'single'):'overview',root_ids:lockedRoots,query:keywordLocked?rootSearchState?.query||'':'',limit:rootSearchState?.limit||3},channel_definitions:channelDefinitions});
+  Object.assign(payload.view,{mode:viewMode,channel_filter:channelFilter,cutoff:timelineCutoff,timeline_zoom:Number($('timelineZoom').value)||1,timeline_style:timelineStyle,exploration,glow:glowConfig,time_focus:timeFocus,price_focus:priceLens?.snapshot(),relation_settings:basePayload.relation_settings||relationUI?.applied(),focus:{mode:lockedRoots.length?(keywordLocked?'keyword':'single'):'overview',root_ids:lockedRoots,query:keywordLocked?rootSearchState?.query||'':'',limit:rootSearchState?.limit||3},channel_definitions:channelDefinitions});
   return payload;
 }
 $('saveDB').onclick = async () => {
@@ -446,6 +451,7 @@ async function restoreSnapshot(id) {
     timelineFocusRequested=true;viewMode=saved.view.mode||'network';channelFilter=saved.view.channel_filter||'all';timelineCutoff=saved.view.cutoff||null;$('timelineZoom').value=saved.view.timeline_zoom||1;
     clearFocus();timeFocus=AtlasTimeline.timeSettings(saved.view.time_focus||{enabled:false});AtlasUI.write('timeFocus',timeFocus);glowConfig=AtlasGlow.settings(saved.view.glow||{});syncGlowControls();exploration=AtlasView.settings(saved.view.exploration||{});syncRelationControls();
     relationUI?.restore(saved.view.relation_settings);selected=null;$('article').replaceChildren(el('p','點擊新聞查看來源與關聯依據。','muted'));$('nodeJson').replaceChildren();applyMode();rebuild({relation_settings:saved.view.relation_settings,source_graphs:saved.source_graphs,cross_relations:saved.cross_relations,channel_definitions:saved.view.channel_definitions?.length?saved.view.channel_definitions:channelCatalog});
+    priceLens?.restore(saved.view.price_focus,saved.search?.ticker||'');
     const focus=saved.view.focus;if(focus?.root_ids?.length){lockedRoots=focus.root_ids.filter(id=>focusView.articles.some(a=>a.id===id));keywordLocked=focus.mode==='keyword'&&lockedRoots.length>0;$('rootQuery').value=focus.query||'';$('rootLimit').value=focus.limit||3;if(keywordLocked){rootSearchState={query:focus.query,limit:focus.limit,matches:lockedRoots.map(id=>({id,title:focusView.articles.find(a=>a.id===id).title,evidence:[]}))};renderRootResults();}refreshFocus();if(viewMode==='timeline')renderTimeline();touchFocus();}
     $('saveStatus').textContent=`已載入「${saved.name}」· ${date(saved.created_at)}`;sourceStates={};
     for(const [s,g] of Object.entries(saved.source_graphs))sourceStates[s]={cached:g.articles.length,new:0,total:g.articles.length,done:true,phase:'已存圖譜'};
@@ -530,10 +536,10 @@ function glowState(){const category=highlightMode==='category'&&viewMode==='netw
 syncGlowControls();
 new ResizeObserver(layoutTimeBar).observe($('timeFocusBar'));
 
-idleFocus=AtlasInteraction.idleFocus(clearFocus,{isBusy:()=>highlightMode==='category'||$('relationDialog')?.open===true||interaction?.isDragging()===true||timeLens?.isDragging()===true});
+idleFocus=AtlasInteraction.idleFocus(clearFocus,{isBusy:()=>globalThis.AtlasChat?.active()===true||highlightMode==='category'||$('relationDialog')?.open===true||interaction?.isDragging()===true||timeLens?.isDragging()===true});
 function attachGraphBehaviors(){
   glowLayer=AtlasGlow.attach($('glowCanvas'),glowState);
-  if(timeLensAvailable)timeSizer=AtlasTimeLens.attach(graph,()=>({config:timeFocus,dates:timelineBounds}));
+  if(timeLensAvailable)timeSizer=AtlasTimeLens.attach(graph,()=>({config:timeFocus,dates:sizeBounds(),scale:(n,v)=>priceLens?.scale(n,v,timeFocus.enabled)??v}));
   interaction=AtlasInteraction.attach($('graph'),{getGraph:()=>graph,enabled:()=>viewMode==='network'&&!!graph,onHover:setHovered,onSelect:showArticle,onDragEnd:()=>rememberNetwork(),onBackground:clearGraphSelection,onActivity:touchFocus,strength:()=>Number($('stickyStrength').value)});
 }
 attachGraphBehaviors();
@@ -609,3 +615,67 @@ for(const p of providers)$('color-'+p).addEventListener('input',()=>{
 });
 $('resetSourceColors').onclick=()=>{Object.assign(colors,defaultColors);AtlasUI.write('sourceColors',colors);syncSourceColors();};
 syncSourceColors();
+
+// Public, redacted runtime contract shared by Chat and its MCP UI adapter.
+(() => {
+  if(typeof document.addEventListener!=='function')return;
+  const clickIds=['modeNetwork','modeTimeline','fit','clearRoot','resetGlow','resetRelations','rootSearchSubmit','relationOpen','relationClose','relationApply','relationCancel','cancelOperation','retryGraph','priceLoad','sourcePanelToggle','sourcePanelReset','timePanelToggle','timePanelReset','timeBellUndo','timeBellReset','timelineZoomIn','timelineZoomOut','submit','cancel','dateCustom','dateQuick','months-3','months-6','months-9','months-12'];
+  const setIds=['language','query','ticker','start','end','rssRegion','source-google','source-yahoo','source-massive','view-google','view-yahoo','view-massive','rootQuery','rootLimit','renderBudget','highlightModeSwitch','graphChannel','separateSources','channelFilter','timelineZoom','timelineCutoff','stickyStrength','timeSizeEnabled','timeFocusSlider','priceMix','priceHorizon','glow-enabled',...['brightness','radius','decay','background'].map(k=>'glow-'+k),...['internalMin','crossMin','depth','branchLimit','pathMin'].map(k=>'rel-'+k),...['adaptive','entity','entity_days','topic','topic_days','topic_similarity','title','title_days','title_similarity','title_terms_min','half_life','internal_neighbors','cross_neighbors','coverage_first'].map(k=>'relation-'+k)];
+  let revision=0,previous='',dataset=0,lastArticles=null,lastEdges=null;const recent=[];
+  const note=(type,id)=>{recent.push({type,id,at:new Date().toISOString()});if(recent.length>12)recent.shift();};
+  document.addEventListener('click',e=>{const node=e.target.closest?.('[id], [data-article-id]');if(clickIds.includes(node?.id))note('click',node.id);});
+  document.addEventListener('change',e=>{if(setIds.includes(e.target.id))note('change',e.target.id);});
+  const control=(id,kind)=>{const e=$(id);if(!e)return null;return {id,kind,type:e.type,disabled:!!e.disabled,hidden:!!e.closest('[hidden]'),value:e.type==='checkbox'?e.checked:e.value,min:e.min||undefined,max:e.max||undefined,step:e.step||undefined,options:e.tagName==='SELECT'?Array.from(e.options,o=>({value:o.value,label:o.textContent})):undefined};};
+  function state(){
+    if(lastArticles!==focusView.articles||lastEdges!==focusView.relations){dataset++;lastArticles=focusView.articles;lastEdges=focusView.relations;}
+    const scope=highlightMode==='category'&&viewMode==='network'?Array.from(categoryTrace.nodes.keys()):lockedRoots.length?Array.from(new Set([...lockedRoots,...activeTrace.nodes.keys()])):selected?[selected]:currentView.articles.map(a=>a.id);
+    const state={dataset,view_mode:viewMode,highlight_mode:highlightMode,selected_article:selected,root_ids:[...lockedRoots],category:graphChannel,channel_filter:channelFilter,scope_ids:scope,scope_kind:highlightMode==='category'&&viewMode==='network'?'category':lockedRoots.length?'roots_and_relations':selected?'article':'visible_results',visible_ids:currentView.articles.map(a=>a.id),counts:{loaded:focusView.articles.length,visible:currentView.articles.length,scope:scope.length,edges:focusView.relations.length,rendered:renderedCount},sources:viewSources(),search:{query:exportMeta.query||'',ticker:exportMeta.ticker||'',start:exportMeta.start||'',end:exportMeta.end||''},cutoff:timelineCutoff,render_budget:renderBudget,exploration:{...exploration},glow:{...glowConfig},time_focus:{...timeFocus},price_focus:priceLens?.state(),tool_dock:globalThis.AtlasDock?.state(),relation_settings:basePayload.relation_settings||{},busy:{search:!!controller,relations:!!relationActivity.busy,root_search:rootSearchBusy},graph_error:graphFailure?.message||null,controls:[...clickIds.map(id=>control(id,'click')),...setIds.map(id=>control(id,'set'))].filter(Boolean),recent_actions:recent.slice()};
+    const fingerprint=JSON.stringify(state);if(fingerprint!==previous){previous=fingerprint;revision++;}return {...state,revision};
+  }
+  function data(){return {articles:focusView.articles.map(a=>({id:a.id,title:a.title,summary:a.summary||'',url:a.url,published_at:a.published_at,source:{provider:a.source?.provider,publisher:a.source?.publisher},channels:a.channels,entities:a.entities})),edges:focusView.relations.map(e=>({id:AtlasView.identity(e),source:AtlasView.endpoint(e.source),target:AtlasView.endpoint(e.target),type:e.type,score:e.score,evidence:e.evidence}))};}
+  async function act(action){
+    if(action.kind==='read')return state();
+    const before=state();if(action.revision!==before.revision)throw Error('畫面已更新，請重新讀取狀態再操作。');
+    let target;
+    if(action.kind==='select_article'){
+      target=Array.from($('list').querySelectorAll('[data-article-id]')).find(e=>e.dataset.articleId===action.id);
+      if(!target)throw Error('這篇新聞不在目前可選清單中。');
+      target.click();
+    }else{
+      const allowed=action.kind==='click'?clickIds:action.kind==='set'?setIds:[];
+      if(!allowed.includes(action.id))throw Error('此控制項未開放操作。');
+      target=$(action.id);if(!target||target.disabled)throw Error('控制項目前不可用。');
+      if(action.kind==='click')target.click();
+      else {
+        if(target.type==='checkbox'){
+          if(typeof action.value!=='boolean')throw Error('此設定需要 true／false。');
+          if(target.checked!==action.value)target.click();
+        }else{
+          const value=String(action.value);
+          if(target.tagName==='SELECT'&&!Array.from(target.options).some(o=>o.value===value))throw Error('無效選項。');
+          if(['range','number'].includes(target.type)){
+            const n=Number(value),min=target.min===''?-Infinity:Number(target.min),max=target.max===''?Infinity:Number(target.max),step=Number(target.step)||1;
+            if(!Number.isFinite(n)||n<min||n>max||Math.abs((n-(Number.isFinite(min)?min:0))/step-Math.round((n-(Number.isFinite(min)?min:0))/step))>1e-6)throw Error('數值超出範圍或步進。');
+          }
+          if(value.length>200)throw Error('輸入過長。');
+          const old=target.value;target.value=value;if(!target.checkValidity()){target.value=old;throw Error('輸入格式無效。');}
+          target.dispatchEvent(new Event('input',{bubbles:true}));target.dispatchEvent(new Event('change',{bubbles:true}));
+        }
+      }
+    }
+    target.classList.add('agent-operated');setTimeout(()=>target.classList.remove('agent-operated'),1600);
+    note('agent',action.id);
+    await new Promise(r=>setTimeout(r,120));
+    if(action.id==='relationApply'||action.id==='rootSearchSubmit'){
+      const until=Date.now()+12000;while((relationActivity.busy||rootSearchBusy)&&Date.now()<until)await new Promise(r=>setTimeout(r,100));
+      if(relationActivity.busy||rootSearchBusy)throw Error('操作仍在處理，尚未確認完成。');
+      if(relationActivity.error)throw Error(relationActivity.error);
+    }
+    return state();
+  }
+  globalThis.AtlasRuntime={state,data,act,record:note};
+})();
+
+if(globalThis.AtlasPrice)priceLens=AtlasPrice.init($,{articles:()=>focusView.articles,ticker:()=>$('ticker').value,focus:()=>({bounds:sizeBounds(),date:timeFocus.date}),onDate:date=>updateTimeCurve({date}),onChange:()=>{syncTimeFocus();if(viewMode==='timeline')renderTimeline();const n=articles.find(a=>a.id===selected);if(n)showArticle(n,false);}});
+
+globalThis.addEventListener?.('atlas-dock',layoutTimeBar);

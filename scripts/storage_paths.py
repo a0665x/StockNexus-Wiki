@@ -131,6 +131,8 @@ def copy_verified(source,target):
     def ignore(directory,names):
         ignored=[]
         for name in names:
+            if (Path(directory)/name).is_socket() or name=='chat-process.json':
+                ignored.append(name);continue
             base=Path(directory)/name.rsplit('-',1)[0]
             if name.endswith(('-wal','-shm','-journal')) and base.is_file():
                 with base.open('rb') as file:

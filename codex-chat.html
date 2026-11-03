@@ -1,0 +1,581 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Codex · 本機對話</title>
+  <style>
+    :root {
+      --paper: #f7f7f3;
+      --surface: #fff;
+      --ink: #223049;
+      --muted: #6d7785;
+      --line: #e5e8e5;
+      --accent: #287b6a;
+      --accent-soft: #e8f2ed;
+      --navy: #253750;
+      --danger: #a33d37;
+      --danger-soft: #fff2ef;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    html, body { height: 100%; margin: 0; }
+    body { background: var(--paper); color: var(--ink); font-family: var(--font); font-size: 15px; }
+    button, textarea { font: inherit; }
+    button { cursor: pointer; }
+    button:disabled { cursor: not-allowed; }
+    button, a, textarea { -webkit-tap-highlight-color: transparent; }
+    button:focus-visible, a:focus-visible { outline: 3px solid #81b7a9; outline-offset: 4px; }
+    button svg { flex-shrink: 0; }
+    .app { display: grid; grid-template-columns: 240px minmax(0, 1fr); height: 100%; height: 100dvh; }
+    .sidebar { background: #eeefea; border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 34px 22px 22px; }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand-mark { display: grid; place-items: center; width: 38px; height: 38px; background: var(--navy); border-radius: 12px; color: #fff; }
+    .brand-name { font-size: 21px; font-weight: 700; letter-spacing: -.6px; }
+    .brand-sub { color: var(--muted); font-size: 11px; letter-spacing: .13em; margin-top: 3px; }
+    .new-chat { display: flex; justify-content: center; align-items: center; gap: 8px; width: 100%; margin-top: 35px; border: 1px solid #d4dbd4; background: #fafbf8; border-radius: 10px; padding: 12px; color: var(--ink); font-size: 14px; font-weight: 600; transition: background .15s; }
+    .new-chat:hover:not(:disabled) { background: #fff; }
+    .new-chat:disabled { opacity: .45; }
+    .sidebar-note { font-size: 12px; color: var(--muted); line-height: 1.8; margin: 15px 3px; }
+    .sidebar-bottom { margin-top: auto; }
+    .connection-card { border-top: 1px solid #dce1db; padding-top: 18px; }
+    .connection-title { display: flex; gap: 8px; align-items: center; font-size: 13px; font-weight: 600; }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #adb5bd; flex-shrink: 0; }
+    .status-dot[data-state="ready"] { background: var(--accent); box-shadow: 0 0 0 3px #dcebe1; }
+    .status-dot[data-state="busy"] { background: #be9250; animation: blink 1.5s ease-in-out infinite; }
+    .status-dot[data-state="error"] { background: var(--danger); }
+    .connection-detail { color: var(--muted); font-size: 12px; line-height: 1.7; margin: 10px 0 0; overflow-wrap: anywhere; }
+    .version { font-size: 11px; color: #8a928e; margin-top: 8px; }
+    .recheck { border: 0; background: transparent; color: var(--accent); font-size: 12px; font-weight: 600; margin-top: 12px; padding: 0; }
+    .recheck:hover { text-decoration: underline; }
+    .main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+    .topbar { height: 82px; min-height: 82px; padding: 0 38px; display: flex; justify-content: space-between; align-items: center; gap: 16px; border-bottom: 1px solid var(--line); background: #f7f7f3ed; }
+    .page-title { font-size: 16px; font-weight: 650; margin: 0; }
+    .topbar-note { color: var(--muted); font-size: 12px; margin-top: 4px; }
+    .account-badge { color: #53695f; display: inline-flex; align-items: center; gap: 7px; font-size: 12px; white-space: nowrap; background: #edf1e9; border: 1px solid #e0e6db; border-radius: 20px; padding: 8px 11px; }
+    .conversation-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-color: #ccd4cc transparent; scrollbar-width: thin; }
+    .conversation-inner { max-width: 900px; margin: 0 auto; padding: 35px 36px 25px; }
+    .welcome { max-width: 580px; margin: clamp(32px, 8vh, 105px) auto 45px; }
+    .eyebrow { color: var(--accent); font-size: 11px; font-weight: 700; letter-spacing: .15em; display: flex; align-items: center; gap: 10px; }
+    .eyebrow::before { content: ""; display: inline-block; width: 22px; height: 2px; background: var(--accent); }
+    .welcome h2 { font-size: clamp(27px, 3vw, 38px); line-height: 1.45; letter-spacing: -.8px; margin: 21px 0 14px; font-weight: 650; }
+    .welcome p { color: var(--muted); line-height: 1.9; font-size: 14px; max-width: 440px; margin: 0; }
+    .suggestions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 28px; }
+    .suggestion { border: 1px solid #dfe5dd; background: #fdfefa; border-radius: 9px; color: #566575; padding: 10px 12px; font-size: 12px; transition: border-color .15s, color .15s; }
+    .suggestion:hover:not(:disabled) { border-color: #8db2a4; color: var(--accent); }
+    .message { margin: 0 0 26px; }
+    .message.user { display: flex; flex-direction: column; align-items: flex-end; }
+    .message-heading { display: flex; align-items: center; gap: 9px; margin-bottom: 9px; font-size: 12px; color: var(--muted); }
+    .message-heading strong { color: var(--ink); font-size: 12px; font-weight: 650; }
+    .avatar { width: 23px; height: 23px; display: inline-grid; place-items: center; border-radius: 7px; background: var(--navy); color: #fff; font-size: 10px; font-weight: 700; letter-spacing: -.5px; }
+    .message-time { font-size: 11px; color: #949c9f; }
+    .message-body { font-size: 14px; line-height: 1.85; white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 2; }
+    .assistant .message-body { padding: 20px 23px; background: var(--surface); border: 1px solid var(--line); border-radius: 3px 15px 15px 15px; box-shadow: 0 2px 6px #263b2b03; }
+    .user .message-body { max-width: 85%; padding: 14px 19px; background: #e8eeea; color: #2d4c42; border: 1px solid #dfe8e0; border-radius: 15px 3px 15px 15px; }
+    .message.error .message-body { background: var(--danger-soft); border: 1px solid #efd6cf; border-radius: 10px; padding: 13px 17px; color: var(--danger); font-size: 13px; }
+    .message.error .message-heading { display: none; }
+    .message-actions { display: flex; align-items: center; margin: 7px 0 0 3px; }
+    .copy-button { display: flex; align-items: center; gap: 5px; border: 0; border-radius: 5px; background: transparent; color: #839087; font-size: 11px; padding: 5px 7px; }
+    .copy-button:hover { background: #e9ede5; color: var(--accent); }
+    .activity { display: flex; align-items: center; gap: 10px; color: #66796d; margin: 4px 0 16px; font-size: 12px; }
+    .activity-spinner { height: 13px; width: 13px; flex-shrink: 0; border-radius: 50%; border: 2px solid #d3e2d8; border-top-color: var(--accent); animation: spin .85s linear infinite; }
+    .activity-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+    .composer-wrap { padding: 12px 36px 20px; }
+    .composer-container { max-width: 828px; margin: 0 auto; }
+    .composer { background: #fff; border: 1px solid #dbe2da; border-radius: 16px; padding: 15px 16px 12px; box-shadow: 0 6px 24px #233e2f05; transition: border-color .15s, box-shadow .15s; }
+    .composer:focus-within { border-color: #8cad9b; box-shadow: 0 0 0 3px #e9f0e8; }
+    textarea { resize: none; width: 100%; min-height: 52px; max-height: 180px; border: 0; outline: none; padding: 2px 3px 8px; color: var(--ink); background: transparent; line-height: 1.7; font-size: 14px; display: block; }
+    textarea::placeholder { color: #9aaba0; }
+    textarea:disabled { color: #a0a7a0; }
+    .composer-bottom { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .composer-hint { color: #939e95; font-size: 11px; }
+    .submit { border: 0; border-radius: 9px; padding: 10px 14px; min-width: 85px; background: var(--navy); color: #fff; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: 12px; font-weight: 650; transition: background .15s; }
+    .submit:hover:not(:disabled) { background: #314d68; }
+    .submit:disabled { background: #e6eae4; color: #98a296; }
+    .submit.stop { background: #f2e9dc; color: #8d6832; }
+    .submit.stop:hover:not(:disabled) { background: #ebddc8; }
+    .footer-note { margin: 11px 0 0; text-align: center; color: #9aa299; font-size: 11px; line-height: 1.7; }
+    .file-mode { max-width: 640px; margin: 22px auto; background: #fff; border: 1px solid #d9e3d6; border-left: 3px solid var(--accent); padding: 21px 22px; border-radius: 10px; }
+    .file-mode h2 { font-size: 17px; margin: 0 0 10px; }
+    .file-mode p { font-size: 13px; line-height: 1.9; color: var(--muted); margin: 8px 0; }
+    .file-mode code { background: #f0f3ed; color: #355147; border-radius: 4px; padding: 3px 5px; font-size: 12px; }
+    .file-mode a { display: inline-block; color: var(--accent); font-size: 13px; font-weight: 600; margin-top: 7px; text-underline-offset: 3px; overflow-wrap: anywhere; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes blink { 50% { opacity: .4; } }
+    @media (max-width: 820px) {
+      .app { grid-template-columns: 190px minmax(0, 1fr); }
+      .sidebar { padding: 27px 16px 20px; }
+      .topbar { padding: 0 25px; }
+      .account-badge { font-size: 11px; padding: 7px 9px; }
+      .conversation-inner { padding-left: 25px; padding-right: 25px; }
+      .composer-wrap { padding-left: 25px; padding-right: 25px; }
+      .composer-hint { font-size: 10px; }
+    }
+    @media (max-width: 620px) {
+      .app { display: flex; flex-direction: column; }
+      .sidebar { padding: 14px 17px; border-right: 0; border-bottom: 1px solid var(--line); flex-direction: row; align-items: center; gap: 12px; }
+      .brand { gap: 9px; }
+      .brand-mark { width: 32px; height: 32px; border-radius: 10px; }
+      .brand-name { font-size: 18px; }
+      .brand-sub { font-size: 9px; }
+      .new-chat { width: auto; margin: 0 0 0 auto; padding: 8px 10px; font-size: 12px; }
+      .sidebar-note, .sidebar-bottom { display: none; }
+      .main { flex: 1; }
+      .topbar { height: 65px; min-height: 65px; padding: 0 18px; }
+      .page-title { font-size: 13px; }
+      .topbar-note { font-size: 11px; }
+      .account-badge { font-size: 10px; gap: 5px; padding: 6px 8px; }
+      .account-badge svg { width: 12px; height: 12px; }
+      .conversation-inner { padding: 22px 17px 12px; }
+      .welcome { margin-top: 24px; margin-bottom: 25px; }
+      .welcome h2 { font-size: 28px; margin-top: 16px; }
+      .welcome p { font-size: 13px; }
+      .suggestions { margin-top: 22px; gap: 7px; }
+      .suggestion { font-size: 11px; padding: 8px 10px; }
+      .composer-wrap { padding: 8px 13px max(12px, env(safe-area-inset-bottom)); }
+      .composer { padding: 12px 12px 10px; border-radius: 13px; }
+      textarea { font-size: 16px; }
+      .composer-hint { font-size: 10px; }
+      .assistant .message-body { padding: 15px 17px; }
+      .user .message-body { max-width: 95%; }
+      .footer-note { font-size: 10px; margin-top: 7px; }
+      .file-mode { padding: 17px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" aria-label="對話選單">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="m8 6-5 6 5 6M16 6l5 6-5 6M14 4l-4 16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div><div class="brand-name">Codex</div><div class="brand-sub">LOCAL CONVERSATION</div></div>
+      </div>
+      <button class="new-chat" id="newChat" type="button"><svg width="15" height="15" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>新對話</button>
+      <p class="sidebar-note">每個想法，留一點空間。<br>這一頁會接續目前的對話。</p>
+      <div class="sidebar-bottom">
+        <div class="connection-card">
+          <div class="connection-title"><span id="statusDot" class="status-dot" data-state="loading" aria-hidden="true"></span><span id="statusLabel">正在連接</span></div>
+          <p class="connection-detail" id="statusDetail">正在確認本機服務…</p>
+          <div class="version" id="version" hidden></div>
+          <button class="recheck" id="recheck" type="button">重新檢查連線</button>
+        </div>
+      </div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div><h1 class="page-title">本機對話</h1><div class="topbar-note" id="headerStatus" role="status">正在確認連線…</div></div>
+        <div class="account-badge"><svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="3" y="3" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M7 17h6M10 13v4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>使用本機 Codex 登入</div>
+      </header>
+      <div class="conversation-scroll" id="scrollArea">
+        <div class="conversation-inner">
+          <section class="file-mode" id="fileMode" hidden aria-labelledby="fileTitle">
+            <h2 id="fileTitle">先啟動本機服務，就能開始對話</h2>
+            <p>這份 HTML 需要透過本機服務連接 Codex。請先在這個資料夾執行 <code>node server.mjs</code>，再開啟下方網址。</p>
+            <p>只需保留執行服務的視窗，不必在網頁輸入 API key。</p>
+            <a href="http://127.0.0.1:3210/">開啟 http://127.0.0.1:3210/ →</a>
+          </section>
+          <section class="welcome" id="welcome">
+            <div class="eyebrow">A LITTLE ROOM TO THINK</div>
+            <h2>從一句話開始，<br>把想法往前推進。</h2>
+            <p>整理思緒、理解程式，或一起規劃下一步。<br>在下方輸入訊息，讓本機 Codex 接著聊。</p>
+            <div class="suggestions" aria-label="對話起點">
+              <button class="suggestion" type="button" data-prompt="我有一個想法，想請你幫我釐清目標與下一步：">整理一個想法 ↗</button>
+              <button class="suggestion" type="button" data-prompt="請幫我用容易理解的方式，說明以下程式碼：\n\n">解釋一段程式 ↗</button>
+              <button class="suggestion" type="button" data-prompt="我想完成一個專案，請幫我把工作拆成可以開始執行的步驟：">規劃下一步 ↗</button>
+            </div>
+          </section>
+          <section id="messages" aria-label="對話內容" aria-live="polite" aria-relevant="additions text"></section>
+          <div class="activity" id="activity" role="status" hidden><span class="activity-spinner" aria-hidden="true"></span><span class="activity-text" id="activityText">正在處理…</span></div>
+        </div>
+      </div>
+      <div class="composer-wrap">
+        <div class="composer-container">
+          <form class="composer" id="chatForm">
+            <label class="sr-only" for="messageInput">輸入訊息</label>
+            <textarea id="messageInput" placeholder="輸入你的問題…" rows="2" maxlength="20000" autocomplete="off" disabled></textarea>
+            <div class="composer-bottom">
+              <span class="composer-hint">Enter 送出 · Shift + Enter 換行</span>
+              <button class="submit" id="sendButton" type="submit" disabled><span id="sendLabel">送出</span><svg id="sendIcon" width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 16V4M5 9l5-5 5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><svg id="stopIcon" width="12" height="12" viewBox="0 0 12 12" fill="currentColor" hidden aria-hidden="true"><rect x="1" y="1" width="10" height="10" rx="2"/></svg></button>
+            </div>
+          </form>
+          <p class="footer-note">對話畫面保留於此分頁；Codex 會依原本設定保存對話紀錄。</p>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script>
+    (() => {
+      'use strict';
+
+      const $ = (id) => document.getElementById(id);
+      const ui = {
+        form: $('chatForm'), input: $('messageInput'), send: $('sendButton'),
+        sendLabel: $('sendLabel'), sendIcon: $('sendIcon'), stopIcon: $('stopIcon'),
+        messages: $('messages'), welcome: $('welcome'), scroll: $('scrollArea'),
+        activity: $('activity'), activityText: $('activityText'),
+        statusDot: $('statusDot'), statusLabel: $('statusLabel'), statusDetail: $('statusDetail'),
+        headerStatus: $('headerStatus'), version: $('version'), newChat: $('newChat'), recheck: $('recheck'),
+      };
+      const storageKey = 'codex-local-chat.v1';
+      const isFile = location.protocol === 'file:';
+      const state = { ready: false, busy: false, cancelling: false, checking: false, conversationId: null, transcript: [], active: null };
+      const rendered = new Map();
+      let statusTimer;
+
+      function uniqueId() {
+        if (globalThis.crypto && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+          const value = Math.floor(Math.random() * 16);
+          return (c === 'x' ? value : (value & 3) | 8).toString(16);
+        });
+      }
+
+      function persist() {
+        try {
+          sessionStorage.setItem(storageKey, JSON.stringify({ conversationId: state.conversationId, transcript: state.transcript }));
+        } catch (_) { /* Storage can be disabled or full; the live conversation still works. */ }
+      }
+
+      function restore() {
+        try {
+          const saved = JSON.parse(sessionStorage.getItem(storageKey) || 'null');
+          if (!saved || !Array.isArray(saved.transcript)) return;
+          state.conversationId = typeof saved.conversationId === 'string' ? saved.conversationId : null;
+          state.transcript = saved.transcript.filter((entry) => entry &&
+            ['user', 'assistant', 'error'].includes(entry.role) && typeof entry.text === 'string' &&
+            typeof entry.key === 'string').slice(-300);
+          state.transcript.forEach(renderMessage);
+          ui.welcome.hidden = state.transcript.length > 0;
+        } catch (_) { /* Ignore incomplete or unavailable page storage. */ }
+      }
+
+      function scrollBottom(force = false) {
+        const nearBottom = ui.scroll.scrollHeight - ui.scroll.scrollTop - ui.scroll.clientHeight < 160;
+        if (force || nearBottom) requestAnimationFrame(() => { ui.scroll.scrollTop = ui.scroll.scrollHeight; });
+      }
+
+      function setConnection(kind, title, detail) {
+        ui.statusDot.dataset.state = kind;
+        ui.statusLabel.textContent = title;
+        ui.statusDetail.textContent = detail;
+        ui.headerStatus.textContent = state.busy ? 'Codex 正在處理你的訊息' : (kind === 'ready' ? '已連接本機服務' : detail);
+      }
+
+      function syncControls() {
+        ui.input.disabled = isFile || !state.ready || state.busy;
+        ui.newChat.disabled = state.busy;
+        ui.send.disabled = state.busy ? state.cancelling : (!state.ready || isFile || !ui.input.value.trim());
+        ui.send.classList.toggle('stop', state.busy);
+        ui.sendLabel.textContent = state.busy ? (state.cancelling ? '停止中' : '停止') : '送出';
+        ui.sendIcon.hidden = state.busy;
+        ui.stopIcon.hidden = !state.busy;
+        ui.activity.hidden = !state.busy;
+        ui.recheck.disabled = state.checking || state.busy;
+        document.querySelectorAll('.suggestion').forEach((button) => { button.disabled = state.busy || isFile; });
+      }
+
+      function resizeInput() {
+        ui.input.style.height = 'auto';
+        ui.input.style.height = Math.min(ui.input.scrollHeight, 180) + 'px';
+      }
+
+      function createTimeLabel(timestamp) {
+        const date = new Date(timestamp || Date.now());
+        return Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+      }
+
+      async function copyText(text, button) {
+        try {
+          await navigator.clipboard.writeText(text);
+          button.textContent = '已複製';
+        } catch (_) {
+          button.textContent = '請選取文字複製';
+        }
+        setTimeout(() => { if (button.isConnected) button.textContent = '複製回覆'; }, 1800);
+      }
+
+      function renderMessage(entry) {
+        if (rendered.has(entry.key)) {
+          rendered.get(entry.key).body.textContent = entry.text;
+          return;
+        }
+        const article = document.createElement('article');
+        article.className = 'message ' + entry.role;
+        const heading = document.createElement('div');
+        heading.className = 'message-heading';
+        if (entry.role === 'assistant') {
+          const avatar = document.createElement('span');
+          avatar.className = 'avatar';
+          avatar.textContent = 'C';
+          avatar.setAttribute('aria-hidden', 'true');
+          heading.append(avatar);
+        }
+        const name = document.createElement('strong');
+        name.textContent = entry.role === 'user' ? '你' : 'Codex';
+        const time = document.createElement('span');
+        time.className = 'message-time';
+        time.textContent = createTimeLabel(entry.createdAt);
+        heading.append(name, time);
+        const body = document.createElement('div');
+        body.className = 'message-body';
+        body.textContent = entry.text;
+        article.append(heading, body);
+        if (entry.role === 'assistant') {
+          const actions = document.createElement('div');
+          actions.className = 'message-actions';
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'copy-button';
+          button.textContent = '複製回覆';
+          button.addEventListener('click', () => copyText(body.textContent, button));
+          actions.append(button);
+          article.append(actions);
+        }
+        ui.messages.append(article);
+        rendered.set(entry.key, { article, body });
+      }
+
+      function addMessage(role, text, key = uniqueId()) {
+        const existing = state.transcript.find((entry) => entry.key === key);
+        if (existing) existing.text = text;
+        const entry = existing || { key, role, text, createdAt: Date.now() };
+        if (!existing) state.transcript.push(entry);
+        ui.welcome.hidden = true;
+        renderMessage(entry);
+        persist();
+        scrollBottom();
+      }
+
+      function explainError(error) {
+        const raw = typeof error === 'string' ? error : error && error.message;
+        if (!raw) return '發生未預期的錯誤，請稍後再試。';
+        if (/unknown.*conversation|conversation.*(not found|expired)|invalid.*conversation/i.test(raw)) {
+          return '這段對話已無法在本機服務中找到，服務可能已重新啟動。請按「新對話」後再傳送訊息。';
+        }
+        if (/Failed to fetch|fetch failed|NetworkError|Load failed|network/i.test(raw)) {
+          return '無法連接本機服務，請確認執行 node server.mjs 的視窗仍然開著，再重新檢查連線。';
+        }
+        if (/AbortError|aborted/i.test(raw)) return '這次回覆已停止。';
+        if (/^[\x00-\x7F]+$/.test(raw)) return '無法完成這次對話。詳細訊息：' + raw;
+        return raw;
+      }
+
+      async function checkStatus() {
+        if (isFile || state.checking || state.busy) return;
+        state.checking = true;
+        syncControls();
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 10000);
+        try {
+          const response = await fetch('/api/status', { cache: 'no-store', signal: controller.signal });
+          const data = await response.json();
+          if (!response.ok || !data.ok) throw new Error(data.error || data.message || '本機服務尚未就緒。');
+          state.ready = Boolean(data.ready);
+          setConnection(state.ready ? 'ready' : 'error', state.ready ? '本機服務已就緒' : '需要完成設定',
+            data.message || (state.ready ? '可直接沿用本機 Codex 登入。' : '請確認 Codex 已安裝，並完成登入。'));
+          ui.version.hidden = !data.version;
+          ui.version.textContent = data.version ? String(data.version) : '';
+        } catch (error) {
+          state.ready = false;
+          const message = error.name === 'AbortError' ? '檢查連線逾時，請確認本機服務仍在執行。' : explainError(error);
+          setConnection('error', '尚未連接', message);
+        } finally {
+          clearTimeout(timer);
+          state.checking = false;
+          syncControls();
+        }
+      }
+
+      function consumeEvent(event, active) {
+        if (!event || typeof event.type !== 'string') return;
+        if (typeof event.conversationId === 'string') {
+          state.conversationId = event.conversationId;
+          persist();
+        }
+        switch (event.type) {
+          case 'session':
+            break;
+          case 'status':
+            if (typeof event.message === 'string') ui.activityText.textContent = event.message;
+            break;
+          case 'message':
+            if (typeof event.text === 'string' && event.text.trim()) {
+              addMessage('assistant', event.text, active.id + ':' + (event.id || 'response'));
+              active.receivedMessage = true;
+            }
+            break;
+          case 'done':
+            active.completed = true;
+            if (event.cancelled === true) active.cancelled = true;
+            break;
+          case 'error':
+            active.failed = true;
+            addMessage('error', explainError(event.message || '本次處理未完成，請再試一次。'));
+            break;
+        }
+      }
+
+      async function sendMessage() {
+        const message = ui.input.value.trim();
+        if (!message || !state.ready || state.busy || isFile) return;
+        const active = { id: uniqueId(), controller: new AbortController(), completed: false, failed: false, receivedMessage: false, cancelled: false };
+        state.active = active;
+        state.busy = true;
+        state.cancelling = false;
+        ui.activityText.textContent = '正在將訊息交給 Codex…';
+        ui.headerStatus.textContent = 'Codex 正在處理你的訊息';
+        ui.statusDot.dataset.state = 'busy';
+        ui.input.value = '';
+        resizeInput();
+        addMessage('user', message);
+        syncControls();
+        scrollBottom(true);
+        try {
+          const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message, conversationId: state.conversationId, requestId: active.id }),
+            signal: active.controller.signal,
+          });
+          if (!response.ok) {
+            let detail = '本機服務無法處理要求（狀態 ' + response.status + '）。';
+            try { const data = await response.json(); detail = data.error || data.message || detail; } catch (_) {}
+            throw new Error(detail);
+          }
+          if (!response.body) throw new Error('瀏覽器無法讀取回覆，請使用較新版本的 Chrome、Edge 或 Firefox。');
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let pending = '';
+          while (true) {
+            const { value, done } = await reader.read();
+            pending += done ? decoder.decode() : decoder.decode(value, { stream: true });
+            let newline;
+            while ((newline = pending.indexOf('\n')) >= 0) {
+              const line = pending.slice(0, newline).trim();
+              pending = pending.slice(newline + 1);
+              if (line) consumeEvent(JSON.parse(line), active);
+            }
+            if (done) break;
+          }
+          if (pending.trim()) consumeEvent(JSON.parse(pending), active);
+          if (!active.completed && !active.failed && !active.cancelled) {
+            throw new Error('連線在回覆完成前結束。請確認本機服務仍在執行，再決定是否重新傳送。');
+          }
+          if (active.completed && !active.receivedMessage && !active.failed && !active.cancelled) {
+            addMessage('error', 'Codex 已完成這次處理，但沒有文字回覆。你可以接著補充問題。');
+          }
+        } catch (error) {
+          if (error.name === 'AbortError' || active.cancelled) {
+            active.cancelled = true;
+          } else {
+            addMessage('error', error instanceof SyntaxError ? '收到的回覆格式無法讀取，請檢查本機服務後再試。' : explainError(error));
+          }
+        } finally {
+          if (state.active === active) {
+            state.busy = false;
+            state.cancelling = false;
+            state.active = null;
+            ui.statusDot.dataset.state = state.ready ? 'ready' : 'error';
+            ui.headerStatus.textContent = active.cancelled ? '已停止這次回覆，可繼續對話' : (state.ready ? '已連接本機服務' : '請重新檢查連線');
+            syncControls();
+            ui.input.focus();
+            persist();
+          }
+        }
+      }
+
+      async function cancelMessage() {
+        const active = state.active;
+        if (!active || state.cancelling) return;
+        state.cancelling = true;
+        ui.activityText.textContent = '正在停止這次回覆…';
+        syncControls();
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 5000);
+        try {
+          const response = await fetch('/api/cancel', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ requestId: active.id }), signal: controller.signal,
+          });
+          if (!response.ok) throw new Error('停止要求沒有送達本機服務。');
+          const result = await response.json();
+          if (result.cancelled) {
+            active.cancelled = true;
+            active.controller.abort();
+          } else if (state.active === active) {
+            state.cancelling = false;
+            ui.activityText.textContent = '正在接收本次回覆的結果…';
+            syncControls();
+          }
+        } catch (error) {
+          if (state.active === active) {
+            state.cancelling = false;
+            ui.activityText.textContent = '停止要求未能送達，仍在等待回覆。你可以再按一次「停止」。';
+            syncControls();
+          }
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+
+      ui.form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        if (state.busy) cancelMessage(); else sendMessage();
+      });
+      ui.input.addEventListener('input', () => { resizeInput(); syncControls(); });
+      ui.input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && event.keyCode !== 229) {
+          event.preventDefault();
+          if (!state.busy) sendMessage();
+        }
+      });
+      ui.newChat.addEventListener('click', () => {
+        if (state.busy) return;
+        state.conversationId = null;
+        state.transcript = [];
+        rendered.clear();
+        ui.messages.replaceChildren();
+        ui.welcome.hidden = false;
+        ui.input.value = '';
+        persist();
+        resizeInput();
+        syncControls();
+        ui.input.focus();
+      });
+      ui.recheck.addEventListener('click', checkStatus);
+      document.querySelectorAll('.suggestion').forEach((button) => {
+        button.addEventListener('click', () => {
+          ui.input.value = button.dataset.prompt.replace(/\\n/g, '\n');
+          resizeInput();
+          syncControls();
+          ui.input.focus();
+        });
+      });
+
+      restore();
+      resizeInput();
+      scrollBottom(true);
+      if (isFile) {
+        $('fileMode').hidden = false;
+        ui.welcome.hidden = true;
+        ui.recheck.hidden = true;
+        setConnection('error', '請從本機網址開啟', '請先執行 node server.mjs，再開啟本機網址。');
+        syncControls();
+      } else {
+        checkStatus();
+        statusTimer = setInterval(() => { if (!state.busy && document.visibilityState === 'visible') checkStatus(); }, 30000);
+      }
+      window.addEventListener('pagehide', () => {
+        clearInterval(statusTimer);
+        if (state.active) state.active.controller.abort();
+      });
+    })();
+  </script>
+</body>
+</html>

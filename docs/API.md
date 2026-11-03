@@ -122,3 +122,10 @@ POST 使用 `Content-Type: application/json`。輸入錯誤為 400，未知資�
 
 
 通用探索 B 參數：entity_days=180、topic_days=60、title_days=30、topic_similarity=.10、title_similarity=.25、title_terms_min=3、coverage_first=true，其他沿用 A。新增 title_terms_min（2–6，預設4）與 coverage_first（boolean，預設false）。覆蓋優先先匹配兩端尚無連線的合格候選，再補一端孤立者，最後按原排序填滿剩餘預算；不為缺乏證據的 pair 造邊。最大天數及 days_apart schema 上限 366，A 的原始 30／7／3 天行為不變。
+
+## Contextual Chat
+
+右側 Chat 的 6 個本機 HTTP 端點、工作階段 bearer 與 NDJSON 事件已列入 OpenAPI。
+實際 SDK／MCP、畫面狀態、允許的 UI 操作與限制見 [Chat 合約](../spec/CHAT_AGENT.md)。
+
+股價大小：`POST /api/prices/lens`，明確 ticker 與文章日期換算未來 1/3/5/7 交易日平均報酬，日線快取六小時。見 [股價大小規格](../spec/PRICE_LENS.md)。

@@ -1,5 +1,13 @@
 # 變更與驗證 log
 
+
+## 2026-11-03 — Contextual Chat Agent
+
+- 右側新聞／Chat 滑動面板、連續對話、新對話、取消、複製與錯誤狀態。
+- 主機 SDK 登入橋接、Unix socket 代理與 session 專用 stdio MCP。
+- 結構化 runtime、新聞／關聯分頁、版本檢查及既有 UI 控制項操作回報。
+- 不改寫新聞 DB；詳見 [CHAT_AGENT](CHAT_AGENT.md)。
+
 入口：[PROJECT_MAP.md](PROJECT_MAP.md)。只記錄已完成的工作區變更；不表示執行中的 server 或 GitHub main 已同步。新增紀錄置頂，事故證據放 references；不記錄金鑰、完整 localStorage 或新聞 DB 內容。
 
 ## 2026-10-29 — WebGL 錯誤診斷與時間軸降級
@@ -158,3 +166,27 @@ Actual failure cause in the user's browser is not established by generic status 
 - 新增 WORKFLOWS 與渲染／快取／設定 lesson，更新架構圖及索引，修正 Yahoo、來源配色、forceRefresh、GPU 預算與偏好遷移的過時描述。
 - 命名只作用於文件；未改既有容器／DB／localStorage 識別，也未宣稱 GitHub 儲存庫已改名或推送。
 - 文件修改不需重建服務；以本地 Markdown 連結與原始碼核對驗證。
+
+## 2026-11-03 選中新聞、語言與股價大小
+
+- 選中新聞置頂紅框；右側 Chat 控制文字與輸入提示隨中英文切換，原新聞／對話不翻譯。
+- 新增 1/3/5/7 交易日平均報酬與時間混合大小，預設時間 100%；股價來自明確 Massive ticker，缺失沿用時間大小。
+- 日線快取與快照證據獨立於新聞關聯計算；方法、限制、回歸見 [PRICE_LENS.md](PRICE_LENS.md)。
+
+## 2026-11-03 股價對齊與工具停靠
+
+- 新增真實 OHLC K 線、未來 N 日累計平均線與後續遮罩；與時間曲線共用垂直游標，點新聞同步定位日期。
+- 配色可選美股／台股慣例；快照保存 OHLC，舊快照不偽造 K 線。
+- 兩工具可拖到右側停靠或拖回，工具／新聞區域及兩工具邊界可調整；版面偏好保存。
+- 修正工具收合圖示與上方導航互相遮擋。設計與限制見 [PRICE_LENS.md](PRICE_LENS.md)、[TOOL_DOCK.md](TOOL_DOCK.md)。
+
+## 2026-11-03 行情空白與吸附修正
+
+- 修正有新聞與 ticker 卻不觸發行情請求；自動載入、圖內錯誤提示、K 線疊收盤價線。
+- 配色改由實際行情市場 metadata 決定，刪除配色選單。
+- 以邊緣 12px／650ms 停留取代整個右側區域吸附，採自適應分割樹，移除文字按鈕。
+- 收合圖示放大一倍，短視窗精簡非必要說明以顯示股價。
+
+## 2026-11-03 股價動能與可分割工作區
+
+新增股價十字線、同步軸縮放／雙擊還原、N 日方向高亮、P95 標準化與鐘形內實際成份占比。修正巢狀分割拖出後剩餘視窗未恢復比例；保留邊緣 650ms 停留門檻。run.sh 新增 chat setup 與整合／獨立範例啟動說明。詳見 PRICE_LENS、TOOL_DOCK、CHAT_AGENT。

@@ -89,4 +89,21 @@ def specification():
     operation('/api/snapshots','get','list_snapshots','列出最近 50 份圖譜快照','Snapshots',response=obj({'snapshots':arr(ref('SnapshotSummary'),50)}))
     operation('/api/snapshots','post','save_snapshot','按來源保存圖譜與視圖設定','Snapshots',ref('SnapshotRequest'),obj({'id':string(),'name':string(),'created_at':{'type':'string','format':'date-time'},'db':ref('DatabaseStats')}),description='Creates a new snapshot; never marks acquisition coverage complete. Freezes channel and root-selection state.',writes=True,code='201')
     operation('/api/snapshots/{id}','get','get_snapshot','載回文章、關聯與視圖設定','Snapshots',response=ref('Snapshot'),parameters=param('id'))
-    return {'openapi':'3.1.0','info':{'title':'GraphNews API','version':'1.0.0','description':'Local/trusted-network GraphNews service. No browser state is controlled by REST. All graph transformations are bounded. No MCP transport is implemented yet; stable operationIds and x-mcp hints support a future wrapper.'},'servers':[{'url':'/'}],'paths':paths,'components':{'schemas':schemas}}
+    operation('/api/prices/lens','post','price_lens','Forward trading-day average returns','Prices',obj({'ticker':string(15),'articles':arr(obj({'id':string(100),'published_at':{'type':['string','null'],'format':'date-time'}},['id']),100000),'massive_key':{'type':'string','format':'password','writeOnly':True,'maxLength':512}},['ticker','articles']),description='Explicit Massive ticker only. First complete US trading session close is baseline; mean of following 1/3/5/7 closes relative to baseline. Split-adjusted, excludes dividends and current ET day. Six-hour cache; missing complete horizons are null.',writes=True,network=True)
+    schemas['ChatRuntime']=obj({'revision':{'type':'integer'},'dataset':{'type':'integer'},'view_mode':{'enum':['network','timeline']},'root_ids':arr(string()),'scope_ids':arr(string()),'selected_article':{'type':['string','null']},'controls':arr({'type':'object'})},['revision'])
+    schemas['ChatEvent']=obj({'type':{'enum':['status','message','heartbeat','done','error']},'message':string(),'text':string(),'cancelled':{'type':'boolean'}},['type'])
+    schemas['ChatSync']=obj({'context':ref('ChatRuntime'),'graph':obj({'articles':arr({'type':'object'}),'edges':arr({'type':'object'})},['articles','edges']),'ack':obj({'id':string(),'error':string()},['id'])},['context'])
+    chat_description='Local browser integration only. Requires loopback Host and same-origin Origin on POST; bridge runs on host via private Unix socket. Maximum body 32 MiB. Tokens are ephemeral, not Codex credentials. Not a general remote automation API.'
+    for name,method,request,response,media in [
+        ('status','get',None,obj({'ready':{'type':'boolean'}}),'application/json'),
+        ('session','post',obj({}),obj({'token':string()},['token']),'application/json'),
+        ('sync','post',ref('ChatSync'),obj({'commands':arr({'type':'object'})}),'application/json'),
+        ('turn','post',obj({'message':{**string(24000),'minLength':1}},['message']),ref('ChatEvent'),'application/x-ndjson'),
+        ('cancel','post',obj({}),obj({'ok':{'type':'boolean'}}),'application/json'),
+        ('reset','post',obj({}),obj({'ok':{'type':'boolean'}}),'application/json')]:
+        operation('/api/chat/'+name,method,'chat_'+name,'Chat '+name,'Chat',request,response,description=chat_description,writes=method=='post',network=name=='turn',media=media)
+        op=paths['/api/chat/'+name][method]
+        for status,label in [('401','Expired session'),('403','Not a local same-origin request'),('409','Busy or missing context'),('413','Context too large'),('503','Host chat bridge unavailable')]:op['responses'][status]={'description':label,'content':{'application/json':{'schema':ref('Error')}}}
+        if name not in ('session','status'):op['security']=[{'ChatSession':[]}]
+        if method=='post':op['parameters']=[{'name':'Origin','in':'header','required':True,'schema':{'type':'string','enum':['http://127.0.0.1:8765','http://localhost:8765']}}]
+    return {'openapi':'3.1.0','info':{'title':'StockNexus-Wiki API','version':'1.1.0','description':'Local/trusted-network GraphNews service. News REST operations are independent of the browser. Local Chat has a session-scoped stdio MCP bridge for runtime context and acknowledged UI controls.'},'servers':[{'url':'/'}],'paths':paths,'components':{'schemas':schemas,'securitySchemes':{'ChatSession':{'type':'http','scheme':'bearer','description':'Ephemeral browser session token from /api/chat/session; never a model login credential.'}}}}

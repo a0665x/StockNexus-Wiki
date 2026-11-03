@@ -48,3 +48,12 @@ GitHub 儲存庫命名：`stocknexus-wiki`。
 - [API 文件](docs/API.md)／[本機 Swagger](http://127.0.0.1:8765/docs)。
 
 新聞來源不保證完整歷史，程式未抓取新聞全文；關聯分數不是因果、機率或投資建議。服務適用於本機或受信任網路，目前沒有帳號隔離。
+
+### Chat Agent
+
+右側可切換新聞詳情與 Chat Agent，討論目前選取的新聞並操作視圖／滑塊。
+主機需 Node.js 20+、已登入 Codex；執行 `npm ci` 後以 `./run.sh chat start` 啟動。
+僅開放本機 8765 網頁；沿用登入，不需在網頁填 key。新聞內容會送交登入帳戶使用的模型。
+[操作與資料範圍](spec/CHAT_AGENT.md)。
+
+首次使用 Chat Agent：在專案目錄執行 `./run.sh chat setup`，需要登入時執行 `npx --no-install codex login`，再 `./run.sh up`。使用 8765 網頁右側 Chat Agent 分頁；`./run.sh --help` 提供完整指引。`node server.mjs --open` 是另開 3210 的獨立對話範例，沒有新聞畫面上下文。

@@ -3,6 +3,7 @@ import io
 import json
 from pathlib import Path
 import sqlite3
+import socket
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -24,6 +25,17 @@ class StorageTests(unittest.TestCase):
         self.assertEqual((self.target/'private'/'key.massive-key').stat().st_mode&0o777,0o600)
         self.assertEqual(s.load(self.root),self.target)
         self.assertEqual(len(list(self.root.glob('.data-backup-*'))),1)
+
+    def test_relocation_skips_chat_socket_and_pid(self):
+        sock=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
+        self.addCleanup(sock.close)
+        sock.bind(str(self.source/'private'/'chat.sock'))
+        (self.source/'private'/'chat-process.json').write_text('{"pid":123}')
+        self.target.parent.mkdir(parents=True)
+        s.copy_verified(self.source,self.target)
+        self.assertFalse((self.target/'private'/'chat.sock').exists())
+        self.assertFalse((self.target/'private'/'chat-process.json').exists())
+        self.assertTrue((self.target/'private'/'key.massive-key').exists())
 
     def test_no_overwrite_or_recursive_target(self):
         self.target.mkdir(parents=True);(self.target/'existing').write_text('untouched')

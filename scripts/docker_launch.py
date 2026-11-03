@@ -18,10 +18,11 @@ import time
 import urllib.request
 
 try:
-    from . import launch, storage_paths
+    from . import launch, storage_paths, chat_service
 except ImportError:
     import launch
     import storage_paths
+    import chat_service
 
 ROOT=Path(__file__).resolve().parents[1]
 PROJECT='news-atlas'
@@ -200,6 +201,7 @@ def up(args):
         run(COMPOSE+['build'])
         if changing:
             print('Stopping project containers; verifying and relocating data...',flush=True)
+            chat_service.manage('stop',data)
             run(COMPOSE+['down','--remove-orphans'])
             try:data=storage_paths.relocate(ROOT,data,selected)
             except BaseException:
@@ -226,6 +228,8 @@ def up(args):
             print('Startup failed; cleaning project containers, retaining data/.',flush=True)
             run(COMPOSE+['down','--remove-orphans'])
             raise
+        try:chat_service.manage('start',data)
+        except (OSError,RuntimeError) as error:print('[WARN] '+str(error),flush=True)
         print('[4/4] [OK] One healthy container; fixed HTTP 8765 -> 8765.\nURL: '+LOCAL,flush=True)
         if bind=='0.0.0.0':print('LAN URL: http://<host-LAN-IP>:8765',flush=True)
         if target:
@@ -261,7 +265,7 @@ def main(argv=None):
         if args.action=='down':
             config=json_run(COMPOSE+['config','--format','json'])
             data=Path(next(v['source'] for v in config['services']['atlas']['volumes'] if v['target']=='/app/data'))
-            run(COMPOSE+['down','--remove-orphans']);stop_owned_tailscale(data)
+            run(COMPOSE+['down','--remove-orphans']);stop_owned_tailscale(data);chat_service.manage('stop',data)
             print('[OK] Project stopped; data retained.')
         elif args.action=='build':run(COMPOSE+['build'])
         else:

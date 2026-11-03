@@ -32,7 +32,7 @@
 - Edge、分類及 root 分數是規則證據，不是因果、機率或向量語意推論。
 - API 回應／SQLite／匯出不得含 Massive key；明確記住時保存於瀏覽器及主機獨立私有檔。
 - 左側搜尋草稿不能被圖譜操作、還原快照覆寫；快照不是日期覆蓋憑證。
-- REST/OpenAPI 已存在，MCP transport 尚未實作。
+- REST/OpenAPI 已存在；Chat Agent 另有工作階段專用 MCP 工具，見 [CHAT_AGENT](CHAT_AGENT.md)。
 
 - 文章快取、完整圖譜快取、快照與 GPU 預算是不同層。3D 預設 800／最高 2400，不裁切完整結果。
 - Edge settings 成功套用後保存；圖譜快取必須匹配當前文章與規則。
@@ -56,3 +56,7 @@
 本 spec 不保存帳號憑證、新聞快取內容、機器固定 IP、暫存瀏覽器檔或未經驗證的部署狀態。
 
 - `scripts/storage_paths.py`：掛載磁碟發現、互動／自訂資料路徑、SQLite/WAL 驗證搬移、data 符號連結及 `.atlas-storage.json`。
+
+- [CHAT_AGENT.md](CHAT_AGENT.md)：右側聊天、主機登入橋接、runtime 情境與 MCP UI 操作。
+- [PRICE_LENS.md](PRICE_LENS.md)：明確 ticker 的交易日平均報酬、混合大小、股價快取與快照。
+- [TOOL_DOCK.md](TOOL_DOCK.md)：右側工具停靠、可調整分隔線、版面保存與拖曳邊界。

@@ -136,7 +136,7 @@ def validate_snapshot(body):
     search = {k: str(search[k])[:200] for k in ('query','ticker','start','end') if k in search}
     if rss_region is not None:search['rss_region']=rss_region
     return {'name': str(body.get('name') or search.get('query') or search.get('ticker') or '新聞圖譜')[:120],
-            'search': search, 'view': {'sources': sources, 'separate': view['separate'], 'positions': positions, 'mode':mode, 'channel_filter':channel_filter, 'cutoff':cutoff, 'timeline_zoom':zoom, 'channel_definitions':frozen_defs, 'timeline_style':timeline_style, 'exploration':exploration, 'glow':normalized_glow, 'focus':focus, 'time_focus':time_focus, 'relation_settings':relation_settings(view.get('relation_settings'))},
+            'search': search, 'view': {'sources': sources, 'separate': view['separate'], 'positions': positions, 'mode':mode, 'channel_filter':channel_filter, 'cutoff':cutoff, 'timeline_zoom':zoom, 'channel_definitions':frozen_defs, 'timeline_style':timeline_style, 'exploration':exploration, 'glow':normalized_glow, 'focus':focus, 'time_focus':time_focus, 'price_focus':validate_price_focus(view.get('price_focus'),valid_view_ids), 'relation_settings':relation_settings(view.get('relation_settings'))},
             'source_graphs': normalized, 'cross_relations': cross}
 
 def validate_edges(edges, ids):
@@ -153,3 +153,43 @@ def validate_edges(edges, ids):
         seen.add(edge['id'])
         out.append({k:edge[k] for k in EDGE_FIELDS if k in edge})
     return out
+
+
+def validate_price_focus(value, ids):
+    if value is None:return {'mix':0,'horizon':3,'ticker':'','as_of':None,'observations':{}}
+    if not isinstance(value,dict):raise ValueError('Invalid price focus')
+    mix=value.get('mix',0);horizon=value.get('horizon',3);ticker=value.get('ticker','')
+    if isinstance(mix,bool) or not isinstance(mix,(int,float)) or not math.isfinite(mix) or not 0<=mix<=1 or isinstance(horizon,bool) or horizon not in (1,3,5,7) or not isinstance(ticker,str) or (ticker and not re.fullmatch(r'[A-Z][A-Z0-9.\-]{0,14}',ticker)):raise ValueError('Invalid price settings')
+    def date(v):
+        if v is None:return None
+        if not isinstance(v,str):raise ValueError('Invalid price date')
+        return dt.date.fromisoformat(v).isoformat()
+    rows=value.get('observations',{});out={}
+    if not isinstance(rows,dict) or len(rows)>len(ids):raise ValueError('Invalid price observations')
+    from .price_lens import instant
+    for key,row in rows.items():
+        if key not in ids or not isinstance(row,dict):raise ValueError('Invalid price article')
+        stamp=row.get('published_at');close=row.get('baseline_close');returns=row.get('returns',{})
+        if stamp is not None and not instant(stamp):raise ValueError('Invalid price timestamp')
+        if close is not None and (isinstance(close,bool) or not isinstance(close,(int,float)) or not math.isfinite(close) or close<=0):raise ValueError('Invalid baseline close')
+        if not isinstance(returns,dict):raise ValueError('Invalid price returns')
+        clean={}
+        for n in (1,3,5,7):
+            v=returns.get(str(n))
+            if v is not None and (isinstance(v,bool) or not isinstance(v,(int,float)) or not math.isfinite(v) or v < -1):raise ValueError('Invalid price return')
+            clean[str(n)]=v
+        out[key]={'published_at':stamp,'baseline_date':date(row.get('baseline_date')),'baseline_close':close,'returns':clean}
+    bars=value.get('bars',[]);clean_bars=[]
+    if not isinstance(bars,list) or len(bars)>500:raise ValueError('Invalid price bars')
+    for bar in bars:
+        if not isinstance(bar,dict):raise ValueError('Invalid price bar')
+        item={'date':date(bar.get('date'))}
+        if not item['date']:raise ValueError('Missing bar date')
+        for field in ('open','high','low','close'):
+            v=bar.get(field)
+            if (field=='close' or v is not None) and (isinstance(v,bool) or not isinstance(v,(int,float)) or not math.isfinite(v) or v<=0):raise ValueError('Invalid OHLC')
+            item[field]=v
+        if all(item[k] is not None for k in ('open','high','low')) and not item['low']<=min(item['open'],item['close'])<=max(item['open'],item['close'])<=item['high']:raise ValueError('Invalid OHLC range')
+        clean_bars.append(item)
+    if any(a['date']>=b['date'] for a,b in zip(clean_bars,clean_bars[1:])):raise ValueError('Unordered price bars')
+    return {'mix':mix,'horizon':horizon,'ticker':ticker,'as_of':date(value.get('as_of')),'observations':out,'bars':clean_bars,'market':'US','currency':'USD'}

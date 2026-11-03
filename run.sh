@@ -6,8 +6,9 @@ atlas_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 if (($#==0)); then set -- up; fi
 usage() {
   cat <<'HELP'
-News Atlas
+StockNexus-Wiki
   ./run.sh up          Interactive Docker startup; fixed port 8765, one container
+  ./run.sh chat setup|start|stop|status  Local signed-in chat bridge
   ./run.sh down        Stop containers (keep all data)
   ./run.sh build       Build the application image
   ./run.sh restart     Restart containers; use up after code changes
@@ -21,9 +22,34 @@ News Atlas
   ./run.sh up --data-dir /mnt/disk/news-atlas-data
 Docker: fixed project news-atlas, fixed host/container port 8765.
 Settings: .env / ATLAS_BIND, ATLAS_DATA_DIR, ATLAS_UID, ATLAS_GID.
+
+Chat first-time setup (run from the repository folder):
+  cd /home/nvidia/Desktop/AI_WS/stocknexus-wiki
+  ./run.sh chat setup                 Install pinned npm dependencies (npm ci)
+  npx --no-install codex login        Only if not already signed in
+  ./run.sh up                        Start web UI and integrated chat bridge
+  ./run.sh chat status                Check the bridge; logs: data/private/chat.log
+Use the Chat Agent tab at http://127.0.0.1:8765/ for news context and UI actions.
+The original standalone sample is separate:
+  node server.mjs --open              http://127.0.0.1:3210/; no news/UI MCP context
+Keep its terminal open. Ctrl+C stops that standalone service.
+For a fresh standalone sample folder only: npm install @openai/codex-sdk @openai/codex
+For this repository use npm ci (also installs the MCP dependency).
 HELP
 }
 case "${1:-}" in
+  chat)
+    shift
+    if [[ "${1:-}" == setup ]]; then
+      command -v node >/dev/null && command -v npm >/dev/null || { echo 'Install Node.js 20+ (includes npm), then run ./run.sh chat setup again.' >&2; exit 1; }
+      node -e 'if(Number(process.versions.node.split(".")[0])<20)process.exit(1)' || { echo 'Node.js 20+ is required.' >&2; exit 1; }
+      cd -- "$atlas_root"
+      npm ci
+      printf '\nInstalled in: %s\n' "$atlas_root"
+      printf 'Reuse your existing Codex login. If needed: npx --no-install codex login\nStart integrated news chat: ./run.sh chat start\nThen open http://127.0.0.1:8765/ (start the web app with ./run.sh up).\n'
+      exit 0
+    fi
+    exec python3 "$atlas_root/scripts/chat_service.py" "${@:-start}" ;;
   up|down|build|restart|logs|status)
     atlas_action="$1"; shift
     command -v docker >/dev/null || { echo 'Docker Engine and Docker Compose are required.' >&2; exit 1; }

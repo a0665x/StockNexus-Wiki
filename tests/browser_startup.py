@@ -31,6 +31,11 @@ def served_document(request, omit=None):
             return '<!-- unavailable asset: ' + url + ' -->'
         return '<script>' + content.decode().replace('</script', '<\\/script') + '</script>'
     html = re.sub(r'<script src="([^"]+)"[^>]*></script>', script, html)
+    def stylesheet(match):
+        url=match.group(1);head,content=request('GET',url);status=int(head.split()[1])
+        assets.append({'url':url,'status':status})
+        return '<style>'+content.decode()+'</style>' if status==200 else '<!-- unavailable stylesheet -->'
+    html=re.sub(r'<link rel="stylesheet" href="([^"]+)"[^>]*>',stylesheet,html)
     return html, assets
 
 

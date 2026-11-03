@@ -1,0 +1,16 @@
+{
+  "name": "stocknexus-wiki",
+  "private": true,
+  "scripts": {
+    "chat": "node chat/service.mjs",
+    "test:chat": "node --test tests/chat*.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@openai/codex-sdk": "0.166.0",
+    "@openai/codex": "0.166.0",
+    "@modelcontextprotocol/sdk": "^1.27.1"
+  }
+}

@@ -44,3 +44,9 @@ test-results/
 *.pfx
 data/*
 !data/README.md
+
+# Local assistant settings and duplicate imported sample bundle
+.codex/
+.agents/
+AGENTS.md
+codex-local-chat/
