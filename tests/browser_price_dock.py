@@ -3,13 +3,14 @@ Uses existing snapshots and real Massive prices/cache; may consume provider quot
 No model calls and no news DB fixture writes.
 """
 import sys
+import shutil
 import json,os,signal,subprocess,tempfile,time,urllib.request,base64
 from pathlib import Path
 import websocket
 root=Path(__file__).resolve().parents[1]
 with tempfile.TemporaryDirectory(prefix='atlas-chat-qa-') as temp:
  p=Path(temp);log=(p/'chrome.log').open('w')
- chrome=subprocess.Popen(['google-chrome','--headless=new','--no-sandbox','--disable-dev-shm-usage','--enable-unsafe-swiftshader','--window-size=1542,1131','--remote-debugging-port=0','--remote-allow-origins=*','--user-data-dir='+str(p/'profile'),'http://127.0.0.1:8765/'],stdout=log,stderr=log,start_new_session=True)
+ chrome=subprocess.Popen([os.environ.get('CHROME_BIN') or shutil.which('google-chrome') or shutil.which('chromium') or 'google-chrome','--headless=new','--no-sandbox','--disable-dev-shm-usage','--enable-unsafe-swiftshader','--window-size=1542,1131','--remote-debugging-port=0','--remote-allow-origins=*','--user-data-dir='+str(p/'profile'),'http://127.0.0.1:8765/'],stdout=log,stderr=log,start_new_session=True)
  try:
   for _ in range(150):
    if (p/'profile/DevToolsActivePort').exists():break
@@ -52,16 +53,19 @@ with tempfile.TemporaryDirectory(prefix='atlas-chat-qa-') as temp:
    time.sleep(.15)
   def drag_to(selector,x,y,hold=0):
    r=js("(()=>{const e=document.querySelector("+json.dumps(selector)+");e.scrollIntoView({block:'nearest'});const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()")
+   call('Input.dispatchMouseEvent',{'type':'mouseMoved',**r})
    call('Input.dispatchMouseEvent',{'type':'mousePressed',**r,'button':'left','clickCount':1})
    for i in range(1,7):call('Input.dispatchMouseEvent',{'type':'mouseMoved','x':r['x']+(x-r['x'])*i/6,'y':r['y']+(y-r['y'])*i/6,'button':'left','buttons':1})
    time.sleep(hold)
+   if hold and js("!$('splitPreview').hidden"):wait("$('splitPreview').classList.contains('split-armed')",5)
    call('Input.dispatchMouseEvent',{'type':'mouseReleased','x':x,'y':y,'button':'left','clickCount':1});time.sleep(.2)
   def rect(selector):return js("document.querySelector("+json.dumps(selector)+").getBoundingClientRect().toJSON()")
   if js("$('timeFocusBody').hidden"):click('#timePanelDrag')
+  js("$('priceChart').scrollIntoView({block:'center'})")
   r=rect('#priceChart')
   js("window.beforeZoom=AtlasRuntime.state().time_focus;window.beforeStart=$('priceChart').dataset.start;window.beforeEnd=$('priceChart').dataset.end")
   call('Input.dispatchMouseEvent',{'type':'mouseMoved','x':r['x']+r['width']/2,'y':r['y']+r['height']/2})
-  assert js("document.querySelectorAll('[data-crosshair]').length===2")
+  wait("document.querySelectorAll('[data-crosshair]').length===2",5)
   call('Input.dispatchMouseEvent',{'type':'mouseWheel','x':r['x']+r['width']/2,'y':r['y']+r['height']/2,'deltaX':0,'deltaY':-180})
   wait("$('priceChart').dataset.start!==beforeStart||$('priceChart').dataset.end!==beforeEnd")
   assert js("JSON.stringify(AtlasRuntime.state().time_focus)===JSON.stringify(beforeZoom)"), 'Zoom must not change size evaluation'
@@ -70,25 +74,38 @@ with tempfile.TemporaryDirectory(prefix='atlas-chat-qa-') as temp:
   assert js("$('priceChart').dataset.start===beforeStart&&$('priceChart').dataset.end===beforeEnd")
   assert js("!!document.querySelector('#timeBell #priceContribution')&&!!document.querySelector('#timeBell #timeContribution')")
   print('PASS: crosshair, shared-axis wheel zoom, unchanged sizing and double-click reset',flush=True)
+  js("$('timePanelDrag').scrollIntoView({block:'nearest'})")
   r=rect('[data-pane="news"]')
   drag_to('#timePanelDrag',r['x']+r['width']/2,r['y']+r['height']/2,.8)
   assert not js("AtlasDock.docked($('timeFocusBar'))"),'Center must not attach'
+  js("$('timePanelDrag').scrollIntoView({block:'nearest'})")
   r=rect('[data-pane="news"]')
   drag_to('#timePanelDrag',r['x']-20,r['y']+r['height']/2,.8)
   assert not js("AtlasDock.docked($('timeFocusBar'))"),'Gap must not attach'
+  js("$('timePanelDrag').scrollIntoView({block:'nearest'})")
   r=rect('[data-pane="news"]')
   drag_to('#timePanelDrag',r['x']+r['width']/2,r['y']+2)
   assert not js("AtlasDock.docked($('timeFocusBar'))"),'Fast edge pass must not attach'
+  # The fast pass ends exactly on the edge. Move away before a second drag;
+  # otherwise the zero-distance gesture is a click that collapses the tool.
+  drag_to('#timePanelDrag',r['x']-80,r['y']+80)
+  r=rect('[data-pane="news"]')
   drag_to('#timePanelDrag',r['x']+r['width']/2,r['y']+2,.85)
+  if not js("AtlasDock.docked($('timeFocusBar'))"):
+   Path('/tmp/wiki-price-failure.png').write_bytes(base64.b64decode(call('Page.captureScreenshot',{'format':'png'})['data']))
+   print(js("JSON.stringify({dock:AtlasDock.state(),drag:$('timePanelDrag').getBoundingClientRect().toJSON()})"),flush=True)
   assert js("AtlasDock.docked($('timeFocusBar'))"),'Edge dwell should attach'
   assert js("AtlasDock.state().tree.axis")=='column'
   assert js("AtlasDock.state().tree.a.id")=='timeFocusBar'
   print('PASS: no center/gap/fast attachment; 650ms edge dwell creates top pane',flush=True)
   if js("$('sourcePanelBody').hidden"):click('#sourcePanelDrag')
+  js("$('sourcePanelDrag').scrollIntoView({block:'nearest'})")
   r=rect('[data-pane="news"]');drag_to('#sourcePanelDrag',r['x']+2,r['y']+r['height']/2,.85)
   assert js("AtlasDock.docked($('sourcePanel'))")
   assert js("AtlasDock.state().tree.b.axis")=='row'
   print('PASS: left-edge split adapts independently within the remaining news pane',flush=True)
+  # A compact tool intentionally uses an 88px pane, not the saved split ratio.
+  if js("$('timeFocusBody').hidden"):click('#timePanelDrag')
   r=rect('.pane-workspace > .pane-split > .pane-divider');before=js('AtlasDock.state().tree.ratio')
   drag_to('.pane-workspace > .pane-split > .pane-divider',r['x']+r['width']/2,r['y']+r['height']/2+60)
   assert js('AtlasDock.state().tree.ratio')>before
@@ -107,6 +124,7 @@ with tempfile.TemporaryDirectory(prefix='atlas-chat-qa-') as temp:
   assert js("AtlasDock.state().tree.a.id")=='timeFocusBar'
   print('PASS: adaptive split layout persists after reload',flush=True)
   for edge in ['right','bottom']:
+   js("$('sourcePanelDrag').scrollIntoView({block:'nearest'})")
    r=rect('[data-pane="news"]')
    drag_to('#sourcePanelDrag',r['right']-2 if edge=='right' else r['x']+r['width']/2,r['y']+r['height']/2 if edge=='right' else r['bottom']-2,.85)
    assert js("AtlasDock.state().tree.b.axis")==('row' if edge=='right' else 'column')

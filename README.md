@@ -22,9 +22,9 @@ GitHub 儲存庫：[a0665x/StockNexus-Wiki](https://github.com/a0665x/StockNexus
 | News Graph、3D／時間軸、來源與分類篩選 | 已實作 |
 | 視圖優先關聯、閒置補線、650ms 說明 | 已實作；預設 800、最多 2,400 節點 |
 | Contextual Chat Agent | 已實作；需啟動本機橋接並登入 Codex |
-| Temporal LLM Wiki | 已完成第一階段設計、Schema 與診斷工具；compiler、Wiki Graph、版本庫、轉換介面與回測尚未實作 |
+| Temporal LLM Wiki | 已實作獨立股票 DB、LLM 增量抽取／關聯提案、版本與 Wiki Graph；依賴重評／回測尚未實作 |
 
-`llm_wiki` 是目前開發分支名稱，不代表上述 Wiki runtime 已完成。實際範圍與下一階段工作見 [Temporal LLM Wiki 設計](spec/TEMPORAL_WIKI.md)。
+從頂部 **LLM Wiki** 切換：選股票與已載入新聞 → 預覽 → 確認整理。可明確開啟持續維護，讓背景檢查指定查詢在新聞 DB 的新內容；不另行抓新聞。每股 Wiki 使用獨立 SQLite 保存節點、連線、引用與版本，重新開頁不用重算。操作、配額與部署見 [Wiki 使用與維護](spec/WIKI_RUNTIME.md)，完整研究範圍見 [設計](spec/TEMPORAL_WIKI.md)。
 
 ## 功能
 
@@ -66,7 +66,7 @@ GitHub 儲存庫：[a0665x/StockNexus-Wiki](https://github.com/a0665x/StockNexus
 
 ## 文件
 
-- [Temporal LLM Wiki 設計](spec/TEMPORAL_WIKI.md)：`llm_wiki` 分支的第一階段診斷、單股版本圖、結構化證據與研究契約；互動轉換器及回測尚未實作。
+- [Temporal LLM Wiki 設計](spec/TEMPORAL_WIKI.md)：單股版本圖、結構化證據與研究契約；已實作範圍另見 [Wiki runtime](spec/WIKI_RUNTIME.md)，回測仍為規劃。
 - [專案地圖](spec/PROJECT_MAP.md)：程式架構與文件入口。
 - [標準工作流程](spec/WORKFLOWS.md)：搜尋、設定、快照、更新及驗收。
 - [啟動與資料管理](spec/RUNTIME.md)：Docker、本機模式、Tailscale、搬移與備份。

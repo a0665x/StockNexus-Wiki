@@ -57,6 +57,10 @@ def main():
                 print(json.dumps({'action':name,'passed':checks[name]}),flush=True)
                 if not checks[name]:
                     print(js("JSON.stringify({rect:$('highlightModeSwitch').getBoundingClientRect().toJSON(),panel:$('sourcePanel').getBoundingClientRect().toJSON(),scroll:document.scrollingElement.scrollTop,mode:viewMode,highlightMode,graphChannel,size:categoryTrace.nodes.size,disabled:$('rootQuery').disabled,hit:(()=>{const r=$('highlightModeSwitch').getBoundingClientRect();return document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.outerHTML})()})"))
+                if not checks[name]:
+                    import base64
+                    Path('/tmp/wiki-journey-failure.png').write_bytes(base64.b64decode(call('Page.captureScreenshot',{'format':'png'})['data']))
+                    print(js("JSON.stringify({relationActivity,pending:!!window.pendingBuild,button:$('relationApply').getBoundingClientRect().toJSON(),dialog:$('relationDialog').getBoundingClientRect().toJSON()})"),flush=True)
                 assert checks[name],name
             def wait_for(code):
                 for _ in range(100):
@@ -72,15 +76,23 @@ def main():
                 check('no unhandled errors',"errors.length===0")
                 print(json.dumps(checks));call('Browser.close');ws.close();return 0
             check('initial 3D ready',"!!graph&&!graphFailure&&renderBudget===800")
-            js("window.realFetch=window.fetch;window.fetch=async(url,options)=>{if(url==='/api/graph/build'){window.pendingBuild=JSON.parse(options.body);return new Promise(r=>window.finishBuild=r);}if(url==='/api/search')return new Response(new ReadableStream({start(c){window.feed=c;}}));return realFetch(url,options);}")
+            js("""window.realFetch=window.fetch;window.holdPreview=true;window.fetch=async(url,options)=>{
+              if(url==='/api/graph/preview'){
+                const body=JSON.parse(options.body);window.pendingBuild=body;
+                const reply=()=>new Response(JSON.stringify({type:'result',stage:body.stage,pairs_checked:0,source_graphs:Object.fromEntries(Object.keys(body.source_graphs).map(p=>[p,{relations:(initialGraph.source_graphs[p]?.relations||[]).filter(e=>body.source_graphs[p].articles.some(a=>a.id===e.source)&&body.source_graphs[p].articles.some(a=>a.id===e.target))} ])),cross_relations:[],relation_settings:body.relation_settings})+'\\n'+JSON.stringify({type:'done'})+'\\n');
+                if(holdPreview)return new Promise(r=>window.finishBuild=()=>r(reply()));return reply();
+              }
+              if(url==='/api/search')return new Response(new ReadableStream({start(c){window.feed=c;}}));return realFetch(url,options);
+            };""")
             click('relationOpen');click('relation-entity');click('relationApply')
-            check('applying shows progress',"relationActivity.busy&&!$('relationSpinner').hidden&&!$('activitySpinner').hidden")
+            wait_for("viewRelationState.phase==='calculating'")
+            check('applying shows view-scoped progress',"!$('activitySpinner').hidden&&!$('viewRelationsStop').hidden")
             click('relationClose');click('modeTimeline')
-            check('timeline usable during applying',"viewMode==='timeline'&&articles.length===3&&relationActivity.busy")
+            check('timeline usable during applying',"viewMode==='timeline'&&articles.length===3")
             click('modeNetwork');check('graph usable during applying',"viewMode==='network'&&graph.graphData().nodes.length===3")
-            click('cancelOperation');check('cancel keeps graph',"!relationActivity.busy&&articles.length===3&&!$('activityText').textContent.includes('NaN')")
-            js("finishBuild({ok:true,json:async()=>variants.off})");time.sleep(.3)
-            check('late cancelled reply ignored',"relations.length>0")
+            click('viewRelationsStop');check('cancel keeps graph',"viewRelationState.phase==='stopped'&&articles.length===3&&!$('activityText').textContent.includes('NaN')")
+            js("finishBuild();holdPreview=false");time.sleep(.3)
+            check('late cancelled reply ignored',"viewRelationState.phase==='stopped'")
             js("$('query').value='test';$('ticker').value='';$('start').value='2026-01-01';$('end').value='2026-01-31'")
             click('submit');wait_for("!!window.feed")
             check('waiting search preserves graph and gives status',"!!controller&&articles.length===3&&!$('activitySpinner').hidden")
@@ -88,13 +100,14 @@ def main():
             check('switching during source wait',"!!controller&&viewMode==='network'&&graph.graphData().nodes.length===3")
             click('relationOpen');check('apply unavailable with reason during search',"$('relationApply').disabled&&$('relationApplyText').textContent.includes('搜尋')")
             click('relationClose')
-            js("window.sendEvent=e=>feed.enqueue(new TextEncoder().encode(JSON.stringify(e)+'\\n'));sendEvent({type:'cache',graph:{...initialGraph,relations_pending:true,relations:[],cross_relations:[],source_graphs:Object.fromEntries(Object.entries(initialGraph.source_graphs).map(([k,v])=>[k,{...v,relations:[]}]))}});sendEvent({type:'phase',phase:'relations'});")
+            js("window.holdPreview=true;window.sendEvent=e=>feed.enqueue(new TextEncoder().encode(JSON.stringify(e)+'\\n'));sendEvent({type:'cache',graph:{...initialGraph,relations_pending:true,relations:[],cross_relations:[],source_graphs:Object.fromEntries(Object.entries(initialGraph.source_graphs).map(([k,v])=>[k,{...v,relations:[]}]))}});sendEvent({type:'phase',phase:'relations'});")
             wait_for("basePayload.relations_pending===true")
             check('nodes precede edges',"graph.graphData().nodes.length===3&&relations.length===0&&searchPhase==='relations'")
             click('view-google');click('modeTimeline');click('view-google');click('modeNetwork')
             check('source toggles during edge wait',"articles.length===3&&!!controller")
-            js("sendEvent({type:'graph',graph:{...initialGraph,relations_pending:false}});sendEvent({type:'done'});feed.close()")
+            js("window.holdPreview=false;sendEvent({type:'graph',graph:{...initialGraph,relations_pending:false}});sendEvent({type:'done'});feed.close()")
             wait_for("controller===null")
+            wait_for("viewRelationState.phase==='ready'")
             check('finished graph responsive',"graph.graphData().nodes.length===3&&relations.length>0&&!$('activitySpinner').hidden===false")
             click('submit');wait_for("!!controller")
             js("window.cancelledFeed=feed")
@@ -104,7 +117,7 @@ def main():
             js("cancelledFeed.enqueue(new TextEncoder().encode(JSON.stringify({type:'graph',graph:{articles:[],relations:[]}})+'\\n'));cancelledFeed.close()")
             time.sleep(.2)
             check('cancelled search cannot replace newer search',"controller!==null&&articles.length===3")
-            js("sendEvent({type:'graph',graph:{...initialGraph,relations_pending:false}});sendEvent({type:'done'});feed.close()")
+            js("window.holdPreview=false;sendEvent({type:'graph',graph:{...initialGraph,relations_pending:false}});sendEvent({type:'done'});feed.close()")
             wait_for("controller===null")
             js("showArticle(articles[0]);window.savedRoot=focusRoot();window.expectedIds=articles.map(a=>a.id).join();channelDefinitions=[{id:'test',name:'Test'}];basePayload.channel_definitions=channelDefinitions;for(const g of Object.values(basePayload.source_graphs))for(const a of g.articles)a.channels=[{id:'test',name:'Test',evidence:[]}];rebuild()")
             if js("$('sourcePanelBody').hidden"):click('sourcePanelDrag')
@@ -115,7 +128,7 @@ def main():
             check('category click retains root',"focusRoot()===savedRoot&&articles.map(a=>a.id).join()===expectedIds")
             click('highlightModeSwitch');check('root mode restored',"focusRoot()===savedRoot&&graphTrace()===activeTrace&&!$('rootQuery').disabled")
             js("relationUI.restore(AtlasRelations.defaults);const seed=initialGraph.source_graphs.google.articles[0];const all=Array.from({length:7106},(_,i)=>({...seed,id:String(i),published_at:'2026-01-01T00:00:00Z'}));rebuild({source_graphs:{google:{articles:all,relations:[],total_articles:all.length}},relation_settings:AtlasRelations.defaults})")
-            check('7106 records bounded at initialization',"articles.length===7106&&graph.graphData().nodes.length===800&&$('activityText').textContent.includes('800/7106')")
+            check('7106 records bounded at initialization',"articles.length===7106&&graph.graphData().nodes.length===800&&$('activityNodesValue').textContent==='800 / 7106'")
             js("showArticle(articles[7105])")
             check('offscreen article can enter 3D',"graph.graphData().nodes.some(n=>n.id===articles[7105].id)&&graph.graphData().nodes.length===800")
             js("$('renderBudget').value='2400';$('renderBudget').dispatchEvent(new Event('change'))")

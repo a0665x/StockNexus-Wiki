@@ -129,3 +129,7 @@ POST 使用 `Content-Type: application/json`。輸入錯誤為 400，未知資�
 實際 SDK／MCP、畫面狀態、允許的 UI 操作與限制見 [Chat 合約](../spec/CHAT_AGENT.md)。
 
 股價大小：`POST /api/prices/lens`，明確 ticker 與文章日期換算未來 1/3/5/7 交易日平均報酬，日線快取六小時。見 [股價大小規格](../spec/PRICE_LENS.md)。
+
+## LLM Wiki
+
+頂部 LLM Wiki 開啟獨立股票知識圖。`GET /api/wiki/status|graph|jobs|article|markdown` 讀取狀態、版本圖、工作、凍結引用與匯出；`POST /api/wiki/plan|jobs|configure|cancel` 負責預覽、明確啟動、維護開關與停止。寫入要求同源及允許來源。API 細節、DB 與成本範圍見 [Wiki runtime](../spec/WIKI_RUNTIME.md)，Swagger 已包含這 9 個操作。

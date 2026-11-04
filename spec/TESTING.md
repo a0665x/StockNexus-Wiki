@@ -130,3 +130,7 @@ K 線／視窗分割：`node tests/price-chart.test.cjs`、`python3 tests/browse
 視圖優先建圖：`python3 -m unittest discover -s tests -p test_view_relations.py`、`/usr/bin/python3 tests/browser_view_relations.py`。使用隔離fixture；後者需Chromium和websocket-client。詳見 [驗證與範圍](references/view-first-relations-20261104.md)。
 
 增量配對：`tests/test_relation_cache.py` 驗證持久重用、負結果、內容失效及重選一致性；`tests/test_view_relations.py` 驗證HTTP新算／重用數及分組略過跨來源；`tests/browser_view_relations.py` 驗證完成範圍零請求、快照還原與先前完成組合。
+
+## LLM Wiki
+
+隔離 DB／引用／歷史／成本：`python3 -m unittest discover -s tests -p "test_wiki*.py"`（schema 測試需開發環境 jsonschema）。橋接：`npm run test:chat`。瀏覽器：`/usr/bin/python3 tests/browser_wiki.py`。實作邊界見 [WIKI_RUNTIME](WIKI_RUNTIME.md)。

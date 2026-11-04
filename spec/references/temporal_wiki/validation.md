@@ -11,3 +11,7 @@
 - 更名後再次唯讀檢查：Google 7,205／Massive 9,325／Yahoo 16,487，日線3,048筆，與搬移前一致。首次沙箱讀取因新路徑SQLite WAL權限失敗，取得新目錄存取權限後檢查成功；不是資料遺失。
 - startup執行了既有DNS／HTTPS reachability checks，未執行新聞下載、行情補抓或LLM編譯。
 - 附件20項runtime驗收均待後續階段；算式fixture通過不等於production labeler已驗證。無真實策略收益、校準品質或因果效果結論。
+
+## 2026-11-05 runtime 後續交付
+
+此頁上方保留第一階段設計檢查紀錄。後續已加入獨立 DB、增量 compiler、背景查詢追蹤、Wiki UI 與 REST；實際範圍及測試見 [WIKI_RUNTIME](../../WIKI_RUNTIME.md) 及 [CHANGELOG](../../CHANGELOG.md)。完整研究矩陣中的依賴重評、預測／Outcome／回測仍未完成，不把本次 runtime 測試替代該驗收。

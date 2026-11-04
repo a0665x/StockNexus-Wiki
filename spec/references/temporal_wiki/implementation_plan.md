@@ -2,7 +2,9 @@
 
 入口：[設計](../../TEMPORAL_WIKI.md)／[契約](data_contract.md)。狀態：第一階段；2026-11-04。保留既有 main 本機修改，在 `llm_wiki` 進行。本文件描述下一階段工作，不代表功能已實作或20項測試已通過。
 
-## 本階段實際交付
+> 2026-11-05 更新：後續已交付增量抽取、獨立 DB、版本、背景查詢維護與 Wiki UI；見 [runtime](../../WIKI_RUNTIME.md)。以下保留原先規劃與完整驗收矩陣，不能把第一階段的「未實作」敘述當成目前 runtime 狀態，也不能把局部交付視為全部 20 項完成。
+
+## 第一階段實際交付
 
 診斷報告、90篇本地結構抽樣、read-only audit CLI、領域詞彙、時間／資料／edge契約、互動流程、Relation strict JSON Schema、synthetic fixture及離線設計檢查。未呼叫 provider／LLM，沒有新建正式 Wiki DB、compiler、UI轉換按鈕或回測結果。
 

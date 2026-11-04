@@ -110,4 +110,16 @@ def specification():
         for status,label in [('401','Expired session'),('403','Not a local same-origin request'),('409','Busy or missing context'),('413','Context too large'),('503','Host chat bridge unavailable')]:op['responses'][status]={'description':label,'content':{'application/json':{'schema':ref('Error')}}}
         if name not in ('session','status'):op['security']=[{'ChatSession':[]}]
         if method=='post':op['parameters']=[{'name':'Origin','in':'header','required':True,'schema':{'type':'string','enum':['http://127.0.0.1:8765','http://localhost:8765']}}]
+    wiki_description='Separate per-instrument SQLite Wiki. Writes require matching Origin/Host and local peer; remote origin must be explicitly listed in NEWS_ATLAS_WIKI_ORIGINS. Preview is model-free; start consumes a 10-minute plan. Incremental extraction/link proposals only; no dependency reassessment or forecasts.'
+    for name,method in [('status','get'),('graph','get'),('jobs','get'),('article','get'),('markdown','get'),('plan','post'),('jobs','post'),('configure','post'),('cancel','post')]:
+        operation('/api/wiki/'+name,method,'wiki_'+method+'_'+name,'Wiki '+name,'Wiki',request={'type':'object'} if method=='post' else None,description=wiki_description,writes=method=='post',network=method=='post' and name=='jobs',code='202' if method=='post' and name=='jobs' else '200')
+        op=paths['/api/wiki/'+name][method]
+        if method=='get' and name!='status':
+            op['parameters']=[{'name':'instrument','in':'query','required':True,'schema':string()}]
+            if name in ('graph','markdown'):op['parameters'].append({'name':'version','in':'query','schema':{'type':'integer','minimum':0}})
+            if name=='graph':op['parameters'].append({'name':'as_of','in':'query','schema':{'type':'string','format':'date-time'}})
+            if name=='article':op['parameters'].append({'name':'id','in':'query','required':True,'schema':string()})
+        if method=='post':op['parameters']=[{'name':'Origin','in':'header','required':True,'schema':string()}]
+        op['responses']['403']={'description':'Origin or peer not authorized'}
+        op['responses']['503']={'description':'Wiki or model bridge unavailable'}
     return {'openapi':'3.1.0','info':{'title':'StockNexus-Wiki API','version':'1.1.0','description':'Local/trusted-network GraphNews service. News REST operations are independent of the browser. Local Chat has a session-scoped stdio MCP bridge for runtime context and acknowledged UI controls.'},'servers':[{'url':'/'}],'paths':paths,'components':{'schemas':schemas,'securitySchemes':{'ChatSession':{'type':'http','scheme':'bearer','description':'Ephemeral browser session token from /api/chat/session; never a model login credential.'}}}}

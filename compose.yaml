@@ -9,6 +9,7 @@ services:
       PORT: "8765"
       NEWS_ATLAS_DB: /app/data/news-atlas.sqlite3
       MASSIVE_API_KEY: ${MASSIVE_API_KEY:-}
+      NEWS_ATLAS_WIKI_ORIGINS: ${NEWS_ATLAS_WIKI_ORIGINS:-}
       NEWS_ATLAS_CACHE_ONLY: ${NEWS_ATLAS_CACHE_ONLY:-0}
     ports:
       - "${ATLAS_BIND:-127.0.0.1}:8765:8765"

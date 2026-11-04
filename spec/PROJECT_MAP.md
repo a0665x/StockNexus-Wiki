@@ -25,7 +25,7 @@
 | Swagger、REST、未來 MCP | [API.md](API.md) | server.py、api.py、openapi.py、exploration.py |
 | 本機啟動、手機、重啟、版本不一致 | [RUNTIME.md](RUNTIME.md) | run.sh、scripts/docker_launch.py、scripts/launch.py、server.py、start-tailscale.sh |
 | 驗證與修改風險 | [TESTING.md](TESTING.md) | tests/ |
-| 單股 Temporal LLM Wiki、新圖與研究設計（第一階段） | [TEMPORAL_WIKI.md](TEMPORAL_WIKI.md) | scripts/wiki_readiness.py、schema/temporal-wiki.relation.schema.json；compiler/UI 待實作 |
+| 單股 LLM Wiki、新圖、背景維護與研究設計 | [WIKI_RUNTIME.md](WIKI_RUNTIME.md)／[TEMPORAL_WIKI.md](TEMPORAL_WIKI.md) | news_atlas/wiki/、chat/wiki.mjs、dist/wiki-view.js |
 
 ## 不可誤解的現況
 

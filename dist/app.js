@@ -772,3 +772,14 @@ viewRelationJob=AtlasViewRelations.create({
 $('viewRelationsRetry').onclick=()=>viewRelationJob.retry();$('viewRelationsStop').onclick=()=>viewRelationJob.cancel();
 AtlasViewRelations.tooltip($('activityCounters'));updateViewCounters();
 }
+
+// Wiki uses an independent renderer/store; opening it never rebuilds News Graph.
+globalThis.AtlasWikiContext={
+  selection(mode){
+    const visibleSources=viewSources(),groups=AtlasView.groups(basePayload);
+    const focus=new Set([selected,...lockedRoots,...graphTrace().nodes.keys()].filter(Boolean));
+    const rows=visibleSources.flatMap(p=>(groups[p]?.articles||[]).filter(a=>mode!=='focus'||focus.has(a.id)||focus.has(p+'::'+a.id)));
+    return {articles:rows.map(a=>({id:a.id,title:a.title,summary:a.summary||'',url:a.url,published_at:a.published_at,source:{provider:a.source.provider}})),sources:visibleSources,search:{query:exportMeta.query||'',ticker:exportMeta.ticker||'',rss_region:exportMeta.rss_region||'TW'}};
+  },
+  visible(open){if(open){clearTimeout(fitTimer);graph?.pauseAnimation();}else if(viewMode==='network')graph?.resumeAnimation();}
+};

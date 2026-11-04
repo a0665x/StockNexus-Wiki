@@ -97,3 +97,7 @@ execution; this integration explicitly approves only its four bounded MCP tools.
 在儲存庫根目錄（本機 `/home/nvidia/Desktop/AI_WS/stocknexus-wiki`）執行 `./run.sh chat setup`，檢查 Node.js 20+ 並用 `npm ci` 安裝 lockfile 固定版本，包含 Codex SDK、CLI 及 MCP SDK。已登入時沿用登入；否則執行 `npx --no-install codex login`。`./run.sh up` 啟動 8765 網頁和整合橋接；亦可 `./run.sh chat start|stop|status` 管理。私有記錄在 `data/private/chat.log`，不可提交。
 
 使用者提供的根目錄 `server.mjs`、`codex-chat.html` 是獨立 3210 範例，`node server.mjs --open` 啟動，Ctrl+C 停止；它不連到新聞 runtime 或 MCP 操作。後續維護應集中在 `chat/` 的整合服務。單獨複製範例才使用 `npm install @openai/codex-sdk @openai/codex`；本專案使用 `npm ci` 避免漏裝 MCP 或改動版本。重複匯入的 `codex-local-chat/` 留在本地且忽略。
+
+## Separate Wiki compiler (2026-11-05)
+
+The same private host process now also serves a tool-free structured-output Wiki compiler. Its `/wiki/*` socket routes are not exposed through `/api/chat/*`; the separate Python Wiki API controls plans, jobs, citations and per-instrument persistence. Chat keeps its existing localhost-only boundary. See [WIKI_RUNTIME](WIKI_RUNTIME.md) for the opt-in continuous compiler and explicit trusted-origin setting.

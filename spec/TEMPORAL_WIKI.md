@@ -1,6 +1,6 @@
 # 單股 Temporal LLM Wiki：設計入口
 
-入口：[PROJECT_MAP.md](PROJECT_MAP.md)。狀態：**第一階段設計／診斷完成；以下 compiler、UI、API 為待實作提案**。2026-11-04，基線 `ef4fd11` 加本機修改，分支 `llm_wiki`。先依使用者「先幫我設計」交付設計，不啟動付費或全庫 LLM 跑批。
+入口：[PROJECT_MAP.md](PROJECT_MAP.md)。狀態：**2026-11-05 已實作增量知識 runtime：獨立 DB、compiler、Wiki UI、API 與版本；完整依賴重評／預測回測仍為設計**。分支 `llm_wiki`。實際可用流程、限制與測試以 [WIKI_RUNTIME.md](WIKI_RUNTIME.md) 為準；下文保留完整研究設計，不代表所有階段均已交付。
 
 - [診斷與抽樣證據](references/temporal_wiki/diagnosis.md)
 - [資料、Edge、時間與研究契約](references/temporal_wiki/data_contract.md)
