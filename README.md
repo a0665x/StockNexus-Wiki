@@ -1,7 +1,30 @@
 # StockNexus-Wiki
 
 以真實財經新聞建立可解釋的關聯圖譜，結合 **3D 探索、時間軸與持久快取**。
-GitHub 儲存庫命名：`stocknexus-wiki`。
+GitHub 儲存庫：[a0665x/StockNexus-Wiki](https://github.com/a0665x/StockNexus-Wiki)。
+
+## 影片 C：研究流程示範（Research Desk）
+
+從財報或產品分類縮小範圍，在 3D 圖譜中選取新聞、展開關聯，再用圖內搜尋與 Chat Agent 整理下一個值得查證的問題。
+
+[![研究流程動畫預覽：旋轉選取新聞的關聯圖，從不同角度查看連線](docs/media/research-preview.gif)](docs/media/research-demo.mp4)
+
+[觀看完整研究版影片（約 62 秒，MP4）](docs/media/research-demo.mp4)。上方為 7 秒循環預覽；完整影片涵蓋財報分類、3D 探索、圖內搜尋與示意對話。
+
+影片中的 Chat Agent 對話標示為 **illustrative dialogue**，展示提問流程，不是即時模型輸出或已驗證的市場結論。影片錄製於較早的介面版本；最新版本另加入視圖優先計算、分開進度與 650ms 停留說明。
+
+已完成的視圖可直接重用；切換範圍時，後端會重用配對評分快取並只補算缺少的配對。快照保存既有連線與最多 12 組近期完成視圖。
+
+## 目前實作狀態
+
+| 項目 | 狀態 |
+| --- | --- |
+| News Graph、3D／時間軸、來源與分類篩選 | 已實作 |
+| 視圖優先關聯、閒置補線、650ms 說明 | 已實作；預設 800、最多 2,400 節點 |
+| Contextual Chat Agent | 已實作；需啟動本機橋接並登入 Codex |
+| Temporal LLM Wiki | 已完成第一階段設計、Schema 與診斷工具；compiler、Wiki Graph、版本庫、轉換介面與回測尚未實作 |
+
+`llm_wiki` 是目前開發分支名稱，不代表上述 Wiki runtime 已完成。實際範圍與下一階段工作見 [Temporal LLM Wiki 設計](spec/TEMPORAL_WIKI.md)。
 
 ## 功能
 
@@ -9,7 +32,9 @@ GitHub 儲存庫命名：`stocknexus-wiki`。
 - 每條關聯保留共同實體、主題或標題相似度的證據。
 - 新聞自動存入 SQLite；相同資料與規則可重用持久圖譜快取。
 - 支援圖譜快照、JSON 匯出、繁體中文／英文介面及 REST API。
-- 3D 預設顯示 800 節點，可調至 2,400；完整資料仍保留於清單、時間軸與匯出。
+- 3D 預設顯示 800 節點，可調至 2,400；先計算目前視圖的嚴格關聯，自適應補線在閒置時啟動，操作期間延後套用結果。
+- 節點、關聯計算、連線渲染與狀態分開顯示；滑鼠在標籤上靜止 650ms 顯示解釋，鍵盤聚焦也可查看。
+- 預算外新聞保留於清單、時間軸與匯出，進入視圖時才補算關聯；匯出及快照明示局部關聯範圍。
 
 ## 快速啟動
 
@@ -37,10 +62,11 @@ GitHub 儲存庫命名：`stocknexus-wiki`。
 3. 在「關聯設定」調整規則並按「套用」。成功後，同瀏覽器、同網址會沿用設定。
 4. 用「儲存圖譜快照」保留當時的資料與規則；載入快照不等於重新搜尋最新新聞。
 
-「Already in DB」表示文章已存在；關聯另有快取。命中時先顯示完整圖譜，再補抓來源；新增資料的關聯可能仍需更新。
+「Already in DB」表示文章已存在；關聯另有快取。命中時可先顯示既有關聯，再補抓來源。瀏覽器的新計算以目前視圖為範圍；「目前視圖完成」不代表全部新聞的關聯都已計算。
 
 ## 文件
 
+- [Temporal LLM Wiki 設計](spec/TEMPORAL_WIKI.md)：`llm_wiki` 分支的第一階段診斷、單股版本圖、結構化證據與研究契約；互動轉換器及回測尚未實作。
 - [專案地圖](spec/PROJECT_MAP.md)：程式架構與文件入口。
 - [標準工作流程](spec/WORKFLOWS.md)：搜尋、設定、快照、更新及驗收。
 - [啟動與資料管理](spec/RUNTIME.md)：Docker、本機模式、Tailscale、搬移與備份。
@@ -57,3 +83,5 @@ GitHub 儲存庫命名：`stocknexus-wiki`。
 [操作與資料範圍](spec/CHAT_AGENT.md)。
 
 首次使用 Chat Agent：在專案目錄執行 `./run.sh chat setup`，需要登入時執行 `npx --no-install codex login`，再 `./run.sh up`。使用 8765 網頁右側 Chat Agent 分頁；`./run.sh --help` 提供完整指引。`node server.mjs --open` 是另開 3210 的獨立對話範例，沒有新聞畫面上下文。
+
+本機離線搜尋：`./run.sh local --offline`；Docker 可用 `NEWS_ATLAS_CACHE_ONLY=1 ./run.sh up`。此模式即使勾選強制更新也只讀 DB，不自動補抓缺口。已下載的日線股價可用 `python3 scripts/read_prices.py NVDA` 離線匯出 CSV。

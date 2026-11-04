@@ -57,7 +57,7 @@
     const saved=read(key,{});let x=Number(saved?.x)||0,y=Number(saved?.y)||0,collapsed=saved?.collapsed===true,drag=null,suppressClick=false;
     const persist=()=>write(key,{x,y,collapsed});
     const rectOf=()=>panel.getBoundingClientRect();
-    const areaOf=()=>{const r=stage.getBoundingClientRect(),gap=Math.min(114,r.height*.25);return {left:r.left,right:r.right,top:r.top+gap,bottom:r.bottom,width:r.width,height:r.height-gap};};
+    const areaOf=()=>{const r=stage.getBoundingClientRect(),counter=$('activityCounters')?.getBoundingClientRect?.(),reserved=counter?.height?counter.bottom-r.top+12:114,gap=Math.min(Math.max(114,reserved),Math.max(r.height*.25,r.height-80));return {left:r.left,right:r.right,top:r.top+gap,bottom:r.bottom,width:r.width,height:r.height-gap};};
     const overlaps=(a,b)=>a.left<b.left+b.width+8&&a.left+a.width+8>b.left&&a.top<b.top+b.height+8&&a.top+a.height+8>b.top;
     function avoid(){
       if(group.busy)return;
@@ -118,7 +118,7 @@
       for(const event of ['pointerup','pointercancel','lostpointercapture'])surface.addEventListener(event,end);
     }
     handle.addEventListener('keydown',e=>{const delta={ArrowLeft:[-20,0],ArrowRight:[20,0],ArrowUp:[0,-20],ArrowDown:[0,20]}[e.key];if(!delta)return;e.preventDefault();x+=delta[0];y+=delta[1];panel.style.transform=`translate(${x}px,${y}px)`;constrain();persist();});
-    if(typeof ResizeObserver!=='undefined'){let queued=false;const observer=new ResizeObserver(()=>{if(queued)return;queued=true;requestAnimationFrame(()=>{queued=false;constrain();});});observer.observe(stage);observer.observe(panel);}
+    if(typeof ResizeObserver!=='undefined'){let queued=false;const observer=new ResizeObserver(()=>{if(queued)return;queued=true;requestAnimationFrame(()=>{queued=false;constrain();});});observer.observe(stage);observer.observe(panel);const counters=$('activityCounters');if(counters?.nodeType===1)observer.observe(counters);}
     group.panels.push({panel,rect:rectOf,moveTo(left,top){const rect=rectOf();x+=left-rect.left;y+=top-rect.top;panel.style.transform=`translate(${x}px,${y}px)`;constrain();persist();},compact(){if(collapsed)return;const before=rectOf();collapsed=true;paint();const after=rectOf();x+=before.left-after.left;y+=before.top-after.top;panel.style.transform=`translate(${x}px,${y}px)`;constrain();persist();}});
     paint();return {constrain,state:()=>({x,y,collapsed})};
   }
@@ -140,5 +140,25 @@
     }
     window.addEventListener('resize',()=>{for(const side of ['left','right'])apply(side,widths[side]);});
   }
-  const api={read,write,jsonTree,initKey,initSearch,initFloatingPanel,initSourcePanel,initTimePanel,initResize};root.AtlasUI=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
+  // All rows remain addressable, but only one page owns DOM nodes/listeners.
+  function pagedRows(container,rows,renderRow,{page=0,onPage=()=>{}}={}){
+    const size=100,pages=Math.max(1,Math.ceil(rows.length/size));
+    function show(value){
+      page=Math.max(0,Math.min(pages-1,Math.floor(Number(value)||0)));onPage(page);
+      container.replaceChildren();
+      if(pages>1){
+        const nav=document.createElement('nav');nav.className='article-pagination';
+        const text=document.createElement('span');text.textContent=`${page*size+1}–${Math.min(rows.length,(page+1)*size)} / ${rows.length}`;
+        const prev=document.createElement('button'),next=document.createElement('button'),input=document.createElement('input');
+        prev.type=next.type='button';prev.textContent=root.AtlasI18n?.t('上一頁')||'Previous';next.textContent=root.AtlasI18n?.t('下一頁')||'Next';
+        prev.disabled=page===0;next.disabled=page===pages-1;prev.onclick=()=>show(page-1);next.onclick=()=>show(page+1);
+        input.type='number';input.min=1;input.max=pages;input.step=1;input.value=page+1;
+        input.setAttribute('aria-label',root.AtlasI18n?.t('頁碼')||'Page');input.onchange=()=>show(Number(input.value)-1);
+        nav.append(text,prev,input,next);container.append(nav);
+      }
+      for(const row of rows.slice(page*size,(page+1)*size))container.append(renderRow(row));
+    }
+    show(page);return {show};
+  }
+  const api={read,write,jsonTree,pagedRows,initKey,initSearch,initFloatingPanel,initSourcePanel,initTimePanel,initResize};root.AtlasUI=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);

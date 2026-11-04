@@ -92,6 +92,10 @@
     }
     async function apply(cfg=read()){
       if(externalBusy)return;
+      if(hooks.applyView){
+        clearTimeout(timer);ticket++;abort?.abort();error='';desired={...cfg};
+        root.AtlasUI.write('relationSettings',desired);hooks.applyView(cfg);busy(false);paint();return;
+      }
       clearTimeout(timer);abort?.abort();const mine=++ticket,base=hooks.get();
       const groups=root.AtlasView.groups(base),source_graphs=Object.fromEntries(Object.entries(groups).map(([p,g])=>[p,{articles:g.articles}]));
       error='';paint();busy(true);
@@ -120,6 +124,7 @@
     return {
       applied:()=>({...applied}),
       preferred:()=>({...desired}),
+      onViewResult(cfg){applied=normalize(cfg);busy(false,true);paint();},
       cancel,
       setSearchBusy(value){externalBusy=value;ticket++;abort?.abort();clearTimeout(timer);error='';busy(false);paint();},
       restore(cfg){desired=normalize(cfg);fields(desired);},

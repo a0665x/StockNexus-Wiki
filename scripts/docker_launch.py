@@ -85,7 +85,7 @@ def preflight():
     ownids={c['id'] for c in own}
     if any(not any(full.startswith(short) for full in ownids) for short in outsiders):
         raise RuntimeError('Port 8765 is occupied by another container; no changes made.')
-    if not running and not launch.available(PORT,'0.0.0.0'):
+    if not running and not launch.available(PORT,bind):
         raise RuntimeError('Port 8765 is occupied by another process; stop it before retrying.')
     print(f'[OK] Project ownership: {PROJECT}; {len(own)} existing container(s).',flush=True)
     for container in own:print('[INFO] Container '+container['id'][:12]+': '+container['state'].get('Status','unknown')+' / '+container['state'].get('Health',{}).get('Status','no health status'),flush=True)
@@ -214,7 +214,7 @@ def up(args):
         if own and not healthy:
             print('[3/4] Cleaning project stale/unhealthy/duplicate containers; data retained.',flush=True)
             run(COMPOSE+['down','--remove-orphans'])
-            if not launch.available(PORT,'0.0.0.0'):raise RuntimeError('Port 8765 was claimed after cleanup; no new container started.')
+            if not launch.available(PORT,bind):raise RuntimeError('Port 8765 was claimed after cleanup; no new container started.')
         else:
             print('[3/4] '+('One healthy container exists; reuse if image/config unchanged; no duplicates.' if own else 'Clean state; starting one container.'),flush=True)
         try:

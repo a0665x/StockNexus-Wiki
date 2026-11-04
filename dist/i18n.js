@@ -1,6 +1,7 @@
 /* Interface translation only. Original news, evidence and JSON are never translated. */
 (function(root){
   const dictionary={
+'上一頁':'Previous page','下一頁':'Next page','頁碼':'Page number',
 '時間貢獻':'Time contribution','股價貢獻':'Price contribution','混合倍率':'Blended size',
 '滾輪縮放焦點日期範圍；雙擊還原。平均線為基準後逐日累計平均；超過 N 日遮罩。價格為歷史日線，非即時報價。':'Wheel to zoom around the focused date; double-click to reset. The line is the forward cumulative mean; prices beyond N sessions are masked. Historical daily prices, not live quotes.',
 

@@ -26,9 +26,14 @@ python3 server.py
 
 Local 預設開啟 `http://127.0.0.1:8765`，程序需保持執行。Ctrl+C 停止。這是直接 Python + SQLite，不建立 Docker bridge。
 
+直接執行 `python3 server.py` 且未設定 `PORT` 時，若 8765 已被使用，server 會直接綁定作業系統分配的可用埠；請以終端印出的實際網址為準。明確指定 `PORT` 時不自動換埠，衝突會顯示設定其他 PORT 的提示並退出，不初始化 DB。更換連接埠會使用不同的瀏覽器 localStorage；Tailscale 代理仍需同步調整目標埠。
+
+[run.sh](../run.sh) 使用 Bash 呼叫新版 Python 啟動器；可從其他目錄用絕對路徑呼叫。相對 `NEWS_ATLAS_DB` 路徑以專案根目錄為基準。`./run.sh local --offline` 保留離線搜尋功能，可與新版啟動選項合用。
+
 | 環境變數 | 預設／用途 |
 | --- | --- |
 | `PORT` | 8765 |
+| `NEWS_ATLAS_CACHE_ONLY` | 設為 `1` 時搜尋只讀 DB，強制更新也不連外補抓；可用 `./run.sh local --offline` 啟用 |
 | `NEWS_ATLAS_DB` | 專案 `data/news-atlas.sqlite3`；可指定測試或其他 DB |
 | `MASSIVE_API_KEY` | 選填；請求內 key → 主機私有保存值 → 環境值；不輸出內容 |
 
@@ -55,7 +60,7 @@ DB 是跨重啟累積的單一 SQLite，不是每次搜尋一份。備份先停�
 
 讀取 Massive key 的測試／除錯不得列印環境或 localStorage 憑證。一般搜尋草稿不含 key，key 由獨立記住／忘記控制管理。
 
-提交前確認 Git 根目錄、分支、remote 與工作目錄狀態。專案展示名稱為 StockNexus-Wiki，建議 repository slug 為 stocknexus-wiki；遠端目前為 a0665x/GraphNews，文件命名不會自動變更遠端名稱。
+提交前確認 Git 根目錄、分支、remote 與工作目錄狀態。專案展示名稱為 StockNexus-Wiki，建議 repository slug 為 stocknexus-wiki；遠端統一為 https://github.com/a0665x/StockNexus-Wiki.git。
 
 前端整頁失去互動時，先檢查 HTTP script 回應與第一個 JavaScript 例外；不要先把問題歸因於 API key 或來源。參閱 [前端資源事故及重啟驗證](references/bugfix-20261029-frontend-asset-startup.md)。塑形 profile 的後端驗證也需要重啟 Python，否則舊程序可能丟棄新欄位。
 
@@ -105,3 +110,5 @@ WebGL 初始化失敗或使用中 context lost 時，前端自動改用時間軸
 正式新聞與快照仍在主 DB；詳見 [快取語義](SOURCES_AND_CACHE.md)。
 同 IP 不代表同 GPU 程序／設定；App、headless SwiftShader 與使用者 Chrome 必須分別驗證。
 診斷順序與證據限制見 [渲染事故紀錄](references/lesson-20261102-rendering-cache-settings.md)。
+
+Docker 的 port 檢查依實際 `ATLAS_BIND` 位址執行（預設 127.0.0.1），包括清理舊容器後的再檢查。Tailscale 僅在 tailnet 位址監聽同號 port 時，不應誤擋 loopback 啟動；若選 0.0.0.0，仍會檢查所有介面的占用。

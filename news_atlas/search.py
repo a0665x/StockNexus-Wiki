@@ -1,5 +1,6 @@
 """Search orchestration: reuse covered windows, fetch gaps, commit partial successes."""
 import datetime as dt
+import os
 import threading
 from .model import TICKER, deduplicate
 from .providers import acquire
@@ -33,7 +34,9 @@ def normalize_request(body, today=None):
         raise ValueError('日期需為過去至今天，且一次不超過 366 天')
     if not isinstance(body.get('force_refresh', False), bool):
         raise ValueError('force_refresh 必須是布林值')
-    return {'relation_settings':relation_settings(body.get('relation_settings')),'rss_region':validate_region(body.get('rss_region')),'query': query, 'ticker': ticker, 'sources': sources, 'start': start.isoformat(),
+    if not isinstance(body.get('defer_relations', False), bool):
+        raise ValueError('defer_relations 必須是布林值')
+    return {'defer_relations':body.get('defer_relations',False),'relation_settings':relation_settings(body.get('relation_settings')),'rss_region':validate_region(body.get('rss_region')),'query': query, 'ticker': ticker, 'sources': sources, 'start': start.isoformat(),
             'end': (last + dt.timedelta(days=1)).isoformat(), 'display_end': last.isoformat(),
             'force_refresh': body.get('force_refresh', False)}
 
@@ -58,13 +61,16 @@ def search_source(source, query, ticker, key, start=None, end=None, store=None, 
     with lock:
         existing = store.read(source, cache_key, start, end)
         fresh, gaps = store.coverage(source, cache_key, start, end)
-        if force_refresh:
+        offline = os.environ.get('NEWS_ATLAS_CACHE_ONLY') == '1'
+        if force_refresh and not offline:
             gaps = [(start, end)]
         progress(f'本地 {len(existing)} 篇；需更新 {len(gaps)} 個日期區間')
         error = code = None
         warnings, requests = [], 0
         retry = store.cooldown(source) if gaps else 0
-        if retry:
+        if offline:
+            warnings.append('離線搜尋：只讀本地 DB，不呼叫來源；日期缺口與過期資料不自動補抓')
+        elif retry:
             error, code = f'來源仍在限流等待期，約 {retry} 秒後重試；先顯示本地資料', 'rate_limit'
         elif gaps:
             old_ids = {a['id'] for a in existing}
@@ -87,7 +93,7 @@ def search_source(source, query, ticker, key, start=None, end=None, store=None, 
         return {'source': source, 'rss_region':edition(source,rss_region)['country'] if source!='massive' else None,'articles': rows, 'error': error, 'error_code': code, 'retry_after': retry,
                 'warnings': warnings, 'cache': {'existing_articles': len(existing), 'returned_articles': len(rows),
                     'new_articles': len({r['id'] for r in rows} - {r['id'] for r in existing}),
-                    'network_requests': requests, 'reused': not gaps, 'complete_days': complete_days,
+                    'network_requests': requests, 'reused': offline or not gaps, 'offline': offline, 'complete_days': complete_days,
                     'snapshot_days': snapshot_days, 'requested_days': len(list(dates(start, end))),
                     'missing_ranges': [{'start': a, 'end_exclusive': b} for a, b in remaining],
                     'refresh_failed': bool(error), 'checked_at': max((c['checked_at'] for c in coverage), default=None)}}

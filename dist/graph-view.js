@@ -56,17 +56,18 @@
     for (const p of selected) {
       const visible = new Set(view.articles.filter(a => a.display_sources.includes(p)).map(a => a.article_id));
       out[p] = { articles: (sourceGraphs[p]?.articles || []).filter(a => visible.has(a.id)),
-        relations: view.relations.flatMap(r => (r.source_relations || (r.scope===p?[{provider:p,relation:r.raw_relation}]:[])).filter(item=>item.provider===p).map(item=>item.relation)) };
+        relations: (sourceGraphs[p]?.relations || []).filter(r=>visible.has(r.source)&&visible.has(r.target)) };
     }
+    const savedIds=new Set(Object.values(out).flatMap(g=>g.articles.map(a=>a.id)));
     return { search, view: { sources: selected, separate, positions }, source_graphs: out,
-      cross_relations: view.relations.filter(r => r.scope === 'cross').map(r => r.raw_relation) };
+      cross_relations: separate?[]:(payload.cross_relations || payload.relations || []).filter(r=>(!r.cross_sources||r.cross_sources.every(p=>selected.includes(p)))&&savedIds.has(r.source)&&savedIds.has(r.target)) };
   }
   function linkStyle(edge, measuredLength) {
     const cross=edge.scope==='cross';
     const fallback=edge.type==='shared_entity'?45:80;
     return {distance:cross?Math.max(120,fallback*2):Number.isFinite(measuredLength)?Math.max(10,Math.min(1000,measuredLength)):fallback,strength:cross?.025:.14};
   }
-  const DEFAULT_SETTINGS={internalMin:0,crossMin:0,depth:2,branchLimit:4,pathMin:.25,maxNodes:150};
+  const DEFAULT_SETTINGS={internalMin:.5,crossMin:.5,depth:2,branchLimit:6,pathMin:.4,maxNodes:150};
   function settings(value={}) {
     const out={};for(const [k,min,max,integer] of [['internalMin',0,1],['crossMin',0,1],['depth',1,6,true],['branchLimit',1,12,true],['pathMin',0,1],['maxNodes',1,150,true]]){
       const n=Number(value[k]);out[k]=Number.isFinite(n)&&value[k]!==undefined?Math.max(min,Math.min(max,integer?Math.round(n):n)):DEFAULT_SETTINGS[k];
@@ -77,11 +78,16 @@
   function filterEdges(edges,options={}) {const cfg=settings(options);return edges.filter(e=>(Number(e.weight)||0)>=(e.scope==='cross'?cfg.crossMin:cfg.internalMin));}
   // Breadth-first expansion, deterministic strongest branches first. Scores multiply along a path;
   // these are heuristic display scores, not probabilities or causal attribution.
-  function trace(edges,rootId,options={},barriers=new Set()) {
-    const cfg=settings(options),nodes=new Map(),chosen=new Set(),adj=new Map();
-    if(rootId==null)return {nodes,edges:chosen,truncated:false};
+  function traceIndex(edges) {
+    const adj=new Map();
     for(const edge of edges){const a=endpoint(edge.source),b=endpoint(edge.target);for(const [from,to] of [[a,b],[b,a]]){if(!adj.has(from))adj.set(from,[]);adj.get(from).push({to,edge});}}
     for(const list of adj.values())list.sort((a,b)=>(b.edge.weight||0)-(a.edge.weight||0)||identity(a.edge).localeCompare(identity(b.edge)));
+    return adj;
+  }
+  function trace(edges,rootId,options={},barriers=new Set(),index=null) {
+    const cfg=settings(options),nodes=new Map(),chosen=new Set();
+    if(rootId==null)return {nodes,edges:chosen,truncated:false};
+    const adj=index||traceIndex(edges);
     nodes.set(rootId,{depth:0,strength:1,parent:null});let frontier=[rootId],truncated=false;
     for(let depth=1;depth<=cfg.depth&&frontier.length;depth++){
       const next=[];
@@ -95,41 +101,70 @@
       }}frontier=next;
     }return {nodes,edges:chosen,truncated};
   }
-  function traceMany(edges,roots,options={}) {
+  function traceMany(edges,roots,options={},index=null) {
     roots=[...new Set(roots)].slice(0,10);const nodes=new Map(),chosen=new Set(),trees=[];
-    for(const root of roots){const tree=trace(edges,root,options,new Set(roots.filter(id=>id!==root)));trees.push({root,...tree});
+    const adj=roots.length?(index||traceIndex(edges)):null;
+    for(const root of roots){const tree=trace(edges,root,options,new Set(roots.filter(id=>id!==root)),adj);trees.push({root,...tree});
       for(const [id,hit] of tree.nodes){const old=nodes.get(id),memberships=[...(old?.memberships||[]),root],parents=[...(old?.parents||[]),...(hit.parent==null?[]:[hit.parent])];nodes.set(id,{...(!old||hit.depth<old.depth?hit:old),memberships,parents:[...new Set(parents)]});}
       for(const id of tree.edges)chosen.add(id);
     }return {nodes,edges:chosen,roots,trees,truncated:trees.some(t=>t.truncated)};
   }
+  // One immutable view revision per cache; at most 16 bounded forests, never all queries.
+  // Callers replace the edge array whenever edges/weights change. Results are read-only.
+  function createTraceCache() {
+    let current=null,configKey='',index=null;const results=new Map();
+    return (edges,roots,options={})=>{
+      const cfg=settings(options),nextConfig=JSON.stringify(cfg);
+      if(current!==edges){current=edges;index=null;results.clear();}
+      if(configKey!==nextConfig){configKey=nextConfig;results.clear();}
+      const ids=[...new Set(roots)].slice(0,10),key=JSON.stringify(ids);
+      if(results.has(key)){const hit=results.get(key);results.delete(key);results.set(key,hit);return hit;}
+      if(ids.length&&!index)index=traceIndex(edges);
+      const result=traceMany(edges,ids,cfg,index);results.set(key,result);
+      if(results.size>16)results.delete(results.keys().next().value);
+      return result;
+    };
+  }
   // Pure runtime lookup: never fetch, navigate, filter nodes, or mutate the graph.
   function rankRoots(rows,query,limit=3){
-    const terms=[...new Set(String(query).normalize('NFKC').toLowerCase().match(/[\p{L}\p{N}_.^-]+/gu)||[])].slice(0,20),matches=[];
+    const terms=[...new Set(String(query).normalize('NFKC').toLowerCase().match(/[\p{L}\p{N}_.^-]+/gu)||[])].slice(0,20);
+    const matchers=terms.map(term=>{
+      const escaped=term.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),ascii=/^[\x00-\x7f]+$/.test(term);
+      const pattern=prefix=>ascii?'(?<![A-Za-z0-9_])'+escaped+(prefix?'[A-Za-z]*':'')+'(?![A-Za-z0-9_])':escaped;
+      const exact=new RegExp(pattern(false),'i');
+      return {term,exact,expanded:/^[a-z]{4,}$/i.test(term)?new RegExp(pattern(true),'i'):exact};
+    });
+    const count=Math.max(1,Math.min(10,Math.floor(Number(limit)||3))),matches=[];
+    const compare=(a,b)=>b.score-a.score||(a.id<b.id?-1:a.id>b.id?1:0);let matched=0;
     for(const row of rows){
       const fields={title:row.title||'',summary:row.summary||'',symbols:(row.symbols||[]).join(' '),entities:(row.entities||[]).map(x=>(x.id||'')+' '+(x.label||'')).join(' '),topics:(row.topics||[]).map(x=>x.label||'').join(' '),channels:(row.channels||[]).map(x=>x.name||'').join(' ')};
       let score=0;const evidence=[];
-      for(const [field,value]of Object.entries(fields))for(const term of terms){
-        const escaped=term.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),ascii=/^[\x00-\x7f]+$/.test(term),prefix=/^[a-z]{4,}$/i.test(term)&&!['symbols','entities'].includes(field),pattern=ascii?'(?<![A-Za-z0-9_])'+escaped+(prefix?'[A-Za-z]*':'')+'(?![A-Za-z0-9_])':escaped;
-        const hit=String(value).normalize('NFKC').match(new RegExp(pattern,'i'));if(!hit)continue;
-        const weight={title:8,summary:2,symbols:10,entities:6,topics:3,channels:3}[field];score+=weight;evidence.push({field,term,match:hit[0],score:weight});
+      for(const [field,value]of Object.entries(fields)){
+        const text=String(value).normalize('NFKC');
+        for(const matcher of matchers){
+          const hit=text.match(['symbols','entities'].includes(field)?matcher.exact:matcher.expanded);if(!hit)continue;
+          const weight={title:8,summary:2,symbols:10,entities:6,topics:3,channels:3}[field];score+=weight;evidence.push({field,term:matcher.term,match:hit[0],score:weight});
+        }
       }
-      if(score)matches.push({id:row.id,title:row.title,score,evidence});
+      if(score){matched++;const hit={id:row.id,title:row.title,score,evidence};
+        if(matches.length<count||compare(hit,matches[matches.length-1])<0){matches.push(hit);matches.sort(compare);if(matches.length>count)matches.pop();}
+      }
     }
-    matches.sort((a,b)=>b.score-a.score||(a.id<b.id?-1:a.id>b.id?1:0));
-    return {roots:matches.slice(0,Math.max(1,Math.min(10,Number(limit)||3))),matched_articles:matches.length,scanned_articles:rows.length};
+    return {roots:matches,matched_articles:matched,scanned_articles:rows.length};
   }
+  function renderLimit(value=800){const n=Number(value);return Number.isFinite(n)&&n>0?Math.max(100,Math.min(2400,Math.floor(n))):800;}
   // GPU budget only: never mutate the complete search/export payload.
   function renderSlice(view, limit=800, priority=[]) {
-    limit=Math.max(100,Math.min(2400,Number(limit)||800));
-    const rank=new Map(priority.map((id,i)=>[id,i]));
+    limit=renderLimit(limit);
+    const rank=new Map();for(const id of priority)if(!rank.has(id))rank.set(id,rank.size);
     const ordered=view.articles.slice().sort((a,b)=>
       (rank.get(a.id)??Infinity)-(rank.get(b.id)??Infinity)||
       String(b.published_at||'').localeCompare(String(a.published_at||''))||String(a.id).localeCompare(String(b.id)));
     const articles=ordered.slice(0,limit),ids=new Set(articles.map(a=>a.id));
-    const relations=view.relations.filter(e=>ids.has(endpoint(e.source))&&ids.has(endpoint(e.target))).slice(0,limit*3);
+    const relations=[];for(const edge of view.relations){if(ids.has(endpoint(edge.source))&&ids.has(endpoint(edge.target)))relations.push(edge);if(relations.length>=limit*3)break;}
     return {articles,relations};
   }
-  const api = { select, snapshot, groups, linkStyle, settings, filterEdges, trace, traceMany, rankRoots, identity, endpoint, renderSlice };
+  const api = { select, snapshot, groups, linkStyle, settings, filterEdges, trace, traceMany, rankRoots, identity, endpoint, renderSlice, renderLimit, createTraceCache };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.AtlasView = api;
 })(globalThis);

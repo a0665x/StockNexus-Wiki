@@ -2,6 +2,7 @@
 """Local News Atlas HTTP server; opt-in credentials stay outside news DBs."""
 import concurrent.futures
 import datetime as dt
+import errno
 import json
 import os
 import queue
@@ -130,6 +131,9 @@ def search_events(request, key, store):
                 displayed=updated
                 event.update(completed=completed, total=len(request['sources']),graph=displayed)
             yield event
+    if request.get('defer_relations'):
+        yield {'type':'done','elapsed':round(time.monotonic()-start_time),'db':store.stats()}
+        return
     yield {'type':'phase','phase':'relations','message':'新聞已載入，正在計算關聯','elapsed':round(time.monotonic()-start_time)}
     # One final graph calculation; stream heartbeats while it runs, keeping news visible.
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as compute:
@@ -192,7 +196,7 @@ class Handler(BaseHTTPRequestHandler):
             saved = self.store.load_snapshot(path.rsplit('/',1)[-1])
             self.json_response(200 if saved else 404, saved or {'error':'快照不存在'})
             return
-        files = {'/price-chart.js': ('dist/price-chart.js','text/javascript; charset=utf-8'), '/docking.js': ('dist/docking.js','text/javascript; charset=utf-8'), '/price-lens.js': ('dist/price-lens.js','text/javascript; charset=utf-8'), '/chat-panel.js': ('dist/chat-panel.js','text/javascript; charset=utf-8'), '/chat-panel.css': ('dist/chat-panel.css','text/css; charset=utf-8'), '/relation-settings.js': ('dist/relation-settings.js','text/javascript; charset=utf-8'), '/time-lens.js': ('dist/time-lens.js','text/javascript; charset=utf-8'), '/docs': ('dist/docs.html','text/html; charset=utf-8'), '/docs/': ('dist/docs.html','text/html; charset=utf-8'), '/vendor/swagger-ui-bundle.js': ('dist/vendor/swagger-ui-bundle.js','text/javascript; charset=utf-8'), '/vendor/swagger-ui.css': ('dist/vendor/swagger-ui.css','text/css; charset=utf-8'), '/interaction.js': ('dist/interaction.js','text/javascript; charset=utf-8'), '/date-range.js': ('dist/date-range.js','text/javascript; charset=utf-8'), '/glow.js': ('dist/glow.js','text/javascript; charset=utf-8'), '/i18n.js': ('dist/i18n.js','text/javascript; charset=utf-8'), '/explorer-ui.js': ('dist/explorer-ui.js','text/javascript; charset=utf-8'), '/schema/news-atlas.schema.json': ('schema/news-atlas.schema.json','application/json; charset=utf-8'), '/': ('dist/index.html', 'text/html; charset=utf-8'), '/3d-force-graph.min.js': ('dist/3d-force-graph.min.js', 'text/javascript; charset=utf-8'), '/app.js': ('dist/app.js', 'text/javascript; charset=utf-8'), '/graph-view.js': ('dist/graph-view.js', 'text/javascript; charset=utf-8'), '/timeline.js': ('dist/timeline.js', 'text/javascript; charset=utf-8')}
+        files = {'/view-relations.js': ('dist/view-relations.js','text/javascript; charset=utf-8'), '/price-chart.js': ('dist/price-chart.js','text/javascript; charset=utf-8'), '/docking.js': ('dist/docking.js','text/javascript; charset=utf-8'), '/price-lens.js': ('dist/price-lens.js','text/javascript; charset=utf-8'), '/chat-panel.js': ('dist/chat-panel.js','text/javascript; charset=utf-8'), '/chat-panel.css': ('dist/chat-panel.css','text/css; charset=utf-8'), '/relation-settings.js': ('dist/relation-settings.js','text/javascript; charset=utf-8'), '/time-lens.js': ('dist/time-lens.js','text/javascript; charset=utf-8'), '/docs': ('dist/docs.html','text/html; charset=utf-8'), '/docs/': ('dist/docs.html','text/html; charset=utf-8'), '/vendor/swagger-ui-bundle.js': ('dist/vendor/swagger-ui-bundle.js','text/javascript; charset=utf-8'), '/vendor/swagger-ui.css': ('dist/vendor/swagger-ui.css','text/css; charset=utf-8'), '/interaction.js': ('dist/interaction.js','text/javascript; charset=utf-8'), '/date-range.js': ('dist/date-range.js','text/javascript; charset=utf-8'), '/glow.js': ('dist/glow.js','text/javascript; charset=utf-8'), '/i18n.js': ('dist/i18n.js','text/javascript; charset=utf-8'), '/explorer-ui.js': ('dist/explorer-ui.js','text/javascript; charset=utf-8'), '/schema/news-atlas.schema.json': ('schema/news-atlas.schema.json','application/json; charset=utf-8'), '/': ('dist/index.html', 'text/html; charset=utf-8'), '/3d-force-graph.min.js': ('dist/3d-force-graph.min.js', 'text/javascript; charset=utf-8'), '/app.js': ('dist/app.js', 'text/javascript; charset=utf-8'), '/graph-view.js': ('dist/graph-view.js', 'text/javascript; charset=utf-8'), '/timeline.js': ('dist/timeline.js', 'text/javascript; charset=utf-8')}
         if path not in files:
             self.send_error(404)
             return
@@ -233,7 +237,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if self.path.startswith('/api/chat/'):
             chat_proxy.handle(self);return
-        if self.path not in ('/api/settings/massive-key','/api/search', '/api/search/result', '/api/snapshots', '/api/channels', '/api/classify', *api.POST_PATHS):
+        if self.path not in ('/api/graph/preview','/api/settings/massive-key','/api/search', '/api/search/result', '/api/snapshots', '/api/channels', '/api/classify', *api.POST_PATHS):
             self.send_error(404)
             return
         if self.headers.get('Content-Type', '').split(';')[0].strip() != 'application/json':
@@ -241,7 +245,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             length = int(self.headers.get('Content-Length', '0'))
-            if not 0 < length <= (268435456 if self.path in ('/api/snapshots','/api/classify',*api.POST_PATHS) else 16384):
+            if not 0 < length <= (268435456 if self.path in ('/api/graph/preview','/api/snapshots','/api/classify',*api.POST_PATHS) else 16384):
                 raise ValueError('搜尋內容大小錯誤')
             body = json.loads(self.rfile.read(length))
             if not isinstance(body,dict): raise ValueError('Request body 必須是 JSON object')
@@ -250,6 +254,26 @@ class Handler(BaseHTTPRequestHandler):
                     credentials.save_key(self.store.path,body.get('key'))
                     self.json_response(200,{'configured':True})
                 except OSError:self.json_response(500,{'error':'無法保存本機金鑰設定'})
+                return
+            if self.path == '/api/graph/preview':
+                from news_atlas.preview import validate, stream
+                groups, cfg, stage = validate(body, self.store)
+                include_cross=body.get('include_cross',True)
+                if not isinstance(include_cross,bool): raise ValueError('無效跨來源計算設定')
+                self.send_response(200)
+                self.send_header('Content-Type','application/x-ndjson; charset=utf-8')
+                self.send_header('Cache-Control','no-store')
+                self.send_header('X-Accel-Buffering','no')
+                self.end_headers()
+                events = stream(groups, cfg, stage, self.store.path.with_name(self.store.path.name+'.pairs.sqlite3'), include_cross=include_cross)
+                try:
+                    for event in events:
+                        self.wfile.write((json.dumps(event,ensure_ascii=False)+'\n').encode())
+                        self.wfile.flush()
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
+                finally:
+                    events.close()
                 return
             if self.path in api.POST_PATHS:
                 self.json_response(200,api.dispatch(self.path,body,self.store,functools.partial(build_cached,self.store,graph_payload)));return
@@ -296,16 +320,33 @@ class Handler(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError):
             pass
 
+def create_server():
+    port = int(os.environ.get('PORT', '8765'))
+    try:
+        return ThreadingHTTPServer(('0.0.0.0', port), Handler)
+    except OSError as exc:
+        if exc.errno != errno.EADDRINUSE:
+            raise
+        if 'PORT' in os.environ:
+            raise SystemExit(f'連接埠 {port} 已被使用；請改用其他 PORT，例如 PORT=8888 ./run.sh。') from None
+        # Bind port zero directly so the OS reserves the available port for us.
+        fallback = ThreadingHTTPServer(('0.0.0.0', 0), Handler)
+        print(f'預設連接埠 {port} 已被使用，改用 {fallback.server_port}。', flush=True)
+        return fallback
+
+
 if __name__ == '__main__':
     def stop_server(signum, frame):
         raise KeyboardInterrupt
     signal.signal(signal.SIGTERM, stop_server)
-    store = Store()
-    port = int(os.environ.get('PORT', '8765'))
-    server = ThreadingHTTPServer(('0.0.0.0', port), Handler)
-    server.store = store
-    print(f'News Atlas: http://127.0.0.1:{port}\nListening: 0.0.0.0:{port} (LAN: http://<host-ip>:{port})\nSQLite: {store.path}', flush=True)
+    server = create_server()
     try:
+        store = Store()
+        server.store = store
+        port = server.server_port
+        if os.environ.get('NEWS_ATLAS_CACHE_ONLY') == '1':
+            print('離線搜尋模式：只讀 DB，不向新聞來源發送請求。', flush=True)
+        print(f'News Atlas: http://127.0.0.1:{port}\nListening: 0.0.0.0:{port} (LAN: http://<host-ip>:{port})\nSQLite: {store.path}', flush=True)
         server.serve_forever()
     except KeyboardInterrupt:
         pass

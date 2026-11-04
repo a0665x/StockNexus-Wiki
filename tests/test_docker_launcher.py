@@ -28,6 +28,22 @@ class DockerLaunchTests(unittest.TestCase):
         self.assertEqual(d.COMPOSE[-2:],['-p','news-atlas'])
         self.assertEqual(d.PORT,8765)
 
+    def test_preflight_probes_configured_address_not_all_interfaces(self):
+        with tempfile.TemporaryDirectory() as folder:
+            for bind in ('127.0.0.1', '0.0.0.0'):
+                config={'services':{'atlas':{'ports':[{'published':'8765','target':8765,'host_ip':bind}],
+                    'volumes':[{'target':'/app/data','source':folder}]}}}
+                # Tailscale owns another interface; only the loopback bind is free.
+                with self.subTest(bind=bind), patch.object(d,'json_run',return_value=config), \
+                     patch.object(d,'containers',return_value=[]), patch.object(d,'run',return_value=''), \
+                     patch.object(d.launch,'available',side_effect=lambda port,host: host=='127.0.0.1') as probe, \
+                     contextlib.redirect_stdout(io.StringIO()):
+                    if bind=='127.0.0.1':
+                        self.assertEqual(d.preflight()[2],bind)
+                    else:
+                        with self.assertRaisesRegex(RuntimeError,'occupied'):d.preflight()
+                    probe.assert_called_once_with(8765,bind)
+
     def test_repeated_healthy_up_does_not_down_or_create_replica(self):
         healthy={'id':'one','labels':{'com.docker.compose.service':'atlas'},'state':{'Running':True,'Health':{'Status':'healthy'}}}
         response=MagicMock();response.__enter__.return_value.status=200

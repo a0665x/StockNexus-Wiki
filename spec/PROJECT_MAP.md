@@ -13,6 +13,8 @@
 3. 編輯前回到文件列出的原始碼核對；文件不取代當下程式、測試或使用者指示。
 4. 修改前查看 [變更紀錄](CHANGELOG.md) 及相關事故／避坑紀錄；依 [TESTING.md](TESTING.md) 選擇回歸檢查；有新行為時更新對應 spec。
 
+`project-spec-graph-onboarding` 共用此入口：先確認 Git 現況，再選任務文件與核對原始碼。有 `.codegraph/` 時遵循 CodeGraph-first；否則可使用既有且可用的 Graphify 索引。沒有可用圖時使用範圍限定的 `rg`，不自動建立索引。已知能力缺口見 [文件盤點](references/DOCUMENT_INVENTORY.md)，驗收依據見 [TESTING.md](TESTING.md)。
+
 | 任務／領域 | Level 2 入口 | 優先原始碼 |
 | --- | --- | --- |
 | 操作、設定、刷新、快照、開發交付 | [WORKFLOWS.md](WORKFLOWS.md) | run.sh、server.py、dist/app.js |
@@ -23,6 +25,7 @@
 | Swagger、REST、未來 MCP | [API.md](API.md) | server.py、api.py、openapi.py、exploration.py |
 | 本機啟動、手機、重啟、版本不一致 | [RUNTIME.md](RUNTIME.md) | run.sh、scripts/docker_launch.py、scripts/launch.py、server.py、start-tailscale.sh |
 | 驗證與修改風險 | [TESTING.md](TESTING.md) | tests/ |
+| 單股 Temporal LLM Wiki、新圖與研究設計（第一階段） | [TEMPORAL_WIKI.md](TEMPORAL_WIKI.md) | scripts/wiki_readiness.py、schema/temporal-wiki.relation.schema.json；compiler/UI 待實作 |
 
 ## 不可誤解的現況
 

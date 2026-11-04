@@ -45,3 +45,7 @@ Chat 同源代理：GET `/api/chat/status`；POST `/api/chat/session|sync|turn|c
 詳細 runtime 與安全邊界見 [CHAT_AGENT](CHAT_AGENT.md)。
 
 股價大小證據：`POST /api/prices/lens`；交易日公式、ticker 邊界與六小時快取見 [PRICE_LENS.md](PRICE_LENS.md)。
+
+新增 `POST /api/graph/preview`（NDJSON、最多2400不同節點），搜尋可指定 `defer_relations:true`。範圍、配對計數及局部快照契約見 [視圖關聯流程](references/view-first-relations-20261104.md)。
+
+`POST /api/graph/preview` 新增 `include_cross`（預設true）；分組畫面送false。progress/result的 `pairs_computed`／`pairs_reused` 區分新評分與快取命中，`pairs_checked`仍是掃描數。快照view新增 `render_budget`、`relation_cache_version`、`relation_scope_sources`、`relation_views`（最多12組）；細節見OpenAPI及[增量重用說明](references/view-first-relations-20261104.md)。

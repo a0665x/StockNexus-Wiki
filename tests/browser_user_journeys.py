@@ -4,6 +4,7 @@ Requires google-chrome and Python websocket-client. Uses isolated HTTP fixtures.
 import json
 import os
 import signal
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -21,7 +22,7 @@ def main():
         assert start>0
         page.write_text((html[:start]+'</body></html>').replace('<script>',"<script>localStorage.setItem('graphnews.searchDraft',JSON.stringify({forceRefresh:true}));</script><script>",1))
         log=(folder/'chrome.log').open('w')
-        chrome=subprocess.Popen(['google-chrome','--headless=new',*(['--disable-webgl'] if '--no-webgl' in sys.argv else []),'--no-sandbox','--disable-dev-shm-usage','--window-size=1440,1000','--remote-debugging-port=0','--remote-allow-origins=*','--allow-file-access-from-files','--user-data-dir='+str(folder/'profile'),page.as_uri()],stdout=log,stderr=log,start_new_session=True)
+        chrome=subprocess.Popen([os.environ.get('CHROME_BIN') or shutil.which('google-chrome') or shutil.which('chromium') or 'google-chrome','--headless=new',*(['--disable-webgl'] if '--no-webgl' in sys.argv else []),'--no-sandbox','--disable-dev-shm-usage','--window-size=1440,1000','--remote-debugging-port=0','--remote-allow-origins=*','--allow-file-access-from-files','--user-data-dir='+str(folder/'profile'),page.as_uri()],stdout=log,stderr=log,start_new_session=True)
         try:
             portfile=folder/'profile/DevToolsActivePort'
             for _ in range(100):

@@ -33,3 +33,8 @@ const sampled=view.select(annual,['google','massive']);
 assert.equal(sampled.articles.length,1600);
 for(const p of ['google','massive'])assert(sampled.articles.some(a=>a.display_provider===p&&a.published_at.startsWith('2025')),'all source articles retained across years');
 console.log('PASS: all 1600 articles retained across both years and sources');
+
+// Display thresholds must not remove the stored raw edge or its evidence.
+const hidden=view.select(payload,['google'],false);hidden.relations=[];
+const unfiltered=view.snapshot(payload,hidden,['google'],false,{});
+assert.equal(unfiltered.source_graphs.google.relations.length,1);

@@ -1,5 +1,12 @@
 # 變更與驗證 log
 
+## 2026-11-04 — 大量節點效能
+
+- 保持800點／2400線預設上限；清單與密集時間桶分頁100篇，完整資料仍可搜尋／匯出。
+- 關聯索引共用與有界cache、相同切片跳過graphData、單點投影及query級regex，減少重複計算。
+- 22個CJS、10k–12k真實WebGL壓力案例、27項既有使用流程及9項API／資源路由檢查通過；使用SwiftShader，不宣稱硬體FPS。
+- [重現、量測與限制](references/bugfix-20261104-large-graph-performance.md)。
+
 
 ## 2026-11-03 — Contextual Chat Agent
 
@@ -190,3 +197,15 @@ Actual failure cause in the user's browser is not established by generic status 
 ## 2026-11-03 股價動能與可分割工作區
 
 新增股價十字線、同步軸縮放／雙擊還原、N 日方向高亮、P95 標準化與鐘形內實際成份占比。修正巢狀分割拖出後剩餘視窗未恢復比例；保留邊緣 650ms 停留門檻。run.sh 新增 chat setup 與整合／獨立範例啟動說明。詳見 PRICE_LENS、TOOL_DOCK、CHAT_AGENT。
+
+## 2026-11-04 視圖優先關聯
+
+搜尋可先取得完整新聞，3D僅計算目前budget內節點；strict先呈現、閒置再補adaptive。新增配對／節點／連線／狀態計數、650ms停留說明與局部關聯快照標記。見 [設計與驗證](references/view-first-relations-20261104.md)。
+
+## 2026-11-04 README示範與分支狀態確認
+
+確認目前為 `llm_wiki`，尚未提交的News Graph效能／互動修改已部署；Temporal LLM Wiki維持設計階段，尚無compiler、Wiki轉換UI或回測runtime。README新增明確實作狀態表、研究版影片動畫預覽與完整影片連結；已依使用者提供的v3目錄確認影片C為Research Desk（stocknexus-research.webm），SHA-256與既有轉檔來源一致；媒體來源註記已更新。15項離線Wiki設計檢查及spec本地連結檢查通過。
+
+## 2026-11-04 跨視圖重用與快照還原
+
+配對分數與負結果持久保存，視圖變更只補缺少評分並重選連線；前端重用12組完成視圖。快照保存原始關聯、渲染預算及完成視圖，還原順序避免中間狀態重算。詳細規則與邊界見[視圖優先關聯](references/view-first-relations-20261104.md)。

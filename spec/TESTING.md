@@ -122,3 +122,11 @@ replacement renderer. The normal journey verifies cleanup exceptions do not bloc
 K 線／視窗分割：`node tests/price-chart.test.cjs`、`python3 tests/browser_price_dock.py`，後者在隔離 Chrome 用 CDP 滑鼠拖曳；使用現有快照及真實 Massive 行情／快取，不寫入正式新聞 DB；可能消耗行情 API 額度。另跑 `tests/browser_user_journeys.py` 檢查工具不遮擋導覽與來源控制。
 
 2026-11-03 驗收：132 項 Python 測試、全部 CJS 測試、Chat session／取消／MCP acknowledgement 測試通過。實際 Chrome 驗證中英切換／紅框、標準化後正負完整報酬 16:1 的實際 mesh 比例、十字線／同步軸縮放不改 time_focus、雙擊還原、正負方向高亮、邊緣停留及巢狀拖出比例補位、保存重載；既有 2,400 節點、WebGL 遺失／重試流程亦通過。這些是隔離瀏覽器驗收，不代表所有主機 GPU 容量。socket 與瀏覽器測試須在允許建立本機 socket 的環境執行。
+
+### 大量節點與重複計算回歸（2026-11-04）
+
+`node tests/test_graph_performance.cjs` 檢查工作數量／cache失效與上限；`/usr/bin/python3 tests/browser_graph_performance.py` 使用隔離synthetic 10k–12k資料與真實WebGL，檢查實際GPU800預設／各預算、DOM100列分頁、Chat跨頁、分類、來源切換與匯出完整性。需Chromium及websocket-client，可指定CHROME_BIN；詳細結果寫在/tmp，不含正式新聞。量測與限制見 [效能紀錄](references/bugfix-20261104-large-graph-performance.md)。
+
+視圖優先建圖：`python3 -m unittest discover -s tests -p test_view_relations.py`、`/usr/bin/python3 tests/browser_view_relations.py`。使用隔離fixture；後者需Chromium和websocket-client。詳見 [驗證與範圍](references/view-first-relations-20261104.md)。
+
+增量配對：`tests/test_relation_cache.py` 驗證持久重用、負結果、內容失效及重選一致性；`tests/test_view_relations.py` 驗證HTTP新算／重用數及分組略過跨來源；`tests/browser_view_relations.py` 驗證完成範圍零請求、快照還原與先前完成組合。

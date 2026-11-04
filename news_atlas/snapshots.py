@@ -128,6 +128,45 @@ def validate_snapshot(body):
     if focus_mode not in ('overview','single','keyword') or not isinstance(root_ids,list) or len(root_ids)>10 or any(not isinstance(r,str) or r not in valid_view_ids for r in root_ids) or len(set(root_ids))!=len(root_ids) or not isinstance(query,str) or len(query)>200 or isinstance(limit,bool) or not isinstance(limit,int) or not 1<=limit<=10: raise ValueError('無效 focus roots 或設定')
     if (focus_mode=='overview' and root_ids) or (focus_mode=='single' and len(root_ids)!=1) or (focus_mode=='keyword' and (not root_ids or not query.strip())): raise ValueError('focus 模式與 roots 不一致')
     focus={'mode':focus_mode,'root_ids':root_ids,'query':query,'limit':limit}
+    relation_scope=view.get('relation_scope','complete')
+    scope_ids=view.get('relation_scope_ids',[])
+    pending=view.get('relations_pending',False)
+    if relation_scope not in ('complete','view') or not isinstance(pending,bool) or not isinstance(scope_ids,list) or len(scope_ids)>2400 or any(not isinstance(i,str) or i not in valid_view_ids for i in scope_ids):
+        raise ValueError('無效關聯計算範圍')
+    selected_id=view.get('selected_id')
+    highlight_mode=view.get('highlight_mode','root')
+    graph_channel=view.get('graph_channel','')
+    if selected_id is not None and (not isinstance(selected_id,str) or selected_id not in valid_view_ids): raise ValueError('無效選取節點')
+    if highlight_mode not in ('root','category') or not isinstance(graph_channel,str) or (graph_channel and graph_channel not in {d['id'] for d in frozen_defs}): raise ValueError('無效圖譜分類焦點')
+    render_budget=view.get('render_budget',800)
+    cache_version=view.get('relation_cache_version',0)
+    scope_sources=view.get('relation_scope_sources',[])
+    if isinstance(render_budget,bool) or render_budget not in (100,200,400,800,1200,1600,2000,2400):
+        raise ValueError('無效渲染預算')
+    if type(cache_version) is not int or cache_version not in (0,1) or not isinstance(scope_sources,list) or len(scope_sources)>3 or any(p not in PROVIDERS for p in scope_sources) or len(set(scope_sources))!=len(scope_sources):
+        raise ValueError('無效快照關聯版本')
+    relation_views=[]
+    raw_views=view.get('relation_views',[])
+    if not isinstance(raw_views,list) or len(raw_views)>12:
+        raise ValueError('最多保存12組已完成視圖')
+    for item in raw_views:
+        if not isinstance(item,dict): raise ValueError('無效已完成視圖')
+        ps=item.get('sources'); ids=item.get('ids'); separate=item.get('separate')
+        gs=item.get('source_graphs')
+        if not isinstance(ps,list) or not ps or len(ps)>3 or any(not isinstance(p,str) or p not in normalized for p in ps) or len(set(ps))!=len(ps) or not isinstance(separate,bool) or not isinstance(gs,dict) or set(gs)!=set(ps):
+            raise ValueError('無效已完成視圖來源')
+        allowed={f'{p}::{a["id"]}' if separate else a['id'] for p in ps for a in normalized[p]['articles']}
+        if not isinstance(ids,list) or len(ids)>2400 or any(not isinstance(i,str) or i not in allowed for i in ids) or len(set(ids))!=len(ids):
+            raise ValueError('無效已完成視圖節點')
+        ids_set=set(ids); clean_groups={}; raw_ids=set()
+        for p in ps:
+            permitted={a['id'] for a in normalized[p]['articles'] if (f'{p}::{a["id"]}' if separate else a['id']) in ids_set}
+            if not isinstance(gs[p],dict): raise ValueError('無效已完成視圖關聯')
+            clean_groups[p]={'relations':validate_edges(gs[p].get('relations',[]),permitted)}
+            raw_ids.update(permitted)
+        cross_edges=validate_edges(item.get('cross_relations',[]),raw_ids)
+        if separate and cross_edges: raise ValueError('分組視圖不能包含跨來源連線')
+        relation_views.append({'ids':sorted(ids),'sources':sorted(ps),'separate':separate,'relation_settings':relation_settings(item.get('relation_settings')),'source_graphs':clean_groups,'cross_relations':cross_edges})
     search = body.get('search', {})
     if not isinstance(search,dict):
         raise ValueError('搜尋資訊格式錯誤')
@@ -136,7 +175,7 @@ def validate_snapshot(body):
     search = {k: str(search[k])[:200] for k in ('query','ticker','start','end') if k in search}
     if rss_region is not None:search['rss_region']=rss_region
     return {'name': str(body.get('name') or search.get('query') or search.get('ticker') or '新聞圖譜')[:120],
-            'search': search, 'view': {'sources': sources, 'separate': view['separate'], 'positions': positions, 'mode':mode, 'channel_filter':channel_filter, 'cutoff':cutoff, 'timeline_zoom':zoom, 'channel_definitions':frozen_defs, 'timeline_style':timeline_style, 'exploration':exploration, 'glow':normalized_glow, 'focus':focus, 'time_focus':time_focus, 'price_focus':validate_price_focus(view.get('price_focus'),valid_view_ids), 'relation_settings':relation_settings(view.get('relation_settings'))},
+            'search': search, 'view': {'selected_id':selected_id,'highlight_mode':highlight_mode,'graph_channel':graph_channel,'relation_views':relation_views,'render_budget':render_budget,'relation_cache_version':cache_version,'relation_scope_sources':scope_sources,'relation_scope':relation_scope,'relation_scope_ids':scope_ids,'relations_pending':pending,'sources': sources, 'separate': view['separate'], 'positions': positions, 'mode':mode, 'channel_filter':channel_filter, 'cutoff':cutoff, 'timeline_zoom':zoom, 'channel_definitions':frozen_defs, 'timeline_style':timeline_style, 'exploration':exploration, 'glow':normalized_glow, 'focus':focus, 'time_focus':time_focus, 'price_focus':validate_price_focus(view.get('price_focus'),valid_view_ids), 'relation_settings':relation_settings(view.get('relation_settings'))},
             'source_graphs': normalized, 'cross_relations': cross}
 
 def validate_edges(edges, ids):

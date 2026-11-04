@@ -145,7 +145,7 @@ def _cached_relations(encoded,max_neighbors,cross_only,cfg):
     return _build_relations(json.loads(encoded),max_neighbors,cross_only,json.loads(cfg))
 
 
-def _build_relations(rows, max_neighbors=None, cross_only=False, relation_settings=None):
+def _build_relations(rows, max_neighbors=None, cross_only=False, relation_settings=None, progress=None, pair_cache=None):
     from .relation_settings import settings, DEFAULTS
     cfg=settings(relation_settings)
     if max_neighbors is None: max_neighbors=cfg['cross_neighbors' if cross_only else 'internal_neighbors']
@@ -158,7 +158,7 @@ def _build_relations(rows, max_neighbors=None, cross_only=False, relation_settin
         strict={**cfg,'adaptive':False,'coverage_first':False}
         for key in ('entity_days','topic_days','title_days'):strict[key]=min(cfg[key],DEFAULTS[key])
         for key in ('topic_similarity','title_similarity','title_terms_min'):strict[key]=max(cfg[key],DEFAULTS[key])
-        result=_build_relations(rows,max_neighbors,cross_only,strict)
+        result=_build_relations(rows,max_neighbors,cross_only,strict,progress,pair_cache)
         for edge in result:
             edge['evidence'].append({'adaptive_stage':'strict'})
             selected.add(edge['id'])
@@ -166,6 +166,8 @@ def _build_relations(rows, max_neighbors=None, cross_only=False, relation_settin
     features = [(r, {e['id']: e for e in r['entities']}, {t['id'] for t in r['topics']}, title_tokens(r['title']),
                  dt.datetime.fromisoformat(r['published_at'].replace('Z','+00:00')) if r.get('published_at') else None,
                  {o['provider'] for o in r.get('origins',[r['source']])}) for r in rows]
+    from .relation_cache import MISSING
+    cache_binding = pair_cache.bind(rows, cfg) if pair_cache else None
     def evaluate(i,j,materialize=False):
         a,ae,at,aw,astamp,asources=features[i]
         b,be,bt,bw,bstamp,bsources=features[j]
@@ -200,6 +202,8 @@ def _build_relations(rows, max_neighbors=None, cross_only=False, relation_settin
     dated=sorted((f[4],i) for i,f in enumerate(features) if f[4] is not None)
     isolated=[entry for entry in dated if not degree.get(rows[entry[1]]['id'],0)]
     window=dt.timedelta(days=max(cfg[k+'_days'] for k in ('entity','topic','title') if cfg[k]))
+    checked = 0
+    if progress: progress(0, 0, len(features))
     for i,feature in enumerate(features):
         if feature[4] is None:continue
         index=isolated if cfg['adaptive'] and degree.get(rows[i]['id'],0) else dated
@@ -207,8 +211,21 @@ def _build_relations(rows, max_neighbors=None, cross_only=False, relation_settin
         hi=bisect.bisect_right(index,(feature[4]+window,len(features)))
         for _,j in index[lo:hi]:
             if j<=i:continue
-            candidate=evaluate(i,j)
+            if cross_only and feature[5] & features[j][5]: continue
+            checked += 1
+            if progress and checked % 2048 == 0: progress(2048, i, len(features))
+            if pair_cache:
+                rules, revisions = cache_binding
+                score = pair_cache.get(rules, revisions[i], revisions[j])
+                if score is MISSING:
+                    candidate = evaluate(i,j)
+                    pair_cache.put(rules, revisions[i], revisions[j], list(candidate[:2]) if candidate else None)
+                else:
+                    candidate = (*score, rows[i]['id']+':'+rows[j]['id'], i, j) if score is not None else None
+            else:
+                candidate=evaluate(i,j)
             if candidate is not None:candidates.append(candidate)
+    if progress: progress(checked % 2048, len(features), len(features))
     ranked=sorted(candidates)
     def take(candidate):
         _,_,identity,i,j=candidate
