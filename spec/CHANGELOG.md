@@ -209,3 +209,7 @@ Actual failure cause in the user's browser is not established by generic status 
 ## 2026-11-04 跨視圖重用與快照還原
 
 配對分數與負結果持久保存，視圖變更只補缺少評分並重選連線；前端重用12組完成視圖。快照保存原始關聯、渲染預算及完成視圖，還原順序避免中間狀態重算。詳細規則與邊界見[視圖優先關聯](references/view-first-relations-20261104.md)。
+
+## 2026-11-04 搜尋後關聯卡在停止狀態
+
+修正acceptSearchGraph誤設restoringRelations=true且未解除，導致搜尋有節點但不發preview請求。快照還原旗標現在只由restoreSnapshot管理。瀏覽器測試改由實際搜尋接收入口進入，並新增還原快照後再搜尋的驗收；避免僅測rebuild而漏掉前置生命週期。

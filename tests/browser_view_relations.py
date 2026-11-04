@@ -81,7 +81,8 @@ def main():
               const seed=initialGraph.source_graphs.google.articles[0];
               window.viewRows=Array.from({length:5637},(_,i)=>({...seed,id:'view-'+String(i).padStart(5,'0'),title:'Fixture '+i,published_at:'2026-01-01T00:00:00Z'}));
               relationUI.restore(AtlasRelations.unified);
-              rebuild({source_graphs:{google:{articles:viewRows,relations:[],total_articles:5637}},relation_scope:'view',relations_pending:true,relation_settings:AtlasRelations.unified});
+              pendingSearchMeta={query:'fixture',sources:{}};
+              acceptSearchGraph({source_graphs:{google:{articles:viewRows,relations:[],total_articles:5637}},relation_scope:'view',relations_pending:true,relation_settings:AtlasRelations.unified});
             })()""")
             def settle():
                 js("new Promise((resolve,reject)=>{let n=0;const t=setInterval(()=>{if(viewRelationState.phase==='ready'){clearInterval(t);resolve(true)}else if(++n>120){clearInterval(t);reject(Error(JSON.stringify(viewRelationState)))}},50)})")
@@ -134,6 +135,13 @@ def main():
             js("window.beforeToggle=previewCalls.length;$('view-google').checked=false;$('view-google').dispatchEvent(new Event('change'));$('view-google').checked=true;$('view-google').dispatchEvent(new Event('change'))")
             settle()
             check('source off and on reuses completed view',"previewCalls.length===beforeToggle&&viewRelationState.cache_hit")
+            js("window.beforeNewSearch=previewCalls.length;pendingSearchMeta={query:'second search',sources:{}};handleEvent({type:'cache',graph:{source_graphs:{google:{articles:viewRows,relations:[],total_articles:5637}},relations_pending:true,relation_settings:AtlasRelations.unified}})")
+            settle()
+            check('new search after snapshot restarts relation work',"!restoringRelations&&previewCalls.length===beforeNewSearch+2&&currentView.relations.length>0&&viewRelationState.phase==='ready'")
+            js("window.beforePartialRestore=previewCalls.length;savedFixture.view.relations_pending=true;savedFixture.view.relation_cache_version=0;savedFixture.view.relation_views=[];for(const g of Object.values(savedFixture.source_graphs))g.relations=[];savedFixture.cross_relations=[]")
+            js("restoreSnapshot('cache-fixture')")
+            settle()
+            check('unfinished zero-edge snapshot resumes computation',"!restoringRelations&&previewCalls.length===beforePartialRestore+2&&currentView.relations.length>0&&viewRelationState.phase==='ready'")
             for label in ['Nodes','Calculation','Edges','State']:
                 js("document.activeElement?.blur();$('activityCounters').dispatchEvent(new PointerEvent('pointerleave'));$('activity%sLabel').dispatchEvent(new PointerEvent('pointermove',{bubbles:true,clientX:200,clientY:150}))" % label)
                 check(label+' tooltip not immediate',"$('activityHelp').hidden")

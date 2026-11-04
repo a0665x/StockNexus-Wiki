@@ -350,7 +350,6 @@ function acceptSearchGraph(payload,final=false){
   if(pendingSearchMeta){
     if(!count&&!final&&focusView.articles.length)return;
     exportMeta=pendingSearchMeta;pendingSearchMeta=null;articleListPage=0;clearFocus();timelineCutoff=null;
-    restoringRelations=true;viewRelationJob?.cancel();
     networkPositions.clear();internalLengths.clear();selected=null;$('nodeJson').replaceChildren();$('article').replaceChildren();
   }
   if(globalThis.AtlasViewRelations)payload={...payload,relation_scope:'view'};

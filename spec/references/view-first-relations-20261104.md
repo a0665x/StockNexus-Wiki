@@ -57,3 +57,9 @@
 回歸測試涵蓋冷／熱快取、縮小／增量／反向配對、負結果、內容版本失效、自適應與鄰居上限一致性、HTTP跨來源開關、快照DB往返，以及瀏覽器免請求還原與來源切換。
 
 增量版本最終驗證：168項Python測試、全部CJS測試通過；真實Chromium合成資料案例33項通過，包含完成視圖切回、完整快照還原、快照先前組合與相同選取狀態下來源切換的零preview請求驗收。Wiki仍只有15項設計檢查通過，不代表runtime已完成。
+
+## 搜尋停止回歸修正
+
+實際log顯示/search成功且新聞持續到達，但沒有/graph/preview請求。根因是快照修正的批次文字替換同時修改acceptSearchGraph，將restoringRelations設為true後未解除；排程入口因而一直返回。移除搜尋入口的誤設，保留restoreSnapshot的try/finally管理。更新瀏覽器驗收先經acceptSearchGraph，再測handleEvent(cache)啟動另一輪搜尋；不能只直接呼叫rebuild，否則會漏掉搜尋前置狀態。既有0-edge未完成快照仍標示pending，可重新載入後補算。
+
+修正驗證：瀏覽器實際搜尋入口先重現stopped／pairs_checked=0；修正後35項Chromium案例通過，含快照後新搜尋及未完成零edge快照恢復。test_stream.cjs與語法／spec連結檢查通過；本地服務重建健康，HTTPS資產與工作樹一致。
