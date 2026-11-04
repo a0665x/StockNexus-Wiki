@@ -105,3 +105,77 @@ class WikiTests(unittest.TestCase):
         pending=self.plan();self.start()
         with self.assertRaises(ValueError):self.service.start({'plan_id':pending['plan_id']})
         with self.assertRaises(ValueError):self.service.plan({'instrument':'../escape','model':'fixture'})
+
+    def test_switch_model_and_prompt_does_not_reextract(self):
+        self.start()
+        p=self.service.plan({'instrument':'NASDAQ:TSLA','model':'different-model','articles':[row()]})
+        self.assertEqual(p['reused'],1);self.assertEqual(p['next_batch'],0)
+        self.service.start({'plan_id':p['plan_id']});self.service.tick()
+        self.assertEqual(len(self.calls),1)
+
+    def test_global_date_expansion_only_fills_missing_articles(self):
+        old=row(day='2025-12-02',suffix='old');recent=row(day='2026-01-02',suffix='recent')
+        self.news.save('massive',query_key('massive','TSLA'),[old,recent],[])
+        body={'instrument':'NASDAQ:TSLA','model':'fixture','scope':'global','search':{'ticker':'TSLA'},'sources':['massive'],'articles':[], 'date_range':{'start':'2026-01-01','end':'2026-01-31'}}
+        p=self.service.plan(body);self.assertEqual(p['selected'],1)
+        self.service.start({'plan_id':p['plan_id']});self.service.tick();self.assertEqual(len(self.calls),1)
+        body['model']='different-model';body['date_range']['start']='2025-12-01'
+        p=self.service.plan(body);self.assertEqual((p['selected'],p['pending'],p['reused']),(2,1,1))
+        self.service.start({'plan_id':p['plan_id']});self.service.tick();self.assertEqual(len(self.calls),2)
+        self.assertEqual(self.service.plan(body)['next_batch'],0)
+
+    def test_narrow_plan_does_not_spend_on_outside_backlog_or_subscription(self):
+        outside=row(day='2025-12-02',suffix='outside')
+        self.store.ingest([capture(outside)])
+        self.news.save('massive',query_key('massive','TSLA'),[outside],[])
+        p=self.service.plan({'instrument':'NASDAQ:TSLA','model':'fixture','articles':[row()], 'sources':['massive'],'search':{'ticker':'TSLA'},'date_range':{'start':'2026-01-01','end':'2026-01-31'}})
+        self.service.start({'plan_id':p['plan_id'],'continuous':True});self.service.tick();self.service.tick()
+        self.assertEqual(self.calls,[capture(row())['revision_id']])
+        self.assertEqual(len(self.store.pending()),1)
+
+    def test_review_is_explicit_bounded_and_never_continuous(self):
+        first=self.start()
+        p=self.plan(operation='review');self.assertEqual(p['next_batch'],1)
+        with self.assertRaises(ValueError):self.service.start({'plan_id':p['plan_id'],'continuous':True})
+        self.service.start({'plan_id':p['plan_id']});self.service.tick();self.service.tick()
+        self.assertEqual(len(self.calls),2);self.assertEqual(self.store.graph()['version'],2)
+        self.assertEqual(self.store.graph(version=1)['edges'],first['edges'])
+        self.assertEqual(self.plan()['next_batch'],0)
+
+    def test_global_context_can_retrieve_old_knowledge_beyond_latest_500(self):
+        self.start()
+        with self.store.connection() as db:
+            for i in range(510):db.execute('INSERT INTO nodes VALUES (?,?,?,?)',(str(i),'Claim',2,encode({'id':str(i),'kind':'Claim','title':'Unrelated weather','scope':'weather'})))
+        context=self.store.context(capture(row(title='Tesla earnings update',suffix='another')))
+        self.assertTrue(any(n['title']=='Tesla earnings grow' for n in context))
+
+    def test_partial_review_resumes_without_reviewing_same_batch(self):
+        self.start([row(suffix=str(i)) for i in range(3)])
+        body={'instrument':'NASDAQ:TSLA','model':'fixture','articles':[row(suffix=str(i)) for i in range(3)],'batch_size':1,'operation':'review'}
+        for remaining in [3,2,1,0]:
+            p=self.service.plan(body);self.assertEqual(p['pending'],remaining)
+            self.service.start({'plan_id':p['plan_id']});self.service.tick()
+        self.assertEqual(len(self.calls),6)
+
+    def test_old_snapshot_does_not_hide_explicitly_selected_latest_revision(self):
+        latest=capture(row(title='Tesla latest earnings'));old=capture(row(title='Tesla old earnings'))
+        self.store.ingest([latest,old]);self.store.ingest([latest])
+        self.assertEqual(self.store.pending(revision_ids=[latest['revision_id']]),[latest])
+
+    def test_background_enqueue_cannot_override_manual_plan_scope(self):
+        import threading
+        from unittest.mock import patch
+        self.start(continuous=True)
+        new=row(suffix='new');self.news.save('massive',query_key('massive','TSLA'),[new],[])
+        p=self.plan([row(suffix='manual')]);entered=threading.Event();release=threading.Event();finished=threading.Event();errors=[]
+        original=self.service.subscribed
+        def blocked(*args):entered.set();release.wait(3);return original(*args)
+        def manual():
+            try:self.service.start({'plan_id':p['plan_id']})
+            except ValueError as e:errors.append(str(e))
+            finally:finished.set()
+        with patch.object(self.service,'subscribed',side_effect=blocked):
+            bg=threading.Thread(target=self.service.refresh,args=(self.store,));bg.start();self.assertTrue(entered.wait(2))
+            request=threading.Thread(target=manual);request.start()
+            self.assertFalse(finished.wait(.1));release.set();bg.join(3);request.join(3)
+        self.assertTrue(errors);self.assertEqual(self.store.jobs()[0]['payload']['revisions'],[capture(new)['revision_id']])

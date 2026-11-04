@@ -134,3 +134,7 @@ K 線／視窗分割：`node tests/price-chart.test.cjs`、`python3 tests/browse
 ## LLM Wiki
 
 隔離 DB／引用／歷史／成本：`python3 -m unittest discover -s tests -p "test_wiki*.py"`（schema 測試需開發環境 jsonschema）。橋接：`npm run test:chat`。瀏覽器：`/usr/bin/python3 tests/browser_wiki.py`。實作邊界見 [WIKI_RUNTIME](WIKI_RUNTIME.md)。
+
+## Wiki 成本與範圍回歸
+
+`tests/test_wiki.py` 驗證跨模型重用、全局日期擴大補缺、已校正文章去重、舊快照與背景排程競態。`npm run test:chat` 覆蓋分頁模型目錄及讀目錄期間取消不啟動推論；`python3 tests/browser_wiki.py` 驗證動態模型選單、月份／滑桿、全局預覽及手動校正限制，使用合成 API，不消耗模型 token。

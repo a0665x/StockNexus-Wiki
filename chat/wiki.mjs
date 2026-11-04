@@ -15,9 +15,10 @@ const PROMPT=[
  'scope identifies subject, period and proposition. Use identical scope only for identical propositions. Claims remain proposals, not verified facts. Thesis is an interpretation, not an executable recommendation.',
  'For an irrelevant article return empty nodes and relations. A search result does not prove instrument relevance.',
  'Existing pages are context, never new evidence. Link a new key to an existing page id or another new key only when supported by this article. DEPENDS_ON points from Thesis to its dependency; CONTRADICTS requires exactly matching scope and opposing propositions. Prefer no relation to a speculative merge. RELATED_TO is a hypothesis. Never output CAUSES, numeric confidence, forecasts, prices or returns.',
+ 'When operation is review, check this evidence against supplied existing pages and propose only warranted clarifications or corrections. Never rewrite the entire graph.',
  'Preserve old knowledge: propose UPDATES/CONTRADICTS where warranted, never delete or overwrite. The host creates source article citation links. Return only the required JSON.'
 ].join('\n');
-export function createWikiCompiler(makeThread){
+export function createWikiCompiler(makeThread,{validateModel}={}){
  const active=new Map();
  return {
   cancel(id){active.get(id)?.abort();},
@@ -29,7 +30,9 @@ export function createWikiCompiler(makeThread){
    const controller=new AbortController();active.set(b.job_id,controller);
    const timer=setTimeout(()=>controller.abort(),120000);
    try{
-    const result=await makeThread(b.model).run(PROMPT+'\n'+JSON.stringify({instrument:b.instrument,article:b.article,existing_pages:b.context}),{outputSchema,signal:controller.signal});
+    if(validateModel)await validateModel(b.model);
+    if(controller.signal.aborted)throw Error('Wiki compilation cancelled or timed out');
+    const result=await makeThread(b.model).run(PROMPT+'\n'+JSON.stringify({instrument:b.instrument,article:b.article,existing_pages:b.context,operation:b.operation||'update'}),{outputSchema,signal:controller.signal});
     if(controller.signal.aborted)throw Error('Wiki compilation cancelled or timed out');
     if((result.items||[]).some(i=>!['agent_message','reasoning'].includes(i.type)))throw Error('Unexpected tool use; Wiki proposal rejected');
     if(typeof result.finalResponse!=='string'||result.finalResponse.length>65000)throw Error('Wiki response exceeds output limit');

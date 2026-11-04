@@ -23,6 +23,8 @@ def handle(handler):
     params=urllib.parse.parse_qs(url.query)
     try:
         if handler.command=='GET':
+            if path=='models':
+                handler.json_response(200,service.bridge_request('/wiki/models',timeout=20));return
             if path=='status':
                 handler.json_response(200,{**service.info(),'writable':writable(handler)});return
             ident=params.get('instrument',[''])[0]

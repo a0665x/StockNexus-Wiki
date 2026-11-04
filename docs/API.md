@@ -132,4 +132,6 @@ POST 使用 `Content-Type: application/json`。輸入錯誤為 400，未知資�
 
 ## LLM Wiki
 
-頂部 LLM Wiki 開啟獨立股票知識圖。`GET /api/wiki/status|graph|jobs|article|markdown` 讀取狀態、版本圖、工作、凍結引用與匯出；`POST /api/wiki/plan|jobs|configure|cancel` 負責預覽、明確啟動、維護開關與停止。寫入要求同源及允許來源。API 細節、DB 與成本範圍見 [Wiki runtime](../spec/WIKI_RUNTIME.md)，Swagger 已包含這 9 個操作。
+頂部 LLM Wiki 開啟獨立股票知識圖。`GET /api/wiki/status|models|graph|jobs|article|markdown` 讀取狀態、版本圖、工作、凍結引用與匯出；`POST /api/wiki/plan|jobs|configure|cancel` 負責預覽、明確啟動、維護開關與停止。寫入要求同源及允許來源。API 細節、DB 與成本範圍見 [Wiki runtime](../spec/WIKI_RUNTIME.md)，Swagger 已包含這 10 個操作。
+
+Wiki `plan` 支援 `scope: global|loaded|focus`、`date_range: null|{start,end}`（UTC 日期，含起訖日）與 `operation: update|review`。全局限於目前查詢 memberships，增量跨模型重用；review 僅手動且略過沒有新增證據的已校正文章。`models` 讀取 Codex model/list，不啟動推論。

@@ -111,10 +111,10 @@ def specification():
         if name not in ('session','status'):op['security']=[{'ChatSession':[]}]
         if method=='post':op['parameters']=[{'name':'Origin','in':'header','required':True,'schema':{'type':'string','enum':['http://127.0.0.1:8765','http://localhost:8765']}}]
     wiki_description='Separate per-instrument SQLite Wiki. Writes require matching Origin/Host and local peer; remote origin must be explicitly listed in NEWS_ATLAS_WIKI_ORIGINS. Preview is model-free; start consumes a 10-minute plan. Incremental extraction/link proposals only; no dependency reassessment or forecasts.'
-    for name,method in [('status','get'),('graph','get'),('jobs','get'),('article','get'),('markdown','get'),('plan','post'),('jobs','post'),('configure','post'),('cancel','post')]:
+    for name,method in [('status','get'),('models','get'),('graph','get'),('jobs','get'),('article','get'),('markdown','get'),('plan','post'),('jobs','post'),('configure','post'),('cancel','post')]:
         operation('/api/wiki/'+name,method,'wiki_'+method+'_'+name,'Wiki '+name,'Wiki',request={'type':'object'} if method=='post' else None,description=wiki_description,writes=method=='post',network=method=='post' and name=='jobs',code='202' if method=='post' and name=='jobs' else '200')
         op=paths['/api/wiki/'+name][method]
-        if method=='get' and name!='status':
+        if method=='get' and name not in ('status','models'):
             op['parameters']=[{'name':'instrument','in':'query','required':True,'schema':string()}]
             if name in ('graph','markdown'):op['parameters'].append({'name':'version','in':'query','schema':{'type':'integer','minimum':0}})
             if name=='graph':op['parameters'].append({'name':'as_of','in':'query','schema':{'type':'string','format':'date-time'}})

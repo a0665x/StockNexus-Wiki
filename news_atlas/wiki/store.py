@@ -2,6 +2,7 @@
 import contextlib
 import datetime as dt
 import hashlib
+import heapq
 import json
 from pathlib import Path
 import re
@@ -60,6 +61,8 @@ class WikiStore:
             CREATE TABLE IF NOT EXISTS edges (id TEXT PRIMARY KEY,source TEXT NOT NULL,target TEXT NOT NULL,created_version INTEGER NOT NULL,payload TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS extractions (revision TEXT NOT NULL,model TEXT NOT NULL,prompt TEXT NOT NULL,version INTEGER NOT NULL,PRIMARY KEY(revision,model,prompt));
             CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,status TEXT NOT NULL,payload TEXT NOT NULL,done INTEGER NOT NULL DEFAULT 0,error TEXT,usage TEXT NOT NULL DEFAULT '{}');
+            CREATE TABLE IF NOT EXISTS review_coverage (revision TEXT PRIMARY KEY,evidence_epoch INTEGER NOT NULL);
+            CREATE TABLE IF NOT EXISTS reviews (job_id TEXT NOT NULL,revision TEXT NOT NULL,PRIMARY KEY(job_id,revision));
             CREATE TABLE IF NOT EXISTS calls (id TEXT PRIMARY KEY,day TEXT NOT NULL,job_id TEXT NOT NULL,revision TEXT NOT NULL);
             CREATE INDEX IF NOT EXISTS edges_endpoints ON edges(source,target,created_version);
             CREATE INDEX IF NOT EXISTS nodes_version ON nodes(created_version DESC,id);
@@ -90,28 +93,32 @@ class WikiStore:
             for a in rows:
                 db.execute('INSERT OR IGNORE INTO articles VALUES (?,?,?,?)',(a['revision_id'],a['provider']+':'+a['id'],stamp,encode(a)))
 
-    def pending(self,model,limit=20):
+    def pending(self,model=None,limit=20,revision_ids=None,review=False):
+        # Coverage is evidence-based, not tied to model/prompt/UI settings.
         with self.connection() as db:
-            rows=db.execute('''SELECT a.payload FROM articles a WHERE NOT EXISTS
-                (SELECT 1 FROM extractions e WHERE e.revision=a.id AND e.model=? AND e.prompt=?)
-                ORDER BY a.captured_at,a.id LIMIT ?''',(model,PROMPT_VERSION,limit)).fetchall()
+            rows=db.execute("""SELECT a.payload FROM articles a WHERE
+                (? OR NOT EXISTS (SELECT 1 FROM extractions e WHERE e.revision=a.id))
+                AND (? IS NULL OR a.id IN (SELECT value FROM json_each(?)))
+                AND (NOT ? OR (EXISTS (SELECT 1 FROM extractions e WHERE e.revision=a.id)
+                AND NOT EXISTS (SELECT 1 FROM review_coverage r WHERE r.revision=a.id
+                    AND r.evidence_epoch >= (SELECT count(DISTINCT revision) FROM extractions))))
+                ORDER BY json_extract(a.payload,'$.published_at') DESC,a.id LIMIT ?""",
+                (review,None if revision_ids is None else 1,encode(revision_ids or []),review,limit)).fetchall()
         return [json.loads(r[0]) for r in rows]
 
-    def known(self,rows,model):
+    def known(self,rows,model=None):
         with self.connection() as db:
-            known={r[0] for r in db.execute('SELECT revision FROM extractions WHERE model=? AND prompt=?',(model,PROMPT_VERSION))}
+            known={r[0] for r in db.execute('SELECT DISTINCT revision FROM extractions')}
         return [r for r in rows if r['revision_id'] not in known]
 
-    def enqueue(self,model,limit,daily_limit):
+    def enqueue(self,model,limit,daily_limit,revision_ids=None,operation='update'):
         with self.connection() as db:
             db.execute('BEGIN IMMEDIATE')
             active=db.execute("SELECT id FROM jobs WHERE status IN ('queued','running') LIMIT 1").fetchone()
             if active: return active[0]
-            rows=db.execute('''SELECT a.id FROM articles a WHERE NOT EXISTS
-                (SELECT 1 FROM extractions e WHERE e.revision=a.id AND e.model=? AND e.prompt=?)
-                ORDER BY a.captured_at,a.id LIMIT ?''',(model,PROMPT_VERSION,limit)).fetchall()
+            rows=self.pending(model,limit,revision_ids,review=operation=='review')
             ident=uuid.uuid4().hex;stamp=now()
-            payload={'model':model,'daily_limit':daily_limit,'revisions':[r[0] for r in rows],'prompt_version':PROMPT_VERSION}
+            payload={'model':model,'daily_limit':daily_limit,'revisions':[r['revision_id'] for r in rows],'prompt_version':PROMPT_VERSION,'operation':operation}
             db.execute('INSERT INTO jobs(id,created_at,updated_at,status,payload) VALUES (?,?,?,?,?)',(ident,stamp,stamp,'queued' if rows else 'completed',encode(payload)))
         return ident
 
@@ -137,11 +144,16 @@ class WikiStore:
         return True
 
     def context(self,article):
-        words=set(re.findall(r'\w+|[\u4e00-\u9fff]',article['title'].lower()))
+        terms=lambda text:set(re.findall(r'[a-z0-9_]+|[\u4e00-\u9fff]',text.lower()))
+        words=terms(article['title']+' '+article['summary'][:2000])
         with self.connection() as db:
-            nodes=[json.loads(r[0]) for r in db.execute("SELECT payload FROM nodes WHERE kind!='ArticleRevision' ORDER BY created_version DESC LIMIT 500")]
-        nodes.sort(key=lambda n:len(words & set(re.findall(r'\w+|[\u4e00-\u9fff]',(n['title']+' '+n.get('scope','')).lower()))),reverse=True)
-        return [{k:n[k] for k in ('id','kind','title','scope')} for n in nodes[:12]]
+            prior={r[0] for r in db.execute("SELECT e.target FROM edges e JOIN articles a ON a.id=e.source WHERE a.source_id=?",(article['provider']+':'+article['id'],))}
+            def candidates():
+                for row in db.execute("SELECT payload FROM nodes WHERE kind!='ArticleRevision'"):
+                    n=json.loads(row[0]);score=len(words & terms(n['title']+' '+n.get('scope','')))
+                    if score or n['id'] in prior: yield (n['id'] in prior,score,n['id'],n)
+            best=heapq.nlargest(12,candidates(),key=lambda x:x[:3])
+        return [{k:n[k] for k in ('id','kind','title','scope')} for _,_,_,n in best]
 
     def publish(self,job,article,proposal,context,usage):
         nodes,edges=validate_proposal(article,proposal,context)
@@ -149,7 +161,9 @@ class WikiStore:
             db.execute('BEGIN IMMEDIATE')
             state=db.execute('SELECT status FROM jobs WHERE id=?',(job['id'],)).fetchone()
             if not state or state[0]!='running': return False
-            if db.execute('SELECT 1 FROM extractions WHERE revision=? AND model=? AND prompt=?',(article['revision_id'],job['payload']['model'],PROMPT_VERSION)).fetchone(): return True
+            review=job['payload'].get('operation')=='review'
+            if not review and db.execute('SELECT 1 FROM extractions WHERE revision=?',(article['revision_id'],)).fetchone(): return True
+            if review and db.execute('SELECT 1 FROM reviews WHERE job_id=? AND revision=?',(job['id'],article['revision_id'])).fetchone(): return True
             stamp=now();version=db.execute('INSERT INTO versions(created_at,job_id,model) VALUES (?,?,?)',(stamp,job['id'],job['payload']['model'])).lastrowid
             article_node={'id':article['revision_id'],'kind':'ArticleRevision','title':article['title'],'summary':article['summary'],'scope':self.instrument,'url':article['url'],'provider':article['provider'],'published_at':article['published_at'],'content_hash':article['content_hash'],'status':'source','citations':[]}
             all_nodes={n['id']:n for n in [article_node,*nodes]}
@@ -169,7 +183,10 @@ class WikiStore:
                     'scores':{'semantic_similarity':None,'evidence_quality':None,'predictive_association':None},
                     'provenance':{'producer':'llm_proposal','model_revision':job['payload']['model'],'prompt_version':PROMPT_VERSION,'input_hash':article['content_hash'],'patch_id':job['id']+':'+article['revision_id']}}
                 db.execute('INSERT OR IGNORE INTO edges VALUES (?,?,?,?,?)',(ident,edge['source'],edge['target'],version,encode(record)))
-            db.execute('INSERT INTO extractions VALUES (?,?,?,?)',(article['revision_id'],job['payload']['model'],PROMPT_VERSION,version))
+            db.execute('INSERT OR IGNORE INTO extractions VALUES (?,?,?,?)',(article['revision_id'],job['payload']['model'],PROMPT_VERSION,version))
+            if review:
+                db.execute('INSERT OR IGNORE INTO reviews VALUES (?,?)',(job['id'],article['revision_id']))
+                db.execute('INSERT OR REPLACE INTO review_coverage VALUES (?,(SELECT count(DISTINCT revision) FROM extractions))',(article['revision_id'],))
             old=json.loads(db.execute('SELECT usage FROM jobs WHERE id=?',(job['id'],)).fetchone()[0])
             totals=dict(old)
             for k,v in usage.items():

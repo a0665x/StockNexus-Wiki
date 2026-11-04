@@ -18,3 +18,25 @@ test('Wiki single flight cancellation prevents late result',async()=>{
  const pending=compiler.run(input);await assert.rejects(compiler.run({...input,job_id:'b'.repeat(32)}),/busy/);
  compiler.cancel(input.job_id);release({items:[],finalResponse:'{}'});await assert.rejects(pending,/cancelled/);
 });
+
+test('model picker reads paginated Codex model/list without inference',async()=>{
+ const {readModels}=await import('../chat/models.mjs');
+ const {PassThrough}=await import('node:stream');const {EventEmitter}=await import('node:events');
+ const requests=[];
+ const result=await readModels('codex',{}, {spawnProcess:()=>{
+  const child=new EventEmitter();child.stdin=new PassThrough();child.stdout=new PassThrough();child.kill=()=>{};
+  child.stdin.on('data',chunk=>{for(const line of chunk.toString().trim().split('\n')){
+   const m=JSON.parse(line);requests.push(m.method);if(m.method==='initialized')continue;
+   const value=m.method==='initialize'?{}:m.params.cursor?{data:[{model:'gpt-6.1-sol',displayName:'GPT-6.1-Sol',hidden:false}],nextCursor:null}:{data:[{model:'hidden',hidden:true}],nextCursor:'next'};
+   setImmediate(()=>child.stdout.write(JSON.stringify({id:m.id,result:value})+'\n'));
+  }});return child;
+ }});
+ assert.equal(result.default_model,'gpt-6.1-sol');assert.deepEqual(result.models.map(m=>m.id),['gpt-6.1-sol']);
+ assert.deepEqual(requests,['initialize','initialized','model/list','model/list']);
+});
+
+test('cancel during catalog lookup cannot launch a paid model turn',async()=>{
+ let release,turns=0;const compiler=createWikiCompiler(()=>({run:async()=>{turns++;return {items:[],finalResponse:'{}'};}}),{validateModel:()=>new Promise(r=>{release=r;})});
+ const pending=compiler.run(input);compiler.cancel(input.job_id);release();
+ await assert.rejects(pending,/cancelled/);assert.equal(turns,0);
+});

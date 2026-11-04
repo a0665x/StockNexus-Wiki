@@ -65,7 +65,8 @@ def main():
                 if(!url.startsWith('/api/wiki/'))return prior(url,options);
                 wikiCalls.push({url,body:options?.body?JSON.parse(options.body):null});
                 let value;
-                if(url.endsWith('/status'))value={instruments:[{instrument:'NASDAQ:TSLA',version:1}],writable:true,bridge_ready:true,default_model:'fixture'};
+                if(url.endsWith('/models'))value={models:[{id:'gpt-6.1-sol',name:'GPT-6.1-Sol'},{id:'fixture',name:'Fixture model'}],default_model:'gpt-6.1-sol',source:'codex model/list'};
+                else if(url.endsWith('/status'))value={instruments:[{instrument:'NASDAQ:TSLA',version:1}],writable:true,bridge_ready:true,default_model:'fixture'};
                 else if(url.endsWith('/plan')){
                   if(deferPlan)await new Promise(r=>{planRelease=r});
                   const body=JSON.parse(options.body);value={plan_id:'plan',instrument:body.instrument,selected:body.articles.length,pending:1,next_batch:1,reused:0,model:body.model,daily_limit:body.daily_limit,watch_sources:[],note:'Fixture'};
@@ -81,14 +82,19 @@ def main():
             })()""")
             time.sleep(1.7) # Let the initial News Graph fit/first-tick camera settle.
             js("newsBefore.camera=JSON.stringify(graph.cameraPosition());AtlasWiki.show()")
-            check('Wiki opens independently with selected news',"!$('wikiPanel').hidden&&$('wikiSelection').textContent.includes('篇來源新聞')&&$('wikiModel').value==='fixture'")
-            js("$('wikiInstrument').value='NASDAQ:TSLA';$('wikiInstrument').dispatchEvent(new Event('input'));window.deferPlan=true;$('wikiPreview').click()")
+            check('Wiki opens independently with selected news',"!$('wikiPanel').hidden&&$('wikiSelection').textContent.includes('全局模式')&&$('wikiModel').value==='gpt-6.1-sol'&&$('wikiModel').tagName==='SELECT'")
+            check('recent month preset and date slider exist',"$('wikiRange').value==='month'&&$('wikiStartDate').value<$('wikiEndDate').value&&$('wikiRangeStart').type==='range'")
+            js("$('wikiOperation').value='review';$('wikiOperation').dispatchEvent(new Event('input'))")
+            check('review cannot silently enable continuous spending',"$('wikiContinuous').disabled&&!$('wikiContinuous').checked")
+            js("$('wikiOperation').value='update';$('wikiOperation').dispatchEvent(new Event('input'))")
+            js("$('wikiRange').value='all';$('wikiRange').dispatchEvent(new Event('change'));$('wikiInstrument').value='NASDAQ:TSLA';$('wikiInstrument').dispatchEvent(new Event('input'));window.deferPlan=true;$('wikiPreview').click()")
             time.sleep(.15)
             js("$('wikiDaily').value='2';$('wikiDaily').dispatchEvent(new Event('input'));planRelease()")
             time.sleep(.15)
             check('late preview cannot revive stale cost authorization',"$('wikiStart').hidden")
             js("window.deferPlan=false;$('wikiPreview').click()")
             time.sleep(.15)
+            check('global scope and chosen dates submitted',"wikiCalls.filter(c=>c.url.endsWith('/plan')).at(-1).body.scope==='global'&&wikiCalls.filter(c=>c.url.endsWith('/plan')).at(-1).body.date_range===null")
             check('explicit preview before any model job',"!$('wikiStart').hidden&&!wikiCalls.some(c=>c.url==='/api/wiki/jobs')&&$('wikiStatus').textContent.includes('NASDAQ:TSLA')")
             js("$('wikiStart').click()")
             time.sleep(.4)

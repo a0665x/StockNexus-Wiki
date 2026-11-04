@@ -24,7 +24,7 @@ GitHub 儲存庫：[a0665x/StockNexus-Wiki](https://github.com/a0665x/StockNexus
 | Contextual Chat Agent | 已實作；需啟動本機橋接並登入 Codex |
 | Temporal LLM Wiki | 已實作獨立股票 DB、LLM 增量抽取／關聯提案、版本與 Wiki Graph；依賴重評／回測尚未實作 |
 
-從頂部 **LLM Wiki** 切換：選股票與已載入新聞 → 預覽 → 確認整理。可明確開啟持續維護，讓背景檢查指定查詢在新聞 DB 的新內容；不另行抓新聞。每股 Wiki 使用獨立 SQLite 保存節點、連線、引用與版本，重新開頁不用重算。操作、配額與部署見 [Wiki 使用與維護](spec/WIKI_RUNTIME.md)，完整研究範圍見 [設計](spec/TEMPORAL_WIKI.md)。
+從頂部 **LLM Wiki** 切換：選股票與全局查詢／日期範圍 → 預覽 → 確認整理。可明確開啟持續維護，讓背景檢查指定查詢在新聞 DB 的新內容；不另行抓新聞。每股 Wiki 使用獨立 SQLite 保存節點、連線、引用與版本，重新開頁不用重算。模型選單讀取 Codex 實際目錄，預設 `gpt-6.1-sol`。可先處理最近一個月再擴大，跨模型重用已完成文章；主頁節點預算與 edge 設定不觸發 Wiki 重算。局部校正另行手動啟動並受配額限制。操作、配額與部署見 [Wiki 使用與維護](spec/WIKI_RUNTIME.md)，完整研究範圍見 [設計](spec/TEMPORAL_WIKI.md)。
 
 ## 功能
 
