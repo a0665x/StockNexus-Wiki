@@ -1,0 +1,41 @@
+{
+  "is_fixture": true,
+  "schema_version": "0.1",
+  "instrument_id": "SYNTHETIC:TEST",
+  "ticker": "TEST",
+  "snapshot_id": "synthetic_snapshot_001",
+  "decision_as_of": "2026-01-02T22:00:00Z",
+  "produced_at": "2026-11-04T05:01:00Z",
+  "mode": "historical_replay",
+  "run_id": "synthetic_run_001",
+  "horizon_trading_days": 5,
+  "return_unit": "decimal",
+  "label_definition_version": "next_open_to_nth_close_v1",
+  "historical_analogs": {
+    "sample_ids": [],
+    "matured_sample_count": 0,
+    "independent_episode_count": 0,
+    "effective_sample_size": 0,
+    "mean_terminal_return": null,
+    "mean_path_return": null
+  },
+  "forecast": {
+    "expected_terminal_return": null,
+    "return_quantiles": null,
+    "p_up": null,
+    "p_down": null,
+    "p_neutral": null,
+    "calibration_status": "not_available"
+  },
+  "signal": {
+    "action": "INSUFFICIENT_EVIDENCE",
+    "reasons": [
+      "No eligible matured historical analogs"
+    ],
+    "execution_enabled": false
+  },
+  "evidence_refs": [],
+  "limitations": [
+    "Synthetic structure example only; full Forecast schema is phase 3 work."
+  ]
+}

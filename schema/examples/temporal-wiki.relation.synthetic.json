@@ -1,0 +1,51 @@
+{
+  "schema_version": "0.1",
+  "is_fixture": true,
+  "instrument_id": "SYNTHETIC:TEST",
+  "ticker": "TEST",
+  "stable_id": "relation_001",
+  "revision_id": "relation_001_v1",
+  "run_id": "synthetic_run_001",
+  "mode": "historical_replay",
+  "relation_type": "SUPPORTS",
+  "source": {
+    "stable_id": "article_001",
+    "revision_id": "article_001_v1",
+    "kind": "ArticleRevision"
+  },
+  "target": {
+    "stable_id": "claim_001",
+    "revision_id": "claim_001_v1",
+    "kind": "Claim"
+  },
+  "status": "proposed",
+  "scope": "Company-reported revenue for synthetic Q1; not independently audited.",
+  "rationale": "The stored source explicitly reports this number; the claim concerns what was reported.",
+  "event_time": null,
+  "available_at": "2026-11-04T05:00:00Z",
+  "produced_at": "2026-11-04T05:01:00Z",
+  "decision_as_of": "2026-01-02T22:00:00Z",
+  "simulated_effective_at": "2026-01-02T21:59:00Z",
+  "evidence_refs": [
+    {
+      "article_revision_id": "article_001_v1",
+      "content_hash": "5a4d05b40d3822aaaf912845dc43671c4e6ff2e56157c65cbe3b197b42477858",
+      "field": "summary",
+      "start": 0,
+      "end": 35,
+      "quote": "TEST reported revenue of 100 units."
+    }
+  ],
+  "scores": {
+    "semantic_similarity": null,
+    "evidence_quality": null,
+    "predictive_association": null
+  },
+  "provenance": {
+    "producer": "llm_proposal",
+    "model_revision": "synthetic-model-no-call",
+    "prompt_version": "extract_claims_proposal_v0.1",
+    "input_hash": "5a4d05b40d3822aaaf912845dc43671c4e6ff2e56157c65cbe3b197b42477858",
+    "patch_id": "synthetic_patch_001"
+  }
+}

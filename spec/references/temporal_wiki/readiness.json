@@ -1,0 +1,248 @@
+{
+  "audited_at": "2026-11-04T05:03:55.673562+00:00",
+  "read_only": true,
+  "llm_calls": 0,
+  "network_requests": 0,
+  "schema_version": 4,
+  "tables": [
+    "articles",
+    "attempts",
+    "channels",
+    "coverage",
+    "daily_prices",
+    "membership_origins",
+    "memberships",
+    "price_downloads",
+    "snapshot_articles",
+    "snapshot_relations",
+    "snapshots"
+  ],
+  "article_counts": {
+    "google": 7205,
+    "massive": 9325,
+    "yahoo": 16487
+  },
+  "samples": {
+    "google": {
+      "selection": "ORDER BY id; bounded sample, not a population estimate",
+      "sample_size": 30,
+      "nonempty_fields": {
+        "published_at": 30,
+        "fetched_at": 30,
+        "first_seen_at": 0,
+        "ingested_at": 0,
+        "available_at": 0,
+        "revision_id": 0,
+        "content_hash": 0,
+        "full_text": 0
+      },
+      "with_summary": 30,
+      "max_summary_chars": 112,
+      "payload_fields": [
+        "fetched_at",
+        "id",
+        "language",
+        "origins",
+        "published_at",
+        "source",
+        "summary",
+        "symbols",
+        "title",
+        "url"
+      ]
+    },
+    "massive": {
+      "selection": "ORDER BY id; bounded sample, not a population estimate",
+      "sample_size": 30,
+      "nonempty_fields": {
+        "published_at": 30,
+        "fetched_at": 30,
+        "first_seen_at": 0,
+        "ingested_at": 0,
+        "available_at": 0,
+        "revision_id": 0,
+        "content_hash": 0,
+        "full_text": 0
+      },
+      "with_summary": 30,
+      "max_summary_chars": 684,
+      "payload_fields": [
+        "fetched_at",
+        "id",
+        "language",
+        "origins",
+        "published_at",
+        "source",
+        "summary",
+        "symbols",
+        "title",
+        "url"
+      ]
+    },
+    "yahoo": {
+      "selection": "ORDER BY id; bounded sample, not a population estimate",
+      "sample_size": 30,
+      "nonempty_fields": {
+        "published_at": 30,
+        "fetched_at": 30,
+        "first_seen_at": 0,
+        "ingested_at": 0,
+        "available_at": 0,
+        "revision_id": 0,
+        "content_hash": 0,
+        "full_text": 0
+      },
+      "with_summary": 30,
+      "max_summary_chars": 129,
+      "payload_fields": [
+        "fetched_at",
+        "id",
+        "language",
+        "origins",
+        "published_at",
+        "source",
+        "summary",
+        "symbols",
+        "title",
+        "url"
+      ]
+    }
+  },
+  "coverage": [
+    [
+      "google",
+      "snapshot",
+      5732
+    ],
+    [
+      "massive",
+      "complete",
+      2140
+    ],
+    [
+      "yahoo",
+      "snapshot",
+      5315
+    ]
+  ],
+  "attempt_errors": [
+    [
+      null,
+      417
+    ],
+    [
+      "limit",
+      41
+    ],
+    [
+      "rate_limit",
+      1
+    ]
+  ],
+  "source_query_count": 35,
+  "daily_prices": {
+    "columns": [
+      "provider",
+      "ticker",
+      "day",
+      "open",
+      "high",
+      "low",
+      "close",
+      "adjusted_close",
+      "volume",
+      "currency",
+      "exchange",
+      "fetched_at"
+    ],
+    "by_ticker": [
+      [
+        "AAPL",
+        251,
+        "2025-10-29",
+        "2026-10-28"
+      ],
+      [
+        "AMD",
+        251,
+        "2025-10-29",
+        "2026-10-28"
+      ],
+      [
+        "AMZN",
+        251,
+        "2025-10-29",
+        "2026-10-28"
+      ],
+      [
+        "ASML",
+        251,
+        "2025-10-29",
+        "2026-10-28"
+      ],
+      [
+        "GOOGL",
+        251,
+        "2025-10-29",
+        "2026-10-28"
+      ],
+      [
+        "NVDA",
+        251,
+        "2025-10-29",
+        "2026-10-28"
+      ],
+      [
+        "QCOM",
+        251,
+        "2025-10-29",
+        "2026-10-28"
+      ],
+      [
+        "RDW",
+        251,
+        "2025-10-29",
+        "2026-10-28"
+      ],
+      [
+        "SNXX",
+        191,
+        "2026-01-27",
+        "2026-10-28"
+      ],
+      [
+        "SPCX",
+        96,
+        "2026-06-12",
+        "2026-10-28"
+      ],
+      [
+        "TSLA",
+        251,
+        "2025-10-29",
+        "2026-10-28"
+      ],
+      [
+        "TSLR",
+        251,
+        "2025-10-29",
+        "2026-10-28"
+      ],
+      [
+        "TSM",
+        251,
+        "2025-10-29",
+        "2026-10-28"
+      ]
+    ]
+  },
+  "sidecars_present": {
+    ".prices.sqlite3": true,
+    ".graphs.sqlite3": true
+  },
+  "optional_installed_versions": {
+    "jsonschema": "4.26.0",
+    "scikit-learn": "1.9.0",
+    "exchange-calendars": null
+  }
+}
