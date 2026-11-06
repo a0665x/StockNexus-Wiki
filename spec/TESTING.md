@@ -210,3 +210,11 @@ PYTHONPATH=.:tests python tests/browser_chat_language.py
 ## 多股票 Wiki 輪替
 
 `python3 -m unittest discover -s tests -p test_wiki_fairness.py -v`：兩支股票都有三批待辦時，每輪各處理一批，再輪替；所有文章最終各呼叫一次。重審同工作已完成文章也不重送。`test_wiki_forest.py` 驗證大樹全部分段發布後才讓出，完成覆蓋與去重維持一致。測試使用隔離 DB／模型回覆，不代表正式模型品質或所有來源歷史完整。
+
+## 2026-11-07 缺失 Wiki 端點回饋回歸
+
+`python3 -m unittest discover -s tests -p 'test_wiki*.py' -q`：53 項通過。`test_missing_relation_target_feedback_repairs_only_the_bad_edge` 在舊訊息先失敗，修正後保留有效關聯、只記一次 coverage、兩次 usage 均計入；`test_unrepaired_missing_target_never_publishes_or_credits_coverage` 確認未修正仍有界失敗。真實拒絕提案僅離線重播，沒有為測試呼叫模型或寫正式圖；正式續跑是另行授權的批次操作。
+
+同輪完整 Python 回歸：`python3 -m unittest discover -s tests -q`，254 項通過；文件連結檢查 36 份通過。
+
+部署：在所有 Wiki 工作均無 running 的發布邊界停止舊容器，六股 queued／done 原值保留，無需重送活動推論；重建後 8765 healthy。容器與主機 `news_atlas/wiki/store.py` SHA-256 同為 `17eebe73754948a0a92eb108f829776054ff631304963753486878b8af931390`。TSM 續跑依私有批次紀錄的一次額度進行；此部署驗證不等於後續全部推論已通過。

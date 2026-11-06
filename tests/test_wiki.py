@@ -43,6 +43,44 @@ class WikiTests(unittest.TestCase):
         self.assertEqual(g['version'],1)
         self.assertFalse(any(e['relation_type']=='TEMPORALLY_PRECEDES' for e in g['edges']))
 
+    def test_missing_relation_target_feedback_repairs_only_the_bad_edge(self):
+        # Given valid new knowledge and one hallucinated existing endpoint, the
+        # repair must identify that target instead of blaming every source.
+        attempts=[]
+        missing='node-'+'f'*64
+        def run(store,job,a,context):
+            feedback=(job.get('repair') or {}).get('error','');attempts.append(feedback)
+            p=proposal(a);base=p['nodes'][0]
+            p['nodes'].append(dict(base,key='n2',title='another supported claim'))
+            valid=dict(source='n1',target='n2',type='RELATED_TO',rationale='shared evidence',citations=base['citations'])
+            p['relations']=[valid,dict(valid,target=missing)]
+            if 'target' in feedback and missing in feedback:p['relations'].pop()
+            return {'proposal':p,'usage':{'input_tokens':10}}
+        self.service.runner=run;g=self.start()
+        self.assertEqual(g['jobs'][0]['status'],'completed')
+        self.assertEqual(len(attempts),2)
+        self.assertEqual(g['jobs'][0]['usage']['input_tokens'],20)
+        self.assertEqual(g['version'],1)
+        self.assertEqual(sum(e['relation_type']=='RELATED_TO' for e in g['edges']),1)
+        self.assertFalse(any(missing in (e['source'],e['target']) for e in g['edges']))
+        with self.store.connection() as db:
+            self.assertEqual(db.execute('select count(*) from extractions').fetchone()[0],1)
+            self.assertEqual(db.execute('select count(*) from rejected_proposals').fetchone()[0],1)
+
+    def test_unrepaired_missing_target_never_publishes_or_credits_coverage(self):
+        attempts=[]
+        def run(store,job,a,context):
+            attempts.append(1);p=proposal(a)
+            p['relations']=[dict(source='n1',target='node-missing',type='RELATED_TO',rationale='unsupported endpoint',citations=p['nodes'][0]['citations'])]
+            return {'proposal':p}
+        self.service.runner=run;g=self.start()
+        self.assertEqual(g['jobs'][0]['status'],'failed')
+        self.assertEqual(len(attempts),2)
+        self.assertEqual(g['version'],0)
+        with self.store.connection() as db:
+            self.assertEqual(db.execute('select count(*) from extractions').fetchone()[0],0)
+            self.assertEqual(db.execute('select count(*) from rejected_proposals').fetchone()[0],2)
+
     def test_repair_stays_bounded_without_daily_quota(self):
         attempts=[]
         def bad(store,job,a,context):

@@ -2,12 +2,12 @@
 
 查核日期：2026-11-07；以目前本地工作區原始碼為準。部署驗收記在 [TESTING](TESTING.md)，不以本頁推斷遠端分支或任意正在執行的服務已同步。
 
-## 當前交接：多股票 Wiki
+## 當前交接：Wiki 關聯端點驗證
 
-- 變更位置：`news_atlas/wiki/compiler.py`，背景每股每輪完成一棵 root 樹或一組證據後讓出；分段完整性及已完成內容重用不變。
-- 驗證：`python3 -m unittest discover -s tests -q`，252 項通過；`tests/test_wiki_fairness.py`／`test_wiki_forest.py` 鎖住公平輪替、review 去重及大樹分段。文件連結檢查通過。
-- Runtime：本次已重建容器並核對 compiler SHA-256 與原始碼相同。七股年度整理的活動狀態應查 jobs/coverage；動畫、排隊與完整發布不同。來源 RSS 缺口不等於 Wiki 已取得內容尚未處理。
-- 後續：沿用已確認範圍觀察發布版本與待辦；失敗先查 job.error／拒絕紀錄，不能無限付費重試。Git 同步狀態仍以當下 Git 為準。
+- 變更位置：`news_atlas/wiki/store.py`。模型引用不存在的 target 時，回饋明確標示關聯序號、端點角色與 ID，避免錯誤引導其修改合法 source。未放寬引用、端點或方向規則；驗證修正仍最多一次。
+- 驗證：`python3 -m unittest discover -s tests -q`，254 項通過（含 53 項 Wiki）；`tests/test_wiki.py` 新增缺失端點的修正成功／有界失敗 BDD。原始拒絕提案離線重播，文件連結檢查通過。
+- 多股公平輪替繼續有效；完成 root 整樹才讓出，既有 revision 重用。TSM 失敗前已完成的成果保留，依授權在固定年度範圍續跑一次；部署與正式恢復證據見 [TESTING](TESTING.md)。
+- 後續：觀察實際 jobs/coverage 與 receipts。同原因若續跑再失敗，保留成果並通知，不無限付費重試。來源 RSS 缺口不等於 Wiki 整理待辦。
 
 ## 已完成
 

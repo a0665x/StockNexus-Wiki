@@ -359,9 +359,12 @@ def validate_proposal(article,proposal,context):
         mapped[n['key']]=node;nodes.append(node)
         for source_id in dict.fromkeys(c['article_revision_id'] for c in refs):
             edges.append({'source':source_id,'target':ident,'type':'SUPPORTS','rationale':'原文支持此LLM提案；只核對引用，不代表陳述已證實。','citations':[c for c in refs if c['article_revision_id']==source_id]})
-    for r in rs:
+    for index,r in enumerate(rs,1):
         if not isinstance(r,dict) or not isinstance(r.get('source'),str) or not isinstance(r.get('target'),str): raise ValueError('無效Wiki關聯')
         a=mapped.get(r['source']);b=mapped.get(r['target']);kind=r.get('type')
+        missing=[f"{end}={r[end][:160]!r}" for end in ('source','target') if r[end] not in mapped]
+        if missing:
+            raise ValueError(f"關聯[{index}] {'; '.join(missing)} 不在本次可用端點內。僅使用本提案的新節點 key、提供的 existing_pages.id 或本批新聞 revision_id；不可猜測 ID。請刪除此無依據關聯，或依原始證據改用確實提供的端點；保留其他有效節點與關聯。")
         article_link=bool(a and b and a['kind']==b['kind']=='ArticleRevision' and kind=='RELATED_TO' and r['source'] in batch)
         if not a or not b or a['id']==b['id'] or kind not in RELATIONS or (r['source'] not in {n['key'] for n in ns} and not article_link):raise ValueError('關聯需由新節點發出；新聞之間僅允許本批新聞發出的 RELATED_TO')
         if ('ArticleRevision' in (a['kind'],b['kind'])) and not article_link:raise ValueError('新聞端點只允許兩篇新聞之間的 RELATED_TO')
