@@ -56,3 +56,7 @@ query/ticker/source/date 的 input/change 即時存草稿；不等待 submit。�
 ## 現行快取與設定合約
 
 見 [標準流程](../WORKFLOWS.md) 與 [2026-11-02 紀錄](lesson-20261102-rendering-cache-settings.md)：快取鍵包含內容／規則，首事件優先完整快取；暫存線只能沿用未變動端點並明示 pending；已套用偏好不可在刷新時自動改為預設；GPU 預算預設 800、上限 2400。
+
+## 2026-11-06 新的相依狀態契約
+
+Wiki 工作輸入取完整 News universe 的 root 覆蓋，顯示聚焦只改明暗；兩者不可共用 GPU 節點集合。執行中 Apply 先驗證再取消／接續，閒置不啟動模型。外部目錄刷新只更新選項、不改模型／日期／新股票選取。浮動尺寸不改圖譜資料或焦點；拖曳不能被當成空白點擊，取消／失焦須收尾。詳見 [互動教訓](lesson-20261106-interaction-and-delivery.md) 與 [通用偏好](../ai-dev-experience-preferences.md)。

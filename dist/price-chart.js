@@ -36,7 +36,10 @@
    const visible=bars.filter(b=>b.date>=bounds.startDate&&b.date<=bounds.endDate&&(!m.end||b.date<=m.end));
    const values=visible.flatMap(b=>[b.low??b.close,b.high??b.close]);
    const min=values.length?Math.min(...values):0,max=values.length?Math.max(...values):1,pad=Math.max((max-min)*.08,max*.002,.01);
-   const y=v=>145-120*(v-min+pad)/(max-min+2*pad),width=clamp(650/Math.max(1,bounds.days),1000/Math.max(1,svg.clientWidth)*1.2,18);
+   const y=v=>145-120*(v-min+pad)/(max-min+2*pad);
+   // Hidden SVGs report zero width. Keep candle geometry bounded until measured.
+   const pixels=svg.getBoundingClientRect().width||1000;
+   const width=clamp(Math.max(650/Math.max(1,bounds.days),1200/pixels),.5,18);
    for(const v of [min,max])add('line',{x1:12,x2:988,y1:y(v),y2:y(v),stroke:'#375061','stroke-width':1});
    if(m.base){
     add('rect',{x:x(m.base.date),y:8,width:Math.max(2,x(m.end)-x(m.base.date)),height:140,fill:'#77e8c3',opacity:.08});
@@ -69,7 +72,7 @@
   svg.addEventListener('pointermove',e=>{if(drag===e.pointerId)seek(e);});
   for(const kind of ['pointerup','pointercancel','lostpointercapture'])svg.addEventListener(kind,e=>{if(drag!==e.pointerId)return;drag=null;if(svg.hasPointerCapture(e.pointerId))svg.releasePointerCapture(e.pointerId);});
   svg.addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();const {bounds,date}=getState();const value=e.key==='Home'?bounds.start:e.key==='End'?bounds.end:clamp(stamp(date)+(e.key==='ArrowLeft'?-DAY:DAY),bounds.start,bounds.end);onDate(new Date(value).toISOString().slice(0,10));});
-  if(typeof ResizeObserver!=='undefined'){let queued=false;const observer=new ResizeObserver(()=>{if(queued)return;queued=true;requestAnimationFrame(()=>{queued=false;align();});});observer.observe(stack);observer.observe(svg);}
+  if(typeof ResizeObserver!=='undefined'){let queued=false;const observer=new ResizeObserver(()=>{if(queued)return;queued=true;requestAnimationFrame(()=>{queued=false;paint();});});observer.observe(stack);observer.observe(svg);}
   $('timeBellEditor').addEventListener('toggle',align);root.addEventListener('atlas-language',paint);
   return {paint,align};
  }

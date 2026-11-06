@@ -1,6 +1,6 @@
 /* Additive screen-space light, projected from the existing 3D camera. No physics changes. */
 (function(root){
-  const defaults={enabled:true,brightness:1,radius:38,decay:.64,background:.18};
+  const defaults={enabled:true,brightness:1.55,radius:25,decay:.9,background:.18};
   function settings(value={}){const out={enabled:value.enabled!==false};for(const [key,min,max]of [['brightness',0,2],['radius',12,90],['decay',.2,.9],['background',.03,.6]]){const n=Number(value[key]);out[key]=value[key]!==undefined&&Number.isFinite(n)?Math.max(min,Math.min(max,n)):defaults[key];}return out;}
   function level(depth,options={}){const cfg=settings(options);return cfg.enabled?cfg.brightness*Math.pow(cfg.decay,Math.max(0,depth)):0;}
   function tint(hex,amount){const rgb=(hex.match(/[a-f\d]{2}/gi)||['b9','d8','df']).map(v=>parseInt(v,16));return `rgb(${rgb.map(v=>Math.round(v*Math.max(0,Math.min(1,amount)))).join(',')})`;}
@@ -58,6 +58,8 @@
         ctx.strokeStyle=gradient;ctx.lineWidth=2+edge.light*2;ctx.shadowBlur=10;ctx.shadowColor=node.color;ctx.beginPath();ctx.moveTo(parent.x,parent.y);ctx.lineTo(node.x,node.y);ctx.stroke();
       }
       ctx.shadowBlur=0;
+      // Keep dense category halos colored; additive blending clips hundreds of overlaps to white.
+      ctx.globalCompositeOperation='source-over';
       for(const node of [...projected.values()].sort((a,b)=>a.light-b.light)){
         const {radius}=node,alpha=1-Math.exp(-node.light*1.6),rgb=node.color.match(/[a-f\d]{2}/gi).map(v=>parseInt(v,16)).join(',');
         const gradient=ctx.createRadialGradient(node.x,node.y,0,node.x,node.y,radius);

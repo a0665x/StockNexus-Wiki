@@ -3,6 +3,7 @@ set -euo pipefail
 export LANG=C.UTF-8
 export LC_ALL=C.UTF-8
 atlas_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+cd -- "$atlas_root"
 if (($#==0)); then set -- up; fi
 usage() {
   cat <<'HELP'
@@ -24,7 +25,7 @@ Docker: fixed project news-atlas, fixed host/container port 8765.
 Settings: .env / ATLAS_BIND, ATLAS_DATA_DIR, ATLAS_UID, ATLAS_GID.
 
 Chat first-time setup (run from the repository folder):
-  cd /home/nvidia/Desktop/AI_WS/stocknexus-wiki
+  cd /path/to/StockNexus-Wiki
   ./run.sh chat setup                 Install pinned npm dependencies (npm ci)
   npx --no-install codex login        Only if not already signed in
   ./run.sh up                        Start web UI and integrated chat bridge

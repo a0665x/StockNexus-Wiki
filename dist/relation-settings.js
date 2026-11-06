@@ -92,6 +92,10 @@
     }
     async function apply(cfg=read()){
       if(externalBusy)return;
+      if(hooks.applyView){
+        clearTimeout(timer);ticket++;abort?.abort();error='';desired={...cfg};
+        root.AtlasUI.write('relationSettings',desired);hooks.applyView(cfg);busy(false);paint();return;
+      }
       clearTimeout(timer);abort?.abort();const mine=++ticket,base=hooks.get();
       const groups=root.AtlasView.groups(base),source_graphs=Object.fromEntries(Object.entries(groups).map(([p,g])=>[p,{articles:g.articles}]));
       error='';paint();busy(true);
@@ -100,7 +104,7 @@
       }
       const request=new AbortController();abort=request;const timeout=setTimeout(()=>request.abort(),300000);let complete=false;
       try{
-        const response=await fetch('/api/graph/build',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({source_graphs,relation_settings:cfg}),signal:request.signal});
+        const response=await fetch('/api/graph/build',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ticker:hooks.ticker?.()||'',source_graphs,relation_settings:cfg}),signal:request.signal});
         const result=await response.json();if(!response.ok)throw Error(result.error||`HTTP ${response.status}`);
         if(mine!==ticket||hooks.get()!==base)return;
         if(!result.relation_settings||!same(result.relation_settings,cfg))throw Error(say('請重啟服務後重試。','Restart the server and retry.'));
@@ -120,6 +124,7 @@
     return {
       applied:()=>({...applied}),
       preferred:()=>({...desired}),
+      onViewResult(cfg){applied=normalize(cfg);busy(false,true);paint();},
       cancel,
       setSearchBusy(value){externalBusy=value;ticket++;abort?.abort();clearTimeout(timer);error='';busy(false);paint();},
       restore(cfg){desired=normalize(cfg);fields(desired);},

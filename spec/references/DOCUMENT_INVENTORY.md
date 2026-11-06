@@ -1,11 +1,16 @@
 # 文件盤點與維護分工
 
-上層：[PROJECT_MAP.md](../PROJECT_MAP.md)。更新：2026-11-02。
+上層：[PROJECT_MAP.md](../PROJECT_MAP.md)。更新：2026-11-06。
 
 | 文件 | 職責 |
 | --- | --- |
 | [README](../../README.md) | StockNexus-Wiki 簡介、啟動、簡短操作及文件連結 |
 | [PROJECT_MAP](../PROJECT_MAP.md) | Level 1 索引；不堆放逐次操作日誌 |
+| [CURRENT_STATE](../CURRENT_STATE.md) | 已實作功能／邊界與現況路由 |
+| [CALCULATION_METHODS](../CALCULATION_METHODS.md) | 公式、目的、輸入集合、缺值及完成定義 |
+| [協作偏好](../ai-dev-experience-preferences.md) | 可跨專案的開發思考與驗證偏好 |
+| [WIKI_RUNTIME](../WIKI_RUNTIME.md)／[CHAT_AGENT](../CHAT_AGENT.md) | 模型工作、引用、版本與對話狀態 |
+| [GRAPH_STORAGE](../GRAPH_STORAGE.md)／[DATA_MERGE](../DATA_MERGE.md) | 股票分庫與在線匯入 |
 | [WORKFLOWS](../WORKFLOWS.md) | 命名邊界、使用／開發／部署標準流程 |
 | [ARCHITECTURE](../ARCHITECTURE.md) | 資料流、模組與狀態邊界 |
 | [SOURCES_AND_CACHE](../SOURCES_AND_CACHE.md) | 來源覆蓋、文章／圖譜快取、失效與性能 |
@@ -22,7 +27,7 @@ references 保存可追溯的事故與設計取捨；目前行為寫在 Level 2�
 ## 尚未實作
 
 新聞全文抓取／全文索引、向量語意推論、全 DB 圖內搜尋、一般新聞 API 的 MCP 包裝、多使用者授權、
-跨 origin 偏好同步、持久 pair evidence、閒置背景補算與跨程序計算合併。
+跨程序計算合併。News/Wiki 主機 workspace、持久 pair evidence 與閒置背景補線已實作；不代表所有瀏覽器偏好都跨裝置同步。
 Yahoo 已支援含台灣的地區選擇；不要沿用早期僅 US Finance 的描述。
 
 本次文件命名不修改遠端 repo、UI 品牌、Compose project、DB 路徑或 localStorage keys。

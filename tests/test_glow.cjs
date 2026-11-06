@@ -5,7 +5,7 @@ for(let depth=0;depth<=6;depth++){const light=glow.level(depth,settings);assert(
 assert.equal(glow.level(3,{brightness:1,decay:.5}),.125);
 assert.equal(glow.level(0,{enabled:false}),0);
 assert.equal(glow.level(0,{brightness:0}),0);
-assert.equal(glow.settings({brightness:Infinity}).brightness,1);
+assert.equal(glow.settings({brightness:Infinity}).brightness,1.55);
 assert.equal(glow.settings({radius:500}).radius,90);
 assert.equal(glow.settings({decay:0}).decay,.2);
 assert.equal(glow.tint('#80e6cc',.5),'rgb(64,115,102)');

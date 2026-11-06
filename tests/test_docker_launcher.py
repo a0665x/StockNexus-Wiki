@@ -24,9 +24,35 @@ class DockerLaunchTests(unittest.TestCase):
                     with d.startup_lock():pass
             with d.startup_lock():pass
 
+    def test_merge_examples_quote_the_actual_storage_path(self):
+        import shlex
+        data=Path('/media/drive with spaces/news data')
+        help_text=d.merge_help(data)
+        commands=[line.split(': ',1)[1].strip() for line in help_text.splitlines() if line.startswith(('  Preview:','  Merge:'))]
+        self.assertEqual(len(commands),2)
+        preview,merge=map(shlex.split,commands)
+        self.assertEqual(preview,[*merge,'--dry-run'])
+        self.assertEqual(merge,[str(d.ROOT/'merge_data.sh'),'--from','/media/usb/data','--to',str(data)])
+
     def test_fixed_project_ignores_environment_project_names(self):
         self.assertEqual(d.COMPOSE[-2:],['-p','news-atlas'])
         self.assertEqual(d.PORT,8765)
+
+    def test_preflight_probes_configured_address_not_all_interfaces(self):
+        with tempfile.TemporaryDirectory() as folder:
+            for bind in ('127.0.0.1', '0.0.0.0'):
+                config={'services':{'atlas':{'ports':[{'published':'8765','target':8765,'host_ip':bind}],
+                    'volumes':[{'target':'/app/data','source':folder}]}}}
+                # Tailscale owns another interface; only the loopback bind is free.
+                with self.subTest(bind=bind), patch.object(d,'json_run',return_value=config), \
+                     patch.object(d,'containers',return_value=[]), patch.object(d,'run',return_value=''), \
+                     patch.object(d.launch,'available',side_effect=lambda port,host: host=='127.0.0.1') as probe, \
+                     contextlib.redirect_stdout(io.StringIO()):
+                    if bind=='127.0.0.1':
+                        self.assertEqual(d.preflight()[2],bind)
+                    else:
+                        with self.assertRaisesRegex(RuntimeError,'occupied'):d.preflight()
+                    probe.assert_called_once_with(8765,bind)
 
     def test_repeated_healthy_up_does_not_down_or_create_replica(self):
         healthy={'id':'one','labels':{'com.docker.compose.service':'atlas'},'state':{'Running':True,'Health':{'Status':'healthy'}}}
@@ -40,6 +66,7 @@ class DockerLaunchTests(unittest.TestCase):
             self.assertEqual(len(ups),2)
             self.assertTrue(all(c[-2:]==['--scale','atlas=1'] for c in ups))
             self.assertIn('URL: http://127.0.0.1:8765',output.getvalue())
+            self.assertIn(d.merge_help(Path('/tmp/data')),output.getvalue())
 
     def test_dirty_state_cleanup_before_start_and_failure_cleanup(self):
         with patch.object(d,'startup_lock',return_value=contextlib.nullcontext()),patch.object(d,'preflight',return_value=([{'state':{},'labels':{}}],Path('/tmp/data'),'127.0.0.1')),patch.object(d,'configure_tailscale',return_value=None),patch.object(d.launch,'available',return_value=True),patch.object(d,'run') as run,patch.object(d,'containers',return_value=[]),contextlib.redirect_stdout(io.StringIO()):

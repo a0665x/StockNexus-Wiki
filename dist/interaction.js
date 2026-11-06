@@ -18,9 +18,10 @@
     if(!element?.setPointerCapture)return {supported:false,hasPointer:()=>false,isDragging:()=>false,refresh(){},guide(){return null;},clear(){},dispose(){}};
     let pointer=null,gesture=null,background=null,suppressClick=false;
     const focus=stableFocus(id=>{const node=getGraph()?.graphData().nodes.find(n=>n.id===id);onHover(node||null);},{retainOnLeave:false});
-    function project(){const graph=getGraph();if(!graph||!enabled())return [];const camera=graph.camera(),rect=element.getBoundingClientRect();
+    function project(onlyId=null){const graph=getGraph();if(!graph||!enabled())return [];const camera=graph.camera(),rect=element.getBoundingClientRect();
       const matrix=camera.matrixWorld?.elements,right=matrix?{x:matrix[0],y:matrix[1],z:matrix[2]}:{x:1,y:0,z:0};const size=Number(graph.nodeRelSize?.())||4,value=graph.nodeVal?.();
-      return graph.graphData().nodes.flatMap(node=>{if(!['x','y','z'].every(k=>Number.isFinite(node[k])))return [];const v=camera.position.clone().set(node.x,node.y,node.z).project(camera);if(v.z< -1||v.z>1)return [];
+      const nodes=graph.graphData().nodes,selected=onlyId===null?null:nodes.find(n=>n.id===onlyId);
+      return (onlyId===null?nodes:selected?[selected]:[]).flatMap(node=>{if(!['x','y','z'].every(k=>Number.isFinite(node[k])))return [];const v=camera.position.clone().set(node.x,node.y,node.z).project(camera);if(v.z< -1||v.z>1)return [];
         const amount=typeof value==='function'?value(node):typeof value==='string'?node[value]:value;
         const worldRadius=(Number(node.__threeObj?.scale?.x)||1)*size*Math.cbrt(Number.isFinite(Number(amount))?Math.max(0,Number(amount)):3);
         const edge=camera.position.clone().set(node.x+right.x*worldRadius,node.y+right.y*worldRadius,node.z+right.z*worldRadius).project(camera);
@@ -54,11 +55,16 @@
       if(event.pointerType==='touch'||cancelled){pointer=null;focus.offer(null);}else focus.offer(pick(event)?.id||null);
     }
     const refresh=()=>{if(pointer&&!gesture&&enabled())focus.offer(pick(pointer)?.id||null);};
-    const controls=getGraph()?.controls?.();controls?.addEventListener?.('change',refresh);
+    const controls=getGraph()?.controls?.();
+    // Trackball's global A/S/D shortcuts also observe typing and can outlive focus.
+    if(Array.isArray(controls?.keys)){controls.keys=[];controls.keyState=-1;}
+    const resetCamera=()=>{if(gesture)end({pointerId:gesture.pointerId,preventDefault(){},stopImmediatePropagation(){}},true);background=null;pointer=null;focus.clear();if(controls&&'keyState' in controls){controls.keyState=-1;controls.state=-1;}};
+    root.addEventListener?.('blur',resetCamera);
+    controls?.addEventListener?.('change',refresh);
     const up=e=>end(e),cancel=e=>end(e,true),leave=()=>{if(gesture)return;pointer=null;focus.offer(null);},click=e=>{if(suppressClick){suppressClick=false;e.preventDefault();e.stopImmediatePropagation();}};
     const listeners=[['wheel',onActivity],['pointermove',move],['pointerdown',down],['pointerup',up],['pointercancel',cancel],['lostpointercapture',cancel],['pointerleave',leave],['click',click]];
     for(const [name,fn]of listeners)element.addEventListener(name,fn,true);
-    return {supported:true,hasPointer:()=>pointer!==null||focus.get()!==null,isDragging:()=>gesture!==null,refresh,guide(id=focus.get()){const point=project().find(p=>p.id===id);return point?{id:point.id,radius:point.radius}:null;},clear(){background=null;if(gesture){const g=gesture;gesture=null;g.controls.enabled=g.controlsEnabled;if(g.node)Object.assign(g.node,g.fixed);if(element.hasPointerCapture?.(g.pointerId))element.releasePointerCapture(g.pointerId);}pointer=null;focus.clear();},dispose(){this.clear();focus.dispose();controls?.removeEventListener?.('change',refresh);for(const [name,fn]of listeners)element.removeEventListener(name,fn,true);}};
+    return {supported:true,hasPointer:()=>pointer!==null||focus.get()!==null,isDragging:()=>gesture!==null,refresh,guide(id=focus.get()){if(id==null)return null;const point=project(id)[0];return point?{id:point.id,radius:point.radius}:null;},clear(){background=null;if(gesture){const g=gesture;gesture=null;g.controls.enabled=g.controlsEnabled;if(g.node)Object.assign(g.node,g.fixed);if(element.hasPointerCapture?.(g.pointerId))element.releasePointerCapture(g.pointerId);}pointer=null;focus.clear();},dispose(){this.clear();root.removeEventListener?.('blur',resetCamera);focus.dispose();controls?.removeEventListener?.('change',refresh);for(const [name,fn]of listeners)element.removeEventListener(name,fn,true);}};
   }
   const api={nearest,stableFocus,attach,adaptiveRadius,idleFocus};root.AtlasInteraction=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);

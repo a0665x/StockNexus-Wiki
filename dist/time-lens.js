@@ -67,7 +67,7 @@
       }
       $('timeBellLine').setAttribute('d',path);$('timeBellHit').setAttribute('d',path);$('timeBellFill').setAttribute('d',path+' L'+x(1)+' 88 L'+x(0)+' 88 Z');
       $('timeBellCenter').setAttribute('x1',x(model.center));$('timeBellCenter').setAttribute('x2',x(model.center));
-      const rect=svg.getBoundingClientRect();handle.setAttribute('rx',8000/Math.max(1,rect.width));handle.setAttribute('ry',800/Math.max(1,rect.height));
+      const rect=svg.getBoundingClientRect();handle.setAttribute('rx',Math.min(40,8000/(rect.width||1000)));handle.setAttribute('ry',Math.min(20,800/(rect.height||100)));
       handle.setAttribute('cx',x(at));handle.setAttribute('cy',model.y(at));handle.setAttribute('aria-disabled',String(!config.enabled));handle.setAttribute('tabindex',config.enabled?'0':'-1');
       const date=new Date(dates.start+Math.round(at*dates.days)*86400000).toISOString().slice(0,10),value=model.gain(at).toFixed(1)+'×';
       handle.setAttribute('aria-valuenow',model.gain(at).toFixed(1));handle.setAttribute('aria-valuetext',date+' · '+value);

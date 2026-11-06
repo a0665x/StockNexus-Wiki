@@ -3,13 +3,14 @@ Run with --live to also use the signed-in model (consumes account usage).
 Without --live, verifies runtime/UI contracts without model calls.
 """
 import sys
+import shutil
 import json,os,signal,subprocess,tempfile,time,urllib.request,base64
 from pathlib import Path
 import websocket
 root=Path(__file__).resolve().parents[1]
 with tempfile.TemporaryDirectory(prefix='atlas-chat-qa-') as temp:
  p=Path(temp);log=(p/'chrome.log').open('w')
- chrome=subprocess.Popen(['google-chrome','--headless=new','--no-sandbox','--disable-dev-shm-usage','--enable-unsafe-swiftshader','--window-size=1542,1131','--remote-debugging-port=0','--remote-allow-origins=*','--user-data-dir='+str(p/'profile'),'http://127.0.0.1:8765/'],stdout=log,stderr=log,start_new_session=True)
+ chrome=subprocess.Popen([os.environ.get('CHROME_BIN') or shutil.which('google-chrome') or shutil.which('chromium') or 'google-chrome','--headless=new','--no-sandbox','--disable-dev-shm-usage','--enable-unsafe-swiftshader','--window-size=1542,1131','--remote-debugging-port=0','--remote-allow-origins=*','--user-data-dir='+str(p/'profile'),'http://127.0.0.1:8765/'],stdout=log,stderr=log,start_new_session=True)
  try:
   for _ in range(150):
    if (p/'profile/DevToolsActivePort').exists():break
@@ -39,7 +40,7 @@ with tempfile.TemporaryDirectory(prefix='atlas-chat-qa-') as temp:
   wait("!!document.querySelector('#snapshots button')")
   js("document.querySelector('#snapshots button').click()")
   wait('AtlasRuntime.state().counts.loaded>0',30)
-  js("document.getElementById('clearRoot').click();document.querySelector('#list button').click();document.getElementById('chatTab').click()")
+  js("document.getElementById('clearRoot').click();document.querySelector('#list [data-article-id]').click();document.getElementById('chatTab').click()")
   wait("document.querySelector('.chat-status').textContent.includes('已連線')")
   print('PASS: saved news loaded, selected root and Chat connected',flush=True)
   state=js('AtlasRuntime.state()');assert state['root_ids'];assert state['counts']['scope']>0

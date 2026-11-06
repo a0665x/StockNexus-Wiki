@@ -10,6 +10,7 @@ import fcntl
 import json
 import os
 from pathlib import Path
+import shlex
 import shutil
 import subprocess
 import sys
@@ -85,7 +86,7 @@ def preflight():
     ownids={c['id'] for c in own}
     if any(not any(full.startswith(short) for full in ownids) for short in outsiders):
         raise RuntimeError('Port 8765 is occupied by another container; no changes made.')
-    if not running and not launch.available(PORT,'0.0.0.0'):
+    if not running and not launch.available(PORT,bind):
         raise RuntimeError('Port 8765 is occupied by another process; stop it before retrying.')
     print(f'[OK] Project ownership: {PROJECT}; {len(own)} existing container(s).',flush=True)
     for container in own:print('[INFO] Container '+container['id'][:12]+': '+container['state'].get('Status','unknown')+' / '+container['state'].get('Health',{}).get('Status','no health status'),flush=True)
@@ -214,7 +215,7 @@ def up(args):
         if own and not healthy:
             print('[3/4] Cleaning project stale/unhealthy/duplicate containers; data retained.',flush=True)
             run(COMPOSE+['down','--remove-orphans'])
-            if not launch.available(PORT,'0.0.0.0'):raise RuntimeError('Port 8765 was claimed after cleanup; no new container started.')
+            if not launch.available(PORT,bind):raise RuntimeError('Port 8765 was claimed after cleanup; no new container started.')
         else:
             print('[3/4] '+('One healthy container exists; reuse if image/config unchanged; no duplicates.' if own else 'Clean state; starting one container.'),flush=True)
         try:
@@ -237,8 +238,20 @@ def up(args):
             except (OSError,RuntimeError) as error:
                 print('Tailscale setup failed: '+str(error)+'\nLocal container is healthy. URL: '+LOCAL,flush=True)
                 return 1
+        print(merge_help(data),flush=True)
         print('Running in background. Status: ./run.sh status | Logs: ./run.sh logs | Stop: ./run.sh down',flush=True)
     return 0
+
+
+
+def merge_help(data):
+    command=shlex.quote(str(ROOT/'merge_data.sh'))+' --from /media/usb/data --to '+shlex.quote(str(data))
+    return ('Import USB data from another terminal (replace /media/usb/data):\n'
+            '  Preview: '+command+' --dry-run\n'
+            '  Merge:   '+command+'\n'
+            'Keep this web service open; pause Wiki work/watchers for stocks being merged.\n'
+            'The Saved Wikis menu refreshes automatically within 6 seconds; choose an imported stock to view it.\n'
+            'Details: spec/DATA_MERGE.md')
 
 
 def main(argv=None):

@@ -38,7 +38,7 @@ Pointer capture 支援移出、反向拖動、cancel／lostcapture；按下不�
 
 ## 面板與瀏覽器保存
 
-`AtlasUI.initFloatingPanel` 共用於來源和時間焦點：標題與非互動空白區拖曳、方向鍵移動、▽ 收成 36px 圖示、點圖示展開、↺ 歸位、限制在 stage 範圍；不修改來源或搜尋內容。同一 stage 的兩面板協調位置，保持 8px 間距；展開／歸位／還原／resize 都避讓，空間不足先收合另一面板，再視需要收合目前面板。互動控制項（含 label、summary、SVG 曲線）不啟動面板拖曳。左／右 sidebar 可拖分隔線調寬。JSON tree 預設隱藏值，展開才建子欄位。
+`AtlasUI.initFloatingPanel` 共用於來源和時間焦點：標題與非互動空白區拖曳、方向鍵移動、▽ 收成 72px 圖示、點圖示展開、↺ 歸位、限制在 stage 範圍；不修改來源或搜尋內容。同一 stage 的兩面板協調位置，保持 8px 間距；展開／歸位／還原／resize 都避讓，空間不足讓另一面板收合／移位，不撤銷目前使用者的展開；展開內容在剩餘尺寸內捲動。浮動邊緣／四角可調整尺寸，停靠時由分割樹接管，見 [TOOL_DOCK](TOOL_DOCK.md)。互動控制項（含 label、summary、SVG 曲線）不啟動面板拖曳。左／右 sidebar 可拖分隔線調寬。JSON tree 預設隱藏值，展開才建子欄位。
 
 localStorage 前綴 `graphnews.`：
 
@@ -50,9 +50,9 @@ localStorage 前綴 `graphnews.`：
 | timeFocus | 時間大小開關、日期、peak、width、可選 profile；快照為 view.time_focus |
 | timeCurveOpen | 3D 中鐘形曲線面板的展開偏好 |
 | language | 繁中或英文；時間軸固定 density，不再讀取 timelineStyle 偏好 |
-| leftWidth / rightWidth / sourcePanel / timePanel | 面板寬度、位置／收合 |
+| leftWidth / rightWidth / sourcePanel / timePanel | 面板寬度、浮動位置／收合／展開寬高 |
 
-`AtlasDates` 保存自訂日期草稿，快速區間重開／搜尋時按 UTC 今天更新。storage 不可用有提示。同 origin 才共享，不承諾跨裝置或跨網址同步。新聞／證據 `.raw` 不翻譯，新增 UI 文字須加入 i18n。
+`AtlasDates` 保存自訂日期草稿，快速區間重開／搜尋時按 UTC 今天更新。storage 不可用有提示。此表的 localStorage 只在同 origin／設定檔共享；另有主機 workspace 保存 News/Wiki 資料及控制值，可由全新瀏覽器恢復。浮動工具幾何仍屬瀏覽器偏好，見 [WORKFLOWS](WORKFLOWS.md)。新聞／證據 `.raw` 不翻譯，新增 UI 文字須加入 i18n。
 
 時間曲線是可選視覺模組：若 AtlasTimeLens 未載入，顯示重啟提示、停用曲線控制，但仍註冊搜尋、語言與 API 說明事件。修改 script 引用時須檢查實際 HTTP 路由，見首頁初始化測試。
 
@@ -81,8 +81,8 @@ UI 固定 renderDensity，移除 timelineStyle／timelinePlay 及播放計時器
 
 ### GPU budget and recovery (2026-11-02)
 
-Search, timeline, article list, snapshots and export retain complete results. On every
-page initialization, 3D draws at most 800 nodes and 2,400 edges. Visible sources offers
+Search, timeline, article list, snapshots and export retain complete results. Without saved workspace settings,
+3D initially draws at most 800 nodes and 2,400 edges; restored workspaces retain their chosen budget. Visible sources offers
 100/200/400/800/1200/1600/2000/2400 budgets. Selection/roots and their traced neighbors (or chosen channel)
 take priority, then newest articles with deterministic ID tie-breaking. Selecting a
 non-rendered article from the list brings it into the GPU slice. Only edges whose two
@@ -113,7 +113,7 @@ constructor. The sliding switch remains 「單一指定」/「分群渲染」.
 
 ## 3D 預算與關聯偏好（2026-11-02）
 
-渲染預算預設 800，每次頁面載入重設；選項包含 100/200/400/800/1200/1600/2000/2400。
+渲染預算未保存時預設 800，已保存工作區恢復所選預算；選項包含 100/200/400/800/1200/1600/2000/2400。
 `renderSlice` 上限 2400、edge 顯示上限為預算三倍；不改完整文章與後端選線。
 GPU 故障退到不超過原預算一半的既有選項，最低 100。
 
@@ -123,3 +123,33 @@ GPU 故障退到不超過原預算一半的既有選項，最低 100。
 快照載入可在本次頁面還原自己的設定，但不是跨頁面保存偏好的替代品。
 
 相關操作順序見 [WORKFLOWS.md](WORKFLOWS.md)，診斷證據見 [渲染／快取／設定紀錄](references/lesson-20261102-rendering-cache-settings.md)。
+
+## 2026-11-04 探索展示預設
+
+無保存狀態的新頁面使用 800 節點渲染預算，三個搜尋來源預設全選；已保存工作區沿用其設定。探索預設為來源內／跨來源最低分數 0.5／0.5、深度 2、每節點分支 6、累積門檻 0.4、最多高亮 150 節點。光暈開啟、亮度 1.55、半徑 25px、每層保留 90%、非關聯節點亮度 18%。
+
+`graphnews.explorationPresetVersion` 一次性更新既有瀏覽器的 exploration、glow 與搜尋來源；保留 query、ticker、日期等草稿。之後手動變更仍持久化，不會每次刷新覆寫。重設探索／光暈回到這組預設。凍結快照仍按原設定還原，不改寫既有快照或新聞／關聯證據；載入舊快照後可使用重設探索、重設光暈套用新版視覺預設。分數不是機率，路徑不是因果；只篩已載入的有依據連線。
+
+800 節點分類高亮時，節點光暈使用 source-over 疊色，避免數百個漸層以 additive 相加變成白色塊；關聯線仍使用 additive。亮度／半徑／深度設定與節點／證據集合不變。
+
+## 2026-11-04 大量節點的計算與 DOM 邊界
+
+3D上限仍為預設800點／2400線；新聞清單與時間桶詳情改每頁100篇，完整結果可翻頁、圖內搜尋、Chat選取與匯出。分類priority不會覆蓋已選取節點，相同GPU切片不重新設定graphData。關聯樹使用目前邊版本的索引及最多16組結果／cache，hover不反覆重建固定root；單點吸附只投影該點。關鍵字規則每查詢建立，Top N排名保持原語意。實測與界線見 [大量圖譜效能紀錄](references/bugfix-20261104-large-graph-performance.md)。
+
+目前視圖優先建圖與四項狀態說明：見 [視圖關聯流程](references/view-first-relations-20261104.md)。預算外新聞延後計算；四個狀態標籤滑鼠靜止650ms顯示說明。
+
+視圖重用：狀態列區分「新算／重用」配對數及完整視圖命中。快照保存渲染預算與最多12組完成視圖，載入同範圍可直接使用edge；顯示門檻不裁切保存的原始關聯。詳見[增量重用與快照](references/view-first-relations-20261104.md)。
+
+## 2026-11-06 旋轉與焦點恢復
+
+Trackball 預設全域 A/S/D 快捷鍵會接收到輸入欄位的字母；視窗失焦錯過 keyup 時可殘留 D 平移狀態。News 與 Wiki 關閉未公開的字母快捷鍵，News blur 清理拖曳／鍵盤狀態。左鍵空白旋轉、Ctrl＋左鍵與右鍵平移保持原行為；首次自動取景改為瞬時，pointerdown／controls start 會取消待執行取景，避免新圖干擾操作。
+
+## Wiki 版面（2026-11-06）
+
+Wiki 全頁從全局 header 實際底部開始，頂部語言／設定保持可用。左右側欄與下方時間圖表均有可拖曳／鍵盤操作的分隔線，尺寸獨立保存於 Wiki 工作區；窄螢幕改為直向。點選 Wiki 星河只調整節點及連線明暗，不移除其他群、不改鏡頭；空白點擊才解除，拖曳不解除。詳細規則見 [WIKI_RUNTIME](WIKI_RUNTIME.md)。
+
+## 語言狀態與多視窗
+
+介面語言統一由 `AtlasI18n` 讀寫 `graphnews.language`。選單、程式切換與同來源同 profile 的 storage 通知共用 `atlas-language` 路徑，News／Wiki runtime 都回報目前值。storage 處理讀取儲存區的最新值，不採用排隊事件的舊值，也不再次寫回；重新載入仍沿用該瀏覽器偏好。不同 host／port／profile 的隔離是預期行為，不能與主機 workspace 跨 profile 恢復混為一談。
+
+Chat 自行翻譯完整 UI 模板，晚到的連線／情境／串流更新依呈現當下的語言處理。Wiki 的生成保存語系及原始引用不受 UI 語言修改。生命週期檢查及失敗證據見 [語系事故紀錄](references/lesson-20261106-language-runtime.md)。

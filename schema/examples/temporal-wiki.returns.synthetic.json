@@ -1,0 +1,27 @@
+{
+  "is_fixture": true,
+  "purpose": "Design math only; not actual price data or runtime labeler output",
+  "entry": 100,
+  "closes": [
+    102,
+    98,
+    105
+  ],
+  "expected": {
+    "terminal_return_1": 0.02,
+    "mean_path_return_1": 0.02,
+    "terminal_return_3": 0.05,
+    "mean_path_return_3": 0.016666666666666666
+  },
+  "analogs": {
+    "terminal_returns": [
+      0.05,
+      -0.01
+    ],
+    "weights": [
+      2,
+      1
+    ],
+    "expected_mean_terminal_return": 0.03
+  }
+}

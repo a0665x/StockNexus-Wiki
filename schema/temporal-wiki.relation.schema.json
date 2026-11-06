@@ -1,0 +1,808 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Temporal Wiki Relation v0.1 — proposal, not runtime migration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "is_fixture",
+    "instrument_id",
+    "ticker",
+    "stable_id",
+    "revision_id",
+    "run_id",
+    "mode",
+    "relation_type",
+    "source",
+    "target",
+    "status",
+    "scope",
+    "rationale",
+    "event_time",
+    "available_at",
+    "produced_at",
+    "decision_as_of",
+    "simulated_effective_at",
+    "evidence_refs",
+    "scores",
+    "provenance"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "0.1"
+    },
+    "is_fixture": {
+      "type": "boolean"
+    },
+    "instrument_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "ticker": {
+      "type": "string",
+      "minLength": 1
+    },
+    "stable_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "revision_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "mode": {
+      "enum": [
+        "live_recorded",
+        "historical_replay"
+      ]
+    },
+    "relation_type": {
+      "enum": [
+        "SUPPORTS",
+        "CONTRADICTS",
+        "UPDATES",
+        "SUPERSEDES",
+        "DEPENDS_ON",
+        "TEMPORALLY_PRECEDES",
+        "RELATED_TO",
+        "HAS_OBSERVED_OUTCOME"
+      ]
+    },
+    "source": {
+      "$ref": "#/$defs/endpoint"
+    },
+    "target": {
+      "$ref": "#/$defs/endpoint"
+    },
+    "status": {
+      "enum": [
+        "proposed",
+        "verified",
+        "hypothesis",
+        "rejected"
+      ]
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1
+    },
+    "rationale": {
+      "type": "string",
+      "minLength": 1
+    },
+    "event_time": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "(Z|[+-]\\d\\d:\\d\\d)$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "available_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "(Z|[+-]\\d\\d:\\d\\d)$"
+    },
+    "produced_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "(Z|[+-]\\d\\d:\\d\\d)$"
+    },
+    "decision_as_of": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "(Z|[+-]\\d\\d:\\d\\d)$"
+    },
+    "simulated_effective_at": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "(Z|[+-]\\d\\d:\\d\\d)$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/span"
+      },
+      "uniqueItems": true
+    },
+    "scores": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "semantic_similarity",
+        "evidence_quality",
+        "predictive_association"
+      ],
+      "properties": {
+        "semantic_similarity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/scored_method"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "evidence_quality": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/scored_method"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "predictive_association": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/association"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "producer",
+        "model_revision",
+        "prompt_version",
+        "input_hash",
+        "patch_id"
+      ],
+      "properties": {
+        "producer": {
+          "enum": [
+            "llm_proposal",
+            "human_review",
+            "deterministic_labeler",
+            "rule"
+          ]
+        },
+        "model_revision": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "prompt_version": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "input_hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "patch_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "translations": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "zh-Hant": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "rationale"
+          ],
+          "properties": {
+            "rationale": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1500
+            }
+          }
+        },
+        "en": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "rationale"
+          ],
+          "properties": {
+            "rationale": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1500
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "endpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stable_id",
+        "revision_id",
+        "kind"
+      ],
+      "properties": {
+        "stable_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "revision_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "ArticleRevision",
+            "Claim",
+            "Event",
+            "Thesis",
+            "Snapshot",
+            "Forecast",
+            "Outcome"
+          ]
+        }
+      }
+    },
+    "span": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "article_revision_id",
+        "content_hash",
+        "field",
+        "start",
+        "end",
+        "quote"
+      ],
+      "properties": {
+        "article_revision_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "content_hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "field": {
+          "enum": [
+            "title",
+            "summary",
+            "body"
+          ]
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "quote": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "scored_method": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "method",
+        "version"
+      ],
+      "properties": {
+        "value": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "method": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "association": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "research_run_id",
+        "horizon_trading_days",
+        "sample_count",
+        "effect",
+        "effect_unit",
+        "method",
+        "version"
+      ],
+      "properties": {
+        "research_run_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "horizon_trading_days": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sample_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "effect": {
+          "type": "number"
+        },
+        "effect_unit": {
+          "type": "string",
+          "minLength": 1
+        },
+        "method": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "relation_type": {
+            "const": "SUPPORTS"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "source": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "ArticleRevision",
+                  "Claim",
+                  "Event"
+                ]
+              }
+            }
+          },
+          "target": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "Claim",
+                  "Event",
+                  "Thesis"
+                ]
+              }
+            }
+          },
+          "evidence_refs": {
+            "minItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "relation_type": {
+            "const": "CONTRADICTS"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "source": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "Claim",
+                  "Event"
+                ]
+              }
+            }
+          },
+          "target": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "Claim",
+                  "Event",
+                  "Thesis"
+                ]
+              }
+            }
+          },
+          "evidence_refs": {
+            "minItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "relation_type": {
+            "const": "UPDATES"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "source": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "Claim",
+                  "Event",
+                  "Thesis"
+                ]
+              }
+            }
+          },
+          "target": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "Claim",
+                  "Event",
+                  "Thesis"
+                ]
+              }
+            }
+          },
+          "evidence_refs": {
+            "minItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "relation_type": {
+            "const": "SUPERSEDES"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "source": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "ArticleRevision",
+                  "Claim",
+                  "Event",
+                  "Thesis",
+                  "Snapshot",
+                  "Forecast",
+                  "Outcome"
+                ]
+              }
+            }
+          },
+          "target": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "ArticleRevision",
+                  "Claim",
+                  "Event",
+                  "Thesis",
+                  "Snapshot",
+                  "Forecast",
+                  "Outcome"
+                ]
+              }
+            }
+          },
+          "evidence_refs": {
+            "minItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "relation_type": {
+            "const": "DEPENDS_ON"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "source": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "Thesis"
+                ]
+              }
+            }
+          },
+          "target": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "Claim",
+                  "Event",
+                  "Thesis"
+                ]
+              }
+            }
+          },
+          "evidence_refs": {
+            "minItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "relation_type": {
+            "const": "TEMPORALLY_PRECEDES"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "source": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "Event"
+                ]
+              }
+            }
+          },
+          "target": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "Event"
+                ]
+              }
+            }
+          },
+          "evidence_refs": {
+            "minItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "relation_type": {
+            "const": "RELATED_TO"
+          }
+        }
+      },
+      "then": {
+        "anyOf": [
+          {
+            "properties": {
+              "source": {
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "Claim",
+                      "Event",
+                      "Thesis"
+                    ]
+                  }
+                }
+              },
+              "target": {
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "Claim",
+                      "Event",
+                      "Thesis"
+                    ]
+                  }
+                }
+              },
+              "evidence_refs": {
+                "minItems": 1
+              }
+            }
+          },
+          {
+            "properties": {
+              "source": {
+                "properties": {
+                  "kind": {
+                    "const": "ArticleRevision"
+                  }
+                }
+              },
+              "target": {
+                "properties": {
+                  "kind": {
+                    "const": "ArticleRevision"
+                  }
+                }
+              },
+              "evidence_refs": {
+                "minItems": 2
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "relation_type": {
+            "const": "HAS_OBSERVED_OUTCOME"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "source": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "Snapshot",
+                  "Forecast"
+                ]
+              }
+            }
+          },
+          "target": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "Outcome"
+                ]
+              }
+            }
+          },
+          "provenance": {
+            "properties": {
+              "producer": {
+                "const": "deterministic_labeler"
+              },
+              "model_revision": {
+                "type": "null"
+              },
+              "prompt_version": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "mode": {
+            "const": "live_recorded"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "simulated_effective_at": {
+            "type": "null"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "simulated_effective_at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "(Z|[+-]\\d\\d:\\d\\d)$"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "provenance": {
+            "properties": {
+              "producer": {
+                "const": "llm_proposal"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "status": {
+            "enum": [
+              "proposed",
+              "hypothesis"
+            ]
+          },
+          "provenance": {
+            "properties": {
+              "model_revision": {
+                "type": "string",
+                "minLength": 1
+              },
+              "prompt_version": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

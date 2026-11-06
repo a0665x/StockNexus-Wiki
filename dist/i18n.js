@@ -1,6 +1,7 @@
 /* Interface translation only. Original news, evidence and JSON are never translated. */
 (function(root){
   const dictionary={
+'上一頁':'Previous page','下一頁':'Next page','頁碼':'Page number',
 '時間貢獻':'Time contribution','股價貢獻':'Price contribution','混合倍率':'Blended size',
 '滾輪縮放焦點日期範圍；雙擊還原。平均線為基準後逐日累計平均；超過 N 日遮罩。價格為歷史日線，非即時報價。':'Wheel to zoom around the focused date; double-click to reset. The line is the forward cumulative mean; prices beyond N sessions are masked. Historical daily prices, not live quotes.',
 
@@ -158,7 +159,9 @@
 
     '文字辨識':'Text match','來源標註':'Source annotation','文章文字':'Article text','標題':'Title','摘要':'Summary',
     '新聞關聯觀測台':'News relationship explorer','搜尋':'Search','新聞清單':'News list','真實來源 · 關聯由規則產生':'Real sources · Rule-based relationships','關閉':'Close','搜尋真實新聞':'Search real news',
-    '搜尋關鍵字（Google／Yahoo）':'Keywords (Google / Yahoo)','例如 半導體、NVIDIA':'e.g. semiconductors, NVIDIA','股票代碼（僅 Massive，請明確填寫）':'Ticker (Massive only, explicit symbol)','例如 NVDA、2330.TW':'e.g. NVDA, 2330.TW','起始日期（UTC）':'Start date (UTC)','結束日期（UTC，含當日）':'End date (UTC, inclusive)','搜尋來源':'Search sources','Google 新聞 RSS':'Google News RSS','Massive API key（選填）':'Massive API key (optional)','也可在伺服器環境設定':'Or configure on the server','伺服器已設定 key，可留白':'Server key configured; may leave blank',
+    '分析目前觀點、引用與關聯…':'Analyze current viewpoints, citations and relations…',
+'向 Wiki 助理提問':'Ask the Wiki assistant',
+'股票識別（必填）':'Instrument (required)','搜尋關鍵字（逗號分隔，可自行補充）':'Search keywords (comma-separated, editable)','搜尋關鍵字（Google／Yahoo）':'Keywords (Google / Yahoo)','例如 半導體、NVIDIA':'e.g. semiconductors, NVIDIA','股票代碼（僅 Massive，請明確填寫）':'Ticker (Massive only, explicit symbol)','例如 NVDA、2330.TW':'e.g. NVDA, 2330.TW','起始日期（UTC）':'Start date (UTC)','結束日期（UTC，含當日）':'End date (UTC, inclusive)','搜尋來源':'Search sources','Google 新聞 RSS':'Google News RSS','Massive API key（選填）':'Massive API key (optional)','也可在伺服器環境設定':'Or configure on the server','伺服器已設定 key，可留白':'Server key configured; may leave blank',
     '記住金鑰會存於此瀏覽器的本機儲存空間；不寫入新聞 DB 或匯出檔。':'Remembered keys are stored locally in this browser, excluded from the news DB and exports.','記住此瀏覽器的 Massive key':'Remember Massive key in this browser','清除已記住的 key':'Forget saved key','已記住此瀏覽器的 key。':'Key remembered in this browser.','已清除瀏覽器保存的 key。':'Saved browser key cleared.','瀏覽器儲存不可用；此 key 僅供本次使用。':'Browser storage unavailable; key will be used for this session only.','無法清除本機儲存；請使用瀏覽器網站資料設定清除。':'Storage could not be cleared; clear site data in browser settings.',
     '強制更新已快取區間':'Force refresh cached dates','進階關聯與多層探索':'Advanced relationships & multi-hop exploration','只篩選目前已載入、有依據的連線，不會搜尋整個 DB 或新增推論。分數不是機率；延伸路徑不是因果。':'Filter loaded evidence-based edges only; this does not search the entire DB or infer new edges. Scores are not probabilities; paths are not causality.',
     '來源內 edge 最低分數':'Within-source minimum score','跨來源 edge 最低分數':'Cross-source minimum score','滑鼠延伸深度':'Hover expansion depth','每個節點最多延伸分支':'Max branches per node','從主節點起的累積門檻':'Cumulative threshold from root','沿路分數相乘；低於門檻、已走訪節點、深度或分支上限即停止。最多高亮 150 個節點。':'Scores multiply along each path. Stop at the threshold, visited nodes, depth or branch limit. Highlight up to 150 nodes.','重設關聯設定':'Reset relationship settings',
@@ -194,21 +197,34 @@
     [/^搜尋服務回應異常（(\d+)）$/,(_,a)=>`Search service error (${a})`],
     [/ · 相隔 ([\d.]+|—) 天$/,(_,a)=>` · ${a} days apart`]
   ];
+  Object.assign(dictionary,{
+    '觀點詳情':'Viewpoint details','來源原文 ↗':'Source article ↗',
+    'Wiki {instrument} · v{version} · {count} 個節點\n依目前選取與日期討論觀點；論述與引用可由工具讀取。':'Wiki {instrument} · v{version} · {count} nodes\nDiscuss viewpoints for the current selection and dates; tools can read arguments and citations.',
+    '目前範圍：{scope} · {count} 篇 · {view}\n每次提問跟隨目前選取；回答期間可繼續操作。':'Current scope: {scope} · {count} articles · {view}\nEach question follows the current selection; you can keep exploring.',
+    '對話連線已失效，請重新開啟 Chat。':'Chat session expired; reopen Chat to reconnect.',
+    'Chat 連線失敗 ({code})':'Chat connection failed ({code})',
+    'Chat 服務未啟動。請執行 ./run.sh chat start。':'Chat service is not running. Run ./run.sh chat start.',
+    '登入已失效，請在主機執行 codex login 後重試。':'Sign-in expired. Run codex login on the host and try again.',
+    '已達用量限制，請稍後重試。':'Usage limit reached. Try again later.',
+    '回覆失敗：{detail}':'Reply failed: {detail}'
+  });
   let lang='zh-Hant';try{if(JSON.parse(localStorage.getItem('graphnews.language'))==='en')lang='en';}catch{}
   const keys=Object.keys(dictionary).sort((a,b)=>b.length-a.length);
   function t(text){if(lang!=='en'||typeof text!=='string')return text;let result=text;for(const [pattern,replace]of patterns){const match=text.match(pattern);if(match&&match[0]===text)return text.replace(pattern,replace);result=result.replace(pattern,replace);}if(dictionary[result])return dictionary[result];
     // Translate UI fragments only; raw news/JSON subtrees are excluded by the walker.
     for(const key of keys)if(result.includes(key))result=result.split(key).join(dictionary[key]);return result;
   }
+  function format(source,values={}){const template=lang==='en'?(dictionary[source]||source):source;return template.replace(/\{(\w+)\}/g,(match,key)=>Object.prototype.hasOwnProperty.call(values,key)?String(values[key]):match);}
   const originals=new WeakMap(),attributes=new WeakMap();let observer=null;
   function translateNode(node){
-    if(node.nodeType===3){if(!node.parentElement||node.parentElement.closest('script,style,textarea,.raw,.json-tree'))return;const old=originals.get(node),current=node.nodeValue;const source=old&&current===old.rendered?old.source:current;const rendered=t(source);originals.set(node,{source,rendered});if(current!==rendered)node.nodeValue=rendered;return;}
-    if(node.nodeType!==1||node.matches('script,style,textarea,.raw,.json-tree'))return;
+    if(node.nodeType===3){if(!node.parentElement||node.parentElement.closest('script,style,textarea,.raw,.json-tree,[data-own-i18n]'))return;const old=originals.get(node),current=node.nodeValue;const source=old&&current===old.rendered?old.source:current;const rendered=t(source);originals.set(node,{source,rendered});if(current!==rendered)node.nodeValue=rendered;return;}
+    if(node.nodeType!==1||node.closest('[data-own-i18n]')||node.matches('script,style,textarea,.raw,.json-tree,[data-own-i18n]'))return;
     for(const name of ['placeholder','aria-label','title']){if(!node.hasAttribute(name))continue;let state=attributes.get(node);if(!state){state={};attributes.set(node,state);}const current=node.getAttribute(name),old=state[name],source=old&&current===old.rendered?old.source:current,rendered=t(source);state[name]={source,rendered};if(current!==rendered)node.setAttribute(name,rendered);}
     for(const child of node.childNodes)translateNode(child);
   }
-  function refresh(){if(typeof document==='undefined')return;document.documentElement.lang=lang;document.title=lang==='en'?'GraphNews · News relationship explorer':'GraphNews · 新聞關聯觀測台';translateNode(document.body);}
-  function setLanguage(value){lang=value==='en'?'en':'zh-Hant';try{localStorage.setItem('graphnews.language',JSON.stringify(lang));}catch{}refresh();if(typeof root.dispatchEvent==='function')root.dispatchEvent(new Event('atlas-language'));}
+  function refresh(){if(typeof document==='undefined')return;document.documentElement.lang=lang;document.title=lang==='en'?'StockNexus Wiki · News relationship explorer':'StockNexus Wiki · 新聞關聯觀測台';translateNode(document.body);}
+  function setLanguage(value,{persist=true}={}){lang=value==='en'?'en':'zh-Hant';if(persist)try{localStorage.setItem('graphnews.language',JSON.stringify(lang));}catch{}refresh();if(typeof document!=='undefined'){const picker=document.getElementById('language');if(picker)picker.value=lang;}if(typeof root.dispatchEvent==='function')root.dispatchEvent(new Event('atlas-language'));}
+  root.addEventListener?.('storage',event=>{if(event.key!==null&&event.key!=='graphnews.language')return;try{if(event.storageArea!==localStorage)return;const value=JSON.parse(localStorage.getItem('graphnews.language'));if(value!==null&&value!=='en'&&value!=='zh-Hant')return;const next=value==='en'?'en':'zh-Hant';if(next!==lang)setLanguage(next,{persist:false});}catch{}});
   function start(){if(typeof MutationObserver==='undefined')return;refresh();observer=new MutationObserver(records=>{for(const r of records){if(r.type==='childList')for(const n of r.addedNodes)translateNode(n);else translateNode(r.target);}});observer.observe(document.body,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['placeholder','aria-label','title']});}
-  root.AtlasI18n={t,language:()=>lang,setLanguage,start};if(typeof module!=='undefined'&&module.exports)module.exports=root.AtlasI18n;
+  root.AtlasI18n={t,format,language:()=>lang,setLanguage,start};if(typeof module!=='undefined'&&module.exports)module.exports=root.AtlasI18n;
 })(globalThis);

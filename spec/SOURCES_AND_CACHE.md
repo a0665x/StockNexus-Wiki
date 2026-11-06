@@ -33,6 +33,8 @@ UI 明確傳送 `rss_region`（預設 TW），API 省略時保留舊版 Google T
 - 分頁／預算／授權錯誤仍保存已取得的好資料與已完成窗口。attempts 記錄錯誤碼／retry_until。
 - 手動 save snapshot 不修改 acquisition coverage。
 
+`./run.sh local --offline`（`NEWS_ATLAS_CACHE_ONLY=1`）使搜尋只讀目前 DB，包括過期快取；即使 force_refresh 也不呼叫 provider。回應保留 missing_ranges 並附離線警告，不能把離線結果當成完整覆蓋。查詢仍依精確 query_key 配對，例如 TSM 與 TSMC 是不同查詢。一般啟動保留原有自動補抓行為。
+
 ## 搜不到新聞的排查順序
 
 1. 查看左側 query／ticker、來源語系和日期；區分 Yahoo Finance 與台灣 Yahoo。
@@ -93,3 +95,5 @@ Microduck 案例（2026-10-28 查核）：提供的新聞屬台灣 Yahoo；當�
 實體／主題與分類各使用 8192 項記憶體 LRU，按實際依賴的 title/summary/symbols 或分類定義
 快取純衍生特徵；每次回傳複製，來源、fetched_at 等 metadata 沿用當下文章，不被快取覆寫。
 這不是持久文章配對快取，也不是閒置全 DB 預算服務。
+
+配對評分快取：主DB旁的 `.pairs.sqlite3` 保存內容／規則版本對應分數及無關聯結果，與文章取得快取、完整圖譜快取分開。縮小／擴大視圖可重用；淘汰策略與快照攜帶範圍見[增量重用說明](references/view-first-relations-20261104.md)。

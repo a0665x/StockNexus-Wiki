@@ -208,8 +208,8 @@ def run_server(httpd, mode, name=None, https_port=None):
     proxy = None
     worker = None
     try:
-        from news_atlas.storage import Store
-        httpd.store = Store()
+        from news_atlas.graph_storage import GraphRepository
+        httpd.store = GraphRepository()
         worker = threading.Thread(target=httpd.serve_forever, daemon=True)
         worker.start()
         port = httpd.server_address[1]
@@ -256,6 +256,7 @@ def run_server(httpd, mode, name=None, https_port=None):
                     httpd.shutdown()
                     worker.join(timeout=3)
             finally:
+                if hasattr(httpd,"wiki"):httpd.wiki.close()
                 httpd.server_close()
 
 
@@ -265,7 +266,12 @@ def main(argv=None):
     parser.add_argument('--mode', choices=['local', 'tailscale'], default='local', help='Initial startup mode')
     parser.add_argument('--https-port', type=port_number, default=8443, help='Tailscale HTTPS port; default 8443')
     parser.add_argument('--non-interactive', action='store_true', help='Use specified settings; report conflicts without changing ports')
+    parser.add_argument('--offline', action='store_true', help='Search local DB without fetching news')
     args = parser.parse_args(argv)
+    if args.offline:
+        os.environ['NEWS_ATLAS_CACHE_ONLY'] = '1'
+    if os.environ.get('NEWS_ATLAS_CACHE_ONLY') == '1':
+        print('Offline search: read the local DB without contacting news providers.', flush=True)
     if sys.version_info < (3, 10):
         parser.error('Python 3.10 or newer is required')
     interactive = not args.non_interactive

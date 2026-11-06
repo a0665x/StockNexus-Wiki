@@ -129,3 +129,32 @@ POST 使用 `Content-Type: application/json`。輸入錯誤為 400，未知資�
 實際 SDK／MCP、畫面狀態、允許的 UI 操作與限制見 [Chat 合約](../spec/CHAT_AGENT.md)。
 
 股價大小：`POST /api/prices/lens`，明確 ticker 與文章日期換算未來 1/3/5/7 交易日平均報酬，日線快取六小時。見 [股價大小規格](../spec/PRICE_LENS.md)。
+
+## LLM Wiki
+
+頂部 LLM Wiki 開啟獨立股票知識圖。`GET /api/wiki/status|models|graph|jobs|article|markdown` 讀取狀態、版本圖、工作、凍結引用與匯出；`POST /api/wiki/plan|jobs|configure|cancel` 負責預覽、明確啟動、維護開關與停止。寫入要求同源及允許來源。API 細節、DB 與成本範圍見 [Wiki runtime](../spec/WIKI_RUNTIME.md)，Swagger 已包含這 10 個操作。
+
+Wiki `plan` 支援 `scope: global|loaded|focus`、`date_range: null|{start,end}`（UTC 日期，含起訖日）與 `operation: update|review`。全局限於目前查詢 memberships，增量跨模型重用；review 僅手動且略過沒有新增證據的已校正文章。`models` 讀取 Codex model/list，不啟動推論。
+
+Wiki `GET /api/wiki/graph` 與 `jobs` 回傳當前 coverage；`POST /api/wiki/resume`（instrument）沿用已保存設定將範圍補到 UTC 今天，可能消耗模型用量，受原有每日上限及同源檢查限制。新圖 `perspectives` 是所選版本的類別統計與最多 40 個既有局部 Thesis，不是全圖重推論。
+
+### 2026-11-05 手動控制 Wiki 用量
+
+移除每批篇數與每日呼叫上限；plan 舊 batch_size/daily_limit 欄位忽略，next_batch 相容欄位代表全部待辦。coverage 保留 daily_calls 記帳但不回傳 daily_limit；不提供帳號週用量百分比。確認後逐篇補足，可由停止按鈕取消，已完成版本不重做。預覽／閱讀頁面不自動啟動推論。
+
+Wiki 工作介面：`GET /api/wiki/graph` 支援 `version` 同時搭配 `start/end`（UTC 新聞日期，包含起訖日），回傳 changes/histories/timeline。`POST plan` 新增 reasoning_effort、languages（預設雙語）、evidence_size（1–20，UI 為 5／10／15／20）、strategy（lexical/chronological/root/fusion）、graph_edges；只核對範圍，不啟動推論。完整語意見 `spec/WIKI_RUNTIME.md`。
+
+
+Wiki 設定 `POST /api/wiki/apply` 接 plan 欄位與 continuous：先驗證，閒置只存設定；活動工作則取消舊呼叫並續跑剩餘證據。Graph 模式提供 `graph_universe: {ticker, separate, articles:[{provider,id}]}`（1–10000 篇）及 `graph_settings: {relation_settings, exploration}`。後端從同股票 DB 按完整圖譜自動採樣 root，直到覆蓋 Wiki 日期內全部目標；整樹日期外成員只作脈絡，此模式忽略 evidence_size。plan 回傳 `graph_selection.mode=coverage` 及 universe_articles／target_articles／context_articles／trees；分段樹全部完成才計進度。只有舊 `graph_selection: {ticker,trees}` 的已確認工作保持原手動範圍相容。`price_horizon` 為 1/3/5/7，僅使用指定股票已存股價資料。
+
+`GET /api/wiki/node?instrument=NASDAQ:GOOGL&id=...&version=...&price_horizon=3` 讀取特定版本存在的觀點及主機快取市場觀察，不呼叫模型。graph 的 perspectives.index 是完整輕量 Thesis 索引，供圖表與分層清單共用，不受 GPU 預算限制。
+
+`GET /api/wiki/node` 現在不論是否已有 `market_evidence` 都回傳 `current_market`。`price_horizon` 僅接受 1/3/5/7；目前快取觀察包含 `available_sessions`、`required_sessions`、`baseline_date`、`as_of`（可得時）。不寫回節點，原始 `market_evidence` 保留；不啟動模型或行情下載。
+
+### 工作畫面與股票識別（2026-11-06）
+
+`GET /api/workspace` 讀取 `news`、`wiki` 獨立紀錄；`POST /api/workspace` 接受 `{section:"news"|"wiki", value:{...}}`，合併指定紀錄且保留另一頁狀態。僅允許同源、本機／已允許來源，欄位白名單與快照清理拒絕憑證。保存於主機 `data/private/workspace.sqlite3`，跨瀏覽器可恢復；恢復不發模型／來源請求。
+
+搜尋支援 `instrument:"NASDAQ:GOOGL"` 與供應商 `ticker:"GOOGL"`；二者必須一致。Web UI 必填完整識別，原 REST 裸 ticker 保持相容。`/api/cache/graph` 支援 `defer_relations:true`，先讀本機文章，再由畫面計算當前範圍關係。
+
+Wiki `graph` 只列最近 10 個可切換版本，sidebar 提供唯一 start/end。原始引用與修訂帳本持續存在。ChatSync graph 可含 Wiki `nodes`、`histories`；ChatRuntime dataset 可為版本／日期組合字串，surface 為 wiki 時包含 instrument/version/date_range/selected_node。

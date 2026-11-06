@@ -45,6 +45,23 @@ class SnapshotTests(unittest.TestCase):
             self.assertNotIn('DO_NOT_SAVE','\n'.join(db.iterdump()))
         self.assertEqual(self.store.stats()['articles'],0,'Saving a view must not invent source coverage/cache records')
 
+    def test_snapshot_restores_completed_views_and_render_budget(self):
+        from news_atlas.relation_settings import settings
+        ids=sorted(f"{p}::{a['id']}" for p,g in self.groups.items() for a in g['articles'])
+        entry={'ids':ids,'sources':['google','massive'],'separate':True,'relation_settings':settings(),
+               'source_graphs':{p:{'relations':g['relations']} for p,g in self.groups.items()},'cross_relations':[]}
+        self.payload['view'].update(selected_id=ids[0],highlight_mode='root',graph_channel='',render_budget=2400,relation_cache_version=1,relation_scope='view',relation_scope_ids=ids,
+                                    relation_scope_sources=['google','massive'],relations_pending=False,relation_views=[entry])
+        saved=self.store.save_snapshot(self.payload)
+        result=Store(self.path).load_snapshot(saved['id'])
+        self.assertEqual(result['view']['relation_views'],[entry])
+        self.assertEqual(result['view']['render_budget'],2400)
+        self.assertEqual(result['view']['selected_id'],ids[0])
+        self.assertFalse(result['view']['relations_pending'])
+        self.assertEqual(result['source_graphs'],self.store.load_snapshot(saved['id'])['source_graphs'])
+        entry['ids']=['missing']
+        with self.assertRaises(ValueError):self.store.save_snapshot(self.payload)
+
     def test_glow_snapshot_roundtrip_and_validation(self):
         self.payload['view']['glow']={'enabled':True,'brightness':1.4,'radius':52,'decay':.55,'background':.12}
         saved=self.store.save_snapshot(self.payload)

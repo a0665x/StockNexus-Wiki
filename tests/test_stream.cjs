@@ -9,12 +9,13 @@ class Element {
 }
 const elements = new Map();
 const get = id => {if(!elements.has(id))elements.set(id,new Element());return elements.get(id)};
-get('query').value='TSLA';get('ticker').value='TSLA';get('start').value='2026-01-01';get('end').value='2026-01-07';
+get('query').value='TSLA';get('ticker').value='NASDAQ:TSLA';get('start').value='2026-01-01';get('end').value='2026-01-07';
 let data={nodes:[],links:[]};const graph=new Proxy(function(){},{get(t,k){if(k==='graphData')return x=>{if(x){data=x;return graph}return data};if(k==='d3Force')return ()=>({strength(){return this},distance(){return this}});return ()=>graph},apply(){return graph}});
 const article={id:'one',title:'Tesla launches product',source:{provider:'massive',publisher:'Publisher'},symbols:['TSLA'],url:'https://example.com/a',published_at:'2026-01-01T00:00:00Z',summary:''};
 let finish;const wait=new Promise(resolve=>finish=resolve);let reads=0;
 const document={getElementById:get,createElement:()=>new Element(),createElementNS:()=>new Element(),querySelectorAll:()=>[{value:'massive'},{value:'google'}],body:new Element()};
 const context={document,ForceGraph3D:()=>()=>graph,ResizeObserver:class{observe(){}},console,Date,URL,Blob,TextDecoder,TextEncoder,Uint8Array,AbortController,setTimeout:(fn,ms)=>ms===80?setTimeout(fn,0):0,clearTimeout(){},setInterval:()=>0,clearInterval(){},fetch:async()=>({ok:true,body:{getReader:()=>({read:async()=>{reads++;if(reads===1)return {value:new TextEncoder().encode(JSON.stringify({type:'source',source:'massive',completed:1,total:2,articles:[article],error:null})+'\n'),done:false};await wait;return {value:new TextEncoder().encode(JSON.stringify({type:'done'})+'\n'),done:reads>2}},cancel(){}})}})};
+context.addEventListener=()=>{};context.document.addEventListener=()=>{};context.AtlasWorkspace={ready:new Promise(()=>{}),save(){}};
 vm.createContext(context);vm.runInContext(fs.readFileSync('dist/i18n.js','utf8'),context);vm.runInContext(fs.readFileSync('dist/explorer-ui.js','utf8'),context);vm.runInContext(fs.readFileSync('dist/graph-view.js','utf8'),context);vm.runInContext(fs.readFileSync('dist/timeline.js','utf8'),context);vm.runInContext(fs.readFileSync('dist/glow.js','utf8'),context);vm.runInContext(fs.readFileSync('dist/date-range.js','utf8'),context);vm.runInContext(fs.readFileSync('dist/interaction.js','utf8'),context);vm.runInContext(fs.readFileSync('dist/time-lens.js','utf8'),context);vm.runInContext(fs.readFileSync('dist/app.js','utf8'),context);
 (async()=>{
   get('start').value='2026-01-01';get('end').value='2026-01-07';

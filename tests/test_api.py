@@ -36,7 +36,8 @@ class APIContractTests(unittest.TestCase):
             for method,op in methods.items():
                 names.append(op['operationId']);self.assertIn('x-mcp',op)
         self.assertEqual(len(names),len(set(names)))
-        self.assertEqual(len(names),29)
+        self.assertEqual(len(names),45)
+        self.assertIn('preview_graph',names)
         self.assertEqual(spec['paths']['/api/chat/turn']['post']['security'],[{'ChatSession':[]}])
         self.assertIn('application/x-ndjson',spec['paths']['/api/chat/turn']['post']['responses']['200']['content'])
         def walk(v):

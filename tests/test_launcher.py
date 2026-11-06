@@ -99,7 +99,7 @@ class LauncherTests(unittest.TestCase):
         response.__enter__.return_value.status = 200
         worker = MagicMock()
         worker.is_alive.return_value = True
-        with patch('news_atlas.storage.Store'), patch.object(launch.threading, 'Thread', return_value=worker), \
+        with patch('news_atlas.graph_storage.GraphRepository'), patch.object(launch.threading, 'Thread', return_value=worker), \
              patch.object(launch.urllib.request, 'build_opener') as opener, \
              patch.object(launch, 'tailscale_json', side_effect=[{}, config]), \
              patch.object(launch.subprocess, 'Popen', return_value=proxy) as popen, \
@@ -119,7 +119,7 @@ class LauncherTests(unittest.TestCase):
         proxy.poll.return_value = 1
         response = MagicMock()
         response.__enter__.return_value.status = 200
-        with patch('news_atlas.storage.Store'), patch.object(launch.threading, 'Thread'), \
+        with patch('news_atlas.graph_storage.GraphRepository'), patch.object(launch.threading, 'Thread'), \
              patch.object(launch.urllib.request, 'build_opener') as opener, patch.object(launch, 'tailscale_json', return_value={}), \
              patch.object(launch.subprocess, 'Popen', return_value=proxy), contextlib.redirect_stdout(io.StringIO()):
             opener.return_value.open.return_value = response

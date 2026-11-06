@@ -50,3 +50,7 @@ data/*
 .agents/
 AGENTS.md
 codex-local-chat/
+
+# Local data merge backups and staging
+.merge-backups/
+.merge-publish-*/

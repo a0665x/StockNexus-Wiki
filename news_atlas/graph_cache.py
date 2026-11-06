@@ -86,12 +86,14 @@ def lookup_cached(store, rows, channels=None, relation_settings=None):
     return cached[1] if cached else None
 
 
-def build_cached(store, build, rows, channels=None, relation_settings=None):
+def build_cached(store, build, rows, channels=None, relation_settings=None, include_relations=True):
     """Exact ordered input reuse, with one in-process producer per DB/key.
 
     Futures contain compressed bytes, so every caller gets independent mutable data.
     Disk failures only disable caching; computation errors propagate to all waiters.
     """
+    if not include_relations:
+        return build(rows, channels, relation_settings, include_relations=False)
     from .channels import definitions
     from .relation_settings import settings
     started = time.perf_counter()

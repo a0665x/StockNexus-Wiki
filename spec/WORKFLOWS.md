@@ -1,13 +1,13 @@
 # 標準工作流程
 
-入口：[PROJECT_MAP.md](PROJECT_MAP.md)。以 2026-11-02 的工作區實作為準。
+入口：[PROJECT_MAP.md](PROJECT_MAP.md)。以 2026-11-06 的工作區實作為準。先讀 [協作偏好](ai-dev-experience-preferences.md)，計算定義見 [CALCULATION_METHODS.md](CALCULATION_METHODS.md)。
 
 ## 專案命名與相容性
 
 展示名稱 **StockNexus-Wiki**；GitHub repository slug **stocknexus-wiki**。
 這是文件命名規範，不代表遠端儲存庫已完成改名或推送。
 
-目前保留 `news_atlas/`、`news-atlas` Compose project/image、`data/news-atlas.sqlite3`、
+目前保留 `news_atlas/`、`news-atlas` Compose project/image、`data/graph/<ticker>/news-atlas.sqlite3`、
 `NEWS_ATLAS_DB`、`graphnews.*` localStorage，以及程式內既有 UI 名稱。
 若未來全面改名，需另做容器／資料位置／憑證／瀏覽器偏好遷移；不可全域字串取代後直接部署。
 
@@ -21,7 +21,7 @@
 
 ## 搜尋與更新圖譜
 
-1. 左側輸入 query／ticker、來源、RSS 地區與 UTC 日期；Massive 使用明確 ticker。
+1. 左側先輸入必填 EXCHANGE:SYMBOL 股票識別；自動帶出 symbol 的第二欄查詢字詞可逗號分隔補充，再選來源、RSS 地區與 UTC 日期。
 2. `/api/search` 從各來源 membership 讀取當前查詢的已存新聞，正規化後查完整圖譜快取。
 3. 命中：第一個 `cache` 事件包含節點與 edges。未命中：先送節點，`relations_pending=true`。
 4. 各來源並行檢查新鮮度、補抓缺口並更新 DB；每個完成來源送出 `source` 事件。
@@ -42,7 +42,7 @@
 | 套用失敗／過期回應 | 保留原圖與已套用設定；不宣稱成功 |
 | 刷新後再次搜尋 | 使用同 origin 最後成功保存的偏好；命中圖譜也必須符合這份設定 |
 | 左側進階 edge 分數／探索深度 | 篩選已載入關聯與走訪範圍，不重抓新聞 |
-| 3D render budget | 當頁顯示量；100–2400 的既有選項，每次初始化預設 800；不改後端 edges |
+| 3D render budget | 當頁顯示量；100–2400 的既有選項，未保存時預設 800；已保存工作區沿用選擇，不改後端 edges |
 | 圖內 Search | 本地排名、選 roots；不抓來源或查全 DB |
 
 新使用者沒有保存值才使用 unified 自適應設定；已保存 original/general/custom 不再被舊遷移覆寫。
@@ -66,3 +66,6 @@
 5. 新增 JS 同時檢查靜態路由與版本參數；修改關聯語義提高 graph cache VERSION。
 6. 更新最相關 spec 與 CHANGELOG，事故另記 reference；保留已驗證與未驗證範圍。
 7. 部署後確認唯一 healthy 容器、HTTP 回應與實際版本。提交／推送前確認有效 Git checkout、branch、remote；未推送不可宣稱遠端已更新。
+
+
+2026-11-06：News/Wiki 工作畫面另存於主機 workspace SQLite；新視窗會先恢復清理過的新聞快照及 Wiki 控制值。新聞股票欄必填 EXCHANGE:SYMBOL，位於可編輯逗號查詢字詞之前。Wiki Graph 方法自動從完整 News 範圍採樣與點選時相同的 root tree，直到 Wiki 日期內所有目標被涵蓋；不要求手動點選，繪製上限不裁切工作集合。新設定驗證成功後才取消進行中的舊工作，接續未完成新聞；閒置 Apply 只保存。模型與顯示篩選的草稿不因切頁重設。

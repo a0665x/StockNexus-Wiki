@@ -3,6 +3,7 @@ import bisect
 import datetime as dt
 import hashlib
 import json
+from pathlib import Path
 import math
 import re
 import sqlite3
@@ -57,6 +58,13 @@ def load(store,body,key,now=None):
         with sqlite3.connect(str(store.path)+'.prices.sqlite3',timeout=15) as db:
             db.execute('CREATE TABLE IF NOT EXISTS series (key TEXT PRIMARY KEY, payload TEXT NOT NULL, fetched REAL NOT NULL)')
             cached=db.execute('SELECT payload,fetched FROM series WHERE key=?',(cache_key,)).fetchone()
+            if not cached and hasattr(store,'data_root'):
+                legacy=store.data_root/'graph/_unassigned/news-atlas.sqlite3.prices.sqlite3'
+                if legacy.exists() and legacy!=Path(str(store.path)+'.prices.sqlite3'):
+                    # The key includes the exact ticker/range/method even in older payloads.
+                    with sqlite3.connect(legacy.resolve().as_uri()+'?mode=ro',uri=True) as old:
+                        cached=old.execute('SELECT payload,fetched FROM series WHERE key=?',(cache_key,)).fetchone()
+                    if cached:db.execute('INSERT OR IGNORE INTO series VALUES (?,?,?)',(cache_key,*cached))
             if cached and time.time()-cached[1]<21600:
                 payload=json.loads(cached[0]);result.update(bars=payload['bars'],fetched_at=payload['fetched_at'],cached=True)
             else:
@@ -79,7 +87,7 @@ def load(store,body,key,now=None):
                     if all(v is not None for v in ohlc.values()) and not ohlc['low']<=min(ohlc['open'],close)<=max(ohlc['open'],close)<=ohlc['high']:raise SourceError('format','Invalid OHLC range')
                     if start<=day<=end:bars[day.isoformat()]={'date':day.isoformat(),'close':close,**ohlc}
                 result.update(bars=[bars[k] for k in sorted(bars)],fetched_at=dt.datetime.now(dt.timezone.utc).isoformat())
-                db.execute('INSERT OR REPLACE INTO series VALUES (?,?,?)',(cache_key,json.dumps({'bars':result['bars'],'fetched_at':result['fetched_at']}),time.time()))
+                db.execute('INSERT OR REPLACE INTO series VALUES (?,?,?)',(cache_key,json.dumps({'ticker':ticker,'bars':result['bars'],'fetched_at':result['fetched_at']}),time.time()))
                 db.execute('DELETE FROM series WHERE key NOT IN (SELECT key FROM series ORDER BY fetched DESC LIMIT 64)')
     result['observations']=measurements(rows,result['bars'])
     return result

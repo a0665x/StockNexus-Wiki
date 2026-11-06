@@ -1,6 +1,6 @@
 # StockNexus-Wiki — 專案入口
 
-最後原始碼查核：2026-11-02。這是目前工作目錄的實作地圖，不代表 GitHub main 或正在執行的 server 已同步。
+最後原始碼查核：2026-11-06。這是目前工作目錄的實作地圖，不代表 GitHub main 或正在執行的 server 已同步。
 
 真實新聞搜尋與可解釋關聯圖：Google RSS、Yahoo 地區新聞（經 Google RSS）、Massive → 標準化／規則關聯 → SQLite 快取 → 3D 星系及時間軸。Python 標準函式庫後端、原生 JavaScript 前端，支援 Docker／Compose、無前端建置程序。
 
@@ -8,21 +8,29 @@
 
 ## 新 session 的最短閱讀路徑
 
-1. 先讀本頁與 [標準流程](WORKFLOWS.md)；需要啟動時讀 [RUNTIME.md](RUNTIME.md)。不要先掃描資料庫或大型 vendor bundle。
+1. 先讀本頁、[開發協作偏好](ai-dev-experience-preferences.md) 與 [目前功能狀態](CURRENT_STATE.md)，再讀相關領域。需要操作／啟動時讀 [標準流程](WORKFLOWS.md) 與 [RUNTIME.md](RUNTIME.md)。不要先掃描資料庫或大型 vendor bundle。
 2. 依下表只讀相關 Level 2 文件；再按需要深入 references。
 3. 編輯前回到文件列出的原始碼核對；文件不取代當下程式、測試或使用者指示。
 4. 修改前查看 [變更紀錄](CHANGELOG.md) 及相關事故／避坑紀錄；依 [TESTING.md](TESTING.md) 選擇回歸檢查；有新行為時更新對應 spec。
 
+`project-spec-graph-onboarding` 共用此入口：先確認 Git 現況，再選任務文件與核對原始碼。有 `.codegraph/` 時遵循 CodeGraph-first；否則可使用既有且可用的 Graphify 索引。沒有可用圖時使用範圍限定的 `rg`，不自動建立索引。已知能力缺口見 [文件盤點](references/DOCUMENT_INVENTORY.md)，驗收依據見 [TESTING.md](TESTING.md)。
+
 | 任務／領域 | Level 2 入口 | 優先原始碼 |
 | --- | --- | --- |
-| 操作、設定、刷新、快照、開發交付 | [WORKFLOWS.md](WORKFLOWS.md) | run.sh、server.py、dist/app.js |
+| 計算定義、輸入／顯示範圍、進度與目的 | [CALCULATION_METHODS.md](CALCULATION_METHODS.md) | model.py、exploration.py、price_lens.py、wiki/forest.py |
+| 操作、設定、刷新、快照、開發交付 | [WORKFLOWS.md](WORKFLOWS.md) | run.sh、server.py、dist/app.js、dist/workspace.js、news_atlas/workspace.py |
 | 整體架構、資料流、模組邊界 | [ARCHITECTURE.md](ARCHITECTURE.md) | server.py、news_atlas/、dist/app.js |
 | API key、來源故障、歷史範圍、缺口補抓 | [SOURCES_AND_CACHE.md](SOURCES_AND_CACHE.md) | providers.py、regions.py、search.py、storage.py、graph_cache.py、credentials.py |
-| 標準文章、去重、關聯、分類、快照 | [DATA_MODEL.md](DATA_MODEL.md) | model.py、relation_settings.py、channels.py、snapshots.py、schema/ |
-| 滑鼠、星系、圖內搜尋、面板、輸入保存 | [UI.md](UI.md) | app.js、graph-view.js、interaction.js、glow.js、time-lens.js、explorer-ui.js |
+| 標準文章、去重、關聯、分類、快照 | [DATA_MODEL.md](DATA_MODEL.md) | model.py、graph_payload.py、relation_settings.py、channels.py、snapshots.py、schema/ |
+| 滑鼠、星系、圖內搜尋、面板、輸入保存 | [UI.md](UI.md) | app.js、graph-view.js、interaction.js、glow.js、time-lens.js、explorer-ui.js、floating-resize.js |
 | Swagger、REST、未來 MCP | [API.md](API.md) | server.py、api.py、openapi.py、exploration.py |
 | 本機啟動、手機、重啟、版本不一致 | [RUNTIME.md](RUNTIME.md) | run.sh、scripts/docker_launch.py、scripts/launch.py、server.py、start-tailscale.sh |
 | 驗證與修改風險 | [TESTING.md](TESTING.md) | tests/ |
+| 單股 LLM Wiki、新圖、背景維護與研究設計 | [WIKI_RUNTIME.md](WIKI_RUNTIME.md)／[TEMPORAL_WIKI.md](TEMPORAL_WIKI.md) | news_atlas/wiki/、chat/wiki.mjs、dist/wiki-view.js、dist/wiki-layout.js |
+
+股票分庫與路徑：[GRAPH_STORAGE.md](GRAPH_STORAGE.md)。
+
+跨電腦資料搬移與去重：[DATA_MERGE.md](DATA_MERGE.md)（`merge_data.sh`）。
 
 ## 不可誤解的現況
 
@@ -38,6 +46,10 @@
 - Edge settings 成功套用後保存；圖譜快取必須匹配當前文章與規則。
 
 ## Level 3 與既有文件
+
+- [語系、重連與多視窗教訓](references/lesson-20261106-language-runtime.md)：翻譯責任、晚回應、同來源偏好同步與入口／時序驗證。
+
+- [互動、範圍與交付教訓](references/lesson-20261106-interaction-and-delivery.md)：root 概念演進、狀態耦合、初畫尺寸、手勢、測試本身及在線匯入。
 
 - [references/lesson-20261102-rendering-cache-settings.md](references/lesson-20261102-rendering-cache-settings.md)：WebGL 診斷限制、AAPL 出線延遲、快取／設定與預算避坑。
 
