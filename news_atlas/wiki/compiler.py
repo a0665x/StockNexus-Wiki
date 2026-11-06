@@ -282,6 +282,9 @@ class WikiService:
     def _refresh(self,store):
         cfg=store.config()
         if not (cfg['enabled'] or cfg.get('catch_up')): return
+        # Active jobs already own a frozen universe; rebuild only after they drain.
+        with store.connection() as db:
+            if db.execute("SELECT 1 FROM jobs WHERE status IN ('queued','running')").fetchone():return
         # Only memberships explicitly authorized in preview; no provider calls here.
         if cfg.get('strategy')=='root' and cfg.get('graph_universe'):
             from .forest import prepare
@@ -301,7 +304,7 @@ class WikiService:
         elif cfg.get('catch_up'):
             cfg['catch_up']=False;store.configure(cfg)
 
-    def process(self,store):
+    def process(self,store,max_groups=None):
         with store.connection() as db:
             db.execute('BEGIN IMMEDIATE')
             raw=db.execute("SELECT * FROM jobs WHERE status='queued' ORDER BY created_at LIMIT 1").fetchone()
@@ -313,6 +316,9 @@ class WikiService:
             with store.connection() as db:
                 rows=[json.loads(r[0]) for r in db.execute('SELECT payload FROM articles WHERE id IN (SELECT value FROM json_each(?))',(json.dumps(job['payload']['revisions']),))]
             if job['payload'].get('operation')!='review':rows=store.known(rows)
+            else:
+                with store.connection() as db:reviewed={r[0] for r in db.execute('SELECT revision FROM reviews WHERE job_id=?',(job['id'],))}
+                rows=[a for a in rows if a['revision_id'] not in reviewed]
             forest=job['payload'].get('graph_selection',{})
             if forest.get('mode')=='coverage':
                 from .forest import groups
@@ -321,6 +327,7 @@ class WikiService:
             else:
                 work=((g,meta,g) for g,meta in bounded_groups(batches(rows,job['payload'])));market_rows=rows
             market=cached_market(self.news,store.instrument,market_rows,job['payload'].get('price_horizon',3))
+            completed_groups=0
             for group,group_info,covered in work:
                 article={**group[0],'_evidence':group,'_market':{a['revision_id']:market[a['revision_id']] for a in group},'_group':group_info,'_context_revisions':job['payload'].get('context_revisions')};article['_covered_articles']=covered
                 if forest.get('mode')=='coverage':article['_context_revisions']=[a['revision_id'] for a in group]
@@ -356,6 +363,15 @@ class WikiService:
                     if not store.publish(job,article,output.get('proposal'),context,output.get('usage',{})): return
                     job.pop('repair',None)
                     break
+                # Yield only after an entire tree has committed its coverage. Splitting
+                # earlier would replay already published segments on the next turn.
+                if covered:
+                    completed_groups+=1
+                    if max_groups is not None and completed_groups>=max_groups:
+                        with store.connection() as db:
+                            changed=db.execute("UPDATE jobs SET status=CASE WHEN done>=json_array_length(payload,'$.revisions') THEN 'completed' ELSE 'queued' END,updated_at=? WHERE id=? AND status='running'",(now(),job['id'])).rowcount
+                        if changed:self.wake.set()
+                        return
             with store.connection() as db: db.execute("UPDATE jobs SET status='completed',updated_at=? WHERE id=? AND status='running'",(now(),job['id']))
             if store.config().get('catch_up'):self.wake.set()
             log.info('wiki_job completed instrument=%s job=%s',store.instrument,job['id'])
@@ -367,14 +383,14 @@ class WikiService:
             log.warning('wiki_job failed instrument=%s job=%s error_type=%s',store.instrument,job['id'],type(error).__name__)
         finally: self.active=None
 
-    def tick(self):
+    def tick(self,max_groups=None):
         for store in self.stores():
             if self.stop.is_set(): break
-            self.refresh(store);self.process(store)
+            self.refresh(store);self.process(store,max_groups=max_groups)
 
     def loop(self):
         while not self.stop.is_set():
-            try: self.tick()
+            try: self.tick(max_groups=1)
             except Exception: log.exception('Wiki worker cycle failed')
             self.wake.wait(60);self.wake.clear()
 

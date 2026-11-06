@@ -110,4 +110,22 @@ class ForestTests(unittest.TestCase):
         self.assertEqual(self.store.config()['graph_selection']['mode'],'coverage')
         self.assertEqual(self.service.coverage(self.store)['scope_done'],3)
 
+    def test_fair_scheduler_yields_only_after_all_tree_segments_publish(self):
+        rows=[row(title='Tesla factory production earnings '+str(i),suffix=str(i)) for i in range(15)]
+        for a in rows:a['summary']='Factory evidence. '*650
+        rows.append(row(title='Isolated unrelated court ruling',suffix='isolated'))
+        body=self.body(rows);body['graph_settings']['exploration'].update(branchLimit=10,depth=3,pathMin=0)
+        plan=self.service.plan(body);self.service.start({'plan_id':plan['plan_id']})
+        self.service.tick(max_groups=1)
+        first=len(self.calls)
+        self.assertGreater(first,1,'Large tree must publish all segments before yielding')
+        self.assertEqual(self.store.jobs()[0]['status'],'queued')
+        self.assertEqual(self.service.coverage(self.store)['scope_done'],len(plan['graph_selection']['trees'][0]['targets']))
+        root=self.calls[0]['_group']['root_id']
+        self.assertEqual(first,self.calls[0]['_group']['parts'])
+        for _ in plan['graph_selection']['trees']:self.service.tick(max_groups=1)
+        self.assertFalse(any(a['_group']['root_id']==root for a in self.calls[first:]),'Committed segments must not be replayed')
+        self.assertEqual(self.store.jobs()[0]['status'],'completed')
+        self.assertEqual(self.service.coverage(self.store)['scope_done'],16)
+
 if __name__=='__main__':unittest.main()

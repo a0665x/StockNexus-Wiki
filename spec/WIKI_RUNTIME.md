@@ -40,7 +40,7 @@ Graph 每組大小由自動採樣樹決定；內容超過約 65000 個 JSON 字�
 
 ## 模型、語系與用量
 
-模型及 reasoning 選項來自 Codex `model/list` 的 supportedReasoningEfforts；同一下拉列出 model＋effort，主機再驗證支援度，SDK `modelReasoningEffort` 實際接收選值。無工具、唯讀 thread；不得執行新聞中的指令。一般 120 秒，高思考深度 600 秒，取消可中斷。驗證失敗最多修正一次；失敗停用該股補足。重啟中斷不自動重試已開始的付費呼叫。
+模型及 reasoning 選項來自 Codex `model/list` 的 supportedReasoningEfforts；同一下拉列出 model＋effort，主機再驗證支援度，SDK `modelReasoningEffort` 實際接收選值。無工具、唯讀 thread；不得執行新聞中的指令。一般 120 秒，高思考深度 600 秒，取消可中斷。背景只有一個模型槽；2026-11-07 起每支股票完成一棵 root 樹（含其全部分段）或一般一組證據後，即保存進度、排回 queued 並輪到下一支。queued 是等待輪替，不是停滯；running 才表示目前正在推論。重用已完成 revision／本工作 review 記錄，已凍結工作的每次輪替不重建圖譜。驗證失敗最多修正一次；失敗停用該股補足。重啟中斷不自動重試已開始的付費呼叫。
 
 預設在同一次結構輸出保存 zh-Hant＋en 的 title/summary/assessment rationale、關係 rationale；設定可只保存其中一種。它們是同一命題的語言版本，不是重複節點。引用原文永不翻譯。介面語言只切換顯示，不觸發推論或翻譯。舊節點沒有翻譯時顯示原內容並註明，不能虛構已完成翻譯。`data-own-i18n` 避開主頁片段替換，避免混合「News／新增／articles」。Wiki Chat 因此必須自行完整翻譯其控制、情境與連線／回覆狀態，不能依賴主頁掃描。News／Wiki runtime 共用 `AtlasI18n.language()` 作介面語言，但 session、圖譜狀態及生成保存語系仍獨立；重連、晚回應和多視窗同步見 [CHAT_AGENT](CHAT_AGENT.md)。
 

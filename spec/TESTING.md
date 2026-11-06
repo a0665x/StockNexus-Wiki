@@ -206,3 +206,7 @@ PYTHONPATH=.:tests python tests/browser_chat_language.py
 正式 8765 已更新至映像 `f0e6c8d97f93`；備份 `data/private/language-runtime-20261106-174752`。重啟前後 22 張 Wiki 表內容一致，五個修改資產與本地逐位元相同，Chat bridge ready、容器 healthy。部署時活動中的 GOOGL 按原設定接續，TSLA 維持停止；使用者之後的設定變更仍可正常生效。
 
 正式服務使用兩個獨立 URL 分頁驗證英文冷啟動、實際 Chat 連線／sync、雙向語言切換、reload 後重新連線及 News／Wiki 返回；所有 UI 斷言通過且無 JS 錯誤。QA 在導覽前攔截 workspace 寫入與模型／來源／設定變更，不送出模型 turn。第一次正式測試沿用小 fixture 的限時等待，未等完整 Wiki 初始化便逾時；改為等待 `show()` 真正完成後再檢查，不改產品結果斷言。正式服務進行中的推論不是 QA 觸發，資料可因使用者既有工作持續更新。
+
+## 多股票 Wiki 輪替
+
+`python3 -m unittest discover -s tests -p test_wiki_fairness.py -v`：兩支股票都有三批待辦時，每輪各處理一批，再輪替；所有文章最終各呼叫一次。重審同工作已完成文章也不重送。`test_wiki_forest.py` 驗證大樹全部分段發布後才讓出，完成覆蓋與去重維持一致。測試使用隔離 DB／模型回覆，不代表正式模型品質或所有來源歷史完整。
