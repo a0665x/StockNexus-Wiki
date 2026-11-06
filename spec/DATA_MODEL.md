@@ -26,13 +26,15 @@ summary 是來源 description，不是全文。language 可為 null。不能把�
 
 Store 每次連線有 transaction context、WAL、15 秒 SQLite timeout。資料庫自動 CREATE IF NOT EXISTS；不能把目前初始化流程當作任意舊 schema 的完整遷移框架。
 
-## 三種不同的狀態
+## 不同生命週期的狀態
 
 | 狀態 | 保存位置 | 語義 |
 | --- | --- | --- |
 | 搜尋草稿 | 瀏覽器 `graphnews.searchDraft` | 尚未送出也保存的左側輸入 |
 | 取得快取 | SQLite articles/memberships/coverage | 可重用的真實來源內容與窗口知識 |
 | 手動快照 | SQLite snapshot_* | 使用者當時文章、關聯、位置及顯示設定 |
+| 工作畫面 | private/workspace.sqlite3 的 news/wiki payload | 白名單化的圖譜與獨立控制值；新瀏覽器恢復，不是查詢覆蓋證明 |
+| Wiki 知識／工作 | llm_wiki/<ticker>/wiki.sqlite3 | 引用、版本、模型工作與已完成範圍；不由瀏覽器顯示預算決定 |
 
 快照的 search 是歷史 metadata，不能載入後覆寫左側草稿。還原時保留凍結 channel 定義、原順序、位置、來源選擇、探索／光暈設定、focus roots 及 time_focus（enabled/date/peak/width/profile?；profile 為 129 個 1–12 的有限數值，覆蓋 Gaussian；舊資料缺 peak/width 時使用 2/.12）。保存來源／edge 門檻篩選後的完整圖，時間／分類只存顯示設定，不刪除暫時隱藏的 root 或中間路徑。舊快照沒有 time_focus 時關閉日期大小效果。舊快照缺欄位使用相容預設；不是每個新 UI preference 都寫入快照。
 

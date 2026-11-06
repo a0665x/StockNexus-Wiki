@@ -18,3 +18,8 @@
 @container (max-height: 540px){
  .docked-tool #timeBell{height:56px}.docked-tool .time-bell-readout{display:flex}.docked-tool .time-bell-readout>:not(#timeCurvePoint){display:none}.docked-tool #priceChart{height:125px}.docked-tool #priceLegend{display:none}.docked-tool #priceChartSummary{font-size:10px;line-height:1.3;margin:3px 0}.docked-tool #timeFocusTicks{height:16px}.docked-tool .time-focus-ends{font-size:9px}.docked-tool #priceSettings>summary{padding:2px 0}.docked-tool #priceChartPanel{margin-top:5px;padding-top:4px}.docked-tool .floating-heading{flex-wrap:nowrap!important}.docked-tool .panel-title{font-size:10px!important}.docked-tool #priceHover{font-size:9px;line-height:1.2;margin:0}
 }
+
+/* Send action shares the message field, preserving submit and keyboard semantics. */
+.chat-compose{position:relative;flex-shrink:0}.chat-compose textarea{box-sizing:border-box;padding:12px 52px 12px 12px;min-height:84px;margin:0}
+.chat-compose .chat-send{position:absolute;right:6px;bottom:6px;width:36px;height:36px;min-height:36px;padding:8px;border:0;border-radius:8px;display:grid;place-items:center;background:transparent;color:var(--accent);cursor:pointer}
+.chat-send svg{width:22px;height:22px;pointer-events:none}.chat-send:hover:not(:disabled){background:#77e8c324}.chat-send:focus-visible{outline:2px solid var(--accent);outline-offset:0}.chat-send:disabled{opacity:.35;cursor:default}

@@ -104,7 +104,7 @@
       }
       const request=new AbortController();abort=request;const timeout=setTimeout(()=>request.abort(),300000);let complete=false;
       try{
-        const response=await fetch('/api/graph/build',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({source_graphs,relation_settings:cfg}),signal:request.signal});
+        const response=await fetch('/api/graph/build',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ticker:hooks.ticker?.()||'',source_graphs,relation_settings:cfg}),signal:request.signal});
         const result=await response.json();if(!response.ok)throw Error(result.error||`HTTP ${response.status}`);
         if(mine!==ticket||hooks.get()!==base)return;
         if(!result.relation_settings||!same(result.relation_settings,cfg))throw Error(say('請重啟服務後重試。','Restart the server and retry.'));

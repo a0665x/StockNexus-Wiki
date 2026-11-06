@@ -15,6 +15,13 @@ def normalize_request(body, today=None):
         raise ValueError('搜尋內容必須是 JSON object')
     today = today or dt.datetime.now(dt.timezone.utc).date()
     query, ticker = str(body.get('query', '')).strip(), str(body.get('ticker', '')).strip().upper()
+    ident=body.get('instrument','')
+    if ':' in ticker:ident=ticker
+    if ident:
+        from .wiki.store import instrument
+        ident=instrument(str(ident).upper());symbol=ident.split(':',1)[1]
+        if ticker and ':' not in ticker and ticker!=symbol:raise ValueError('股票識別不一致')
+        ticker=symbol
     if len(query) > 200 or len(ticker) > 20:
         raise ValueError('搜尋文字太長')
     if not query:
@@ -36,7 +43,7 @@ def normalize_request(body, today=None):
         raise ValueError('force_refresh 必須是布林值')
     if not isinstance(body.get('defer_relations', False), bool):
         raise ValueError('defer_relations 必須是布林值')
-    return {'defer_relations':body.get('defer_relations',False),'relation_settings':relation_settings(body.get('relation_settings')),'rss_region':validate_region(body.get('rss_region')),'query': query, 'ticker': ticker, 'sources': sources, 'start': start.isoformat(),
+    return {'instrument':ident,'defer_relations':body.get('defer_relations',False),'relation_settings':relation_settings(body.get('relation_settings')),'rss_region':validate_region(body.get('rss_region')),'query': query, 'ticker': ticker, 'sources': sources, 'start': start.isoformat(),
             'end': (last + dt.timedelta(days=1)).isoformat(), 'display_end': last.isoformat(),
             'force_refresh': body.get('force_refresh', False)}
 
@@ -49,7 +56,9 @@ def query_key(provider, term, rss_region=None):
     return ('rss-v2:zh-TW:' if provider == 'google' else 'rss-v3:en-US:' if provider == 'yahoo' else 'massive-v2:') + (term.strip() if provider in ('google', 'yahoo') else term.upper())
 
 def search_source(source, query, ticker, key, start=None, end=None, store=None, force_refresh=False, progress=lambda _: None, rss_region=None):
-    store = store or Store()
+    if store is None:
+        from .graph_storage import GraphRepository
+        store=GraphRepository().for_ticker(ticker)
     today = dt.datetime.now(dt.timezone.utc).date()
     start = start or (today - dt.timedelta(days=6)).isoformat()
     end = end or (today + dt.timedelta(days=1)).isoformat()

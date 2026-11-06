@@ -45,7 +45,7 @@ def generate(destination, omit=None):
     try:
         html, assets = served_document(harness.request, omit)
         replies = {}
-        for url in ['/api/status', '/api/channels', '/api/snapshots', '/schema/news-atlas.schema.json']:
+        for url in ['/api/workspace', '/api/status', '/api/channels', '/api/snapshots', '/schema/news-atlas.schema.json']:
             _, content = harness.request('GET', url)
             replies[url] = json.loads(content)
         with patch.object(server, 'search_events', return_value=iter([{'type': 'done', 'elapsed': 0, 'db': harness.store.stats()}])):

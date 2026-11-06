@@ -10,6 +10,7 @@ import fcntl
 import json
 import os
 from pathlib import Path
+import shlex
 import shutil
 import subprocess
 import sys
@@ -237,8 +238,20 @@ def up(args):
             except (OSError,RuntimeError) as error:
                 print('Tailscale setup failed: '+str(error)+'\nLocal container is healthy. URL: '+LOCAL,flush=True)
                 return 1
+        print(merge_help(data),flush=True)
         print('Running in background. Status: ./run.sh status | Logs: ./run.sh logs | Stop: ./run.sh down',flush=True)
     return 0
+
+
+
+def merge_help(data):
+    command=shlex.quote(str(ROOT/'merge_data.sh'))+' --from /media/usb/data --to '+shlex.quote(str(data))
+    return ('Import USB data from another terminal (replace /media/usb/data):\n'
+            '  Preview: '+command+' --dry-run\n'
+            '  Merge:   '+command+'\n'
+            'Keep this web service open; pause Wiki work/watchers for stocks being merged.\n'
+            'The Saved Wikis menu refreshes automatically within 6 seconds; choose an imported stock to view it.\n'
+            'Details: spec/DATA_MERGE.md')
 
 
 def main(argv=None):

@@ -57,7 +57,7 @@ flowchart LR
 | [dist/date-range.js](../dist/date-range.js) | 自訂日期、快速月份與草稿序列化 |
 | [dist/i18n.js](../dist/i18n.js) | 繁中／英文介面，不翻譯 `.raw` 新聞或證據 |
 
-內附 3d-force-graph 與 Swagger vendor。優先讀 adapter，不要廣泛搜尋 minified bundle。不是 React／Next／npm 專案。
+內附 3d-force-graph 與 Swagger vendor。優先讀 adapter，不要廣泛搜尋 minified bundle。前端不是 React／Next，也無 npm build；Chat 主機橋接使用 Node／npm 相依套件。
 
 ## 改動邊界
 
@@ -71,3 +71,13 @@ flowchart LR
 與新聞 DB 分開保存；key、預算、失效與計時語義見 SOURCES_AND_CACHE。
 
 首事件、來源更新與最終建圖的順序以 [WORKFLOWS.md](WORKFLOWS.md) 為準。快取加速不等於省略資料新鮮度檢查；整體圖譜快取和瀏覽器物理排列是不同責任。
+
+## Wiki、工作區與在線合併
+
+- `graph_storage.py` 路由股票新聞分庫；`wiki/compiler.py` 管理預覽、設定、排程／取消；`wiki/store.py` 驗證與原子發布。`wiki/forest.py` 從完整 News 範圍建立覆蓋樹，`evidence.py` 分組／分段。知識驗證與畫面密度無關。
+- `workspace.py`／`dist/workspace.js` 保存白名單化 News/Wiki 工作畫面；`wiki-view.js` 保留自己的資料、選取、Chat 及設定，`wiki-layout.js` 管理分隔幾何。
+- `floating-resize.js` 只改時間／來源工具的浮動幾何，`explorer-ui.js` 協調位置／碰撞，`docking.js` 管理停靠分割；不重新建立 graphData。
+- `chat/service.mjs` 使用主機登入橋接模型，`chat/wiki.mjs` 編譯具引用約束的 Wiki 提案；瀏覽器 Chat 是獨立 session。
+- `scripts/merge_data.py` 保留運行中服務的既有 SQLite 檔案，以寫入鎖與原地交易匯入；新庫排他發布。Wiki status 重新發現目錄，前端定期刷新選項。完整邊界見 [DATA_MERGE](DATA_MERGE.md)。
+
+目前功能總表見 [CURRENT_STATE](CURRENT_STATE.md)，公式／完成條件見 [CALCULATION_METHODS](CALCULATION_METHODS.md)。

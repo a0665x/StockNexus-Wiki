@@ -231,6 +231,40 @@
           "minLength": 1
         }
       }
+    },
+    "translations": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "zh-Hant": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "rationale"
+          ],
+          "properties": {
+            "rationale": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1500
+            }
+          }
+        },
+        "en": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "rationale"
+          ],
+          "properties": {
+            "rationale": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1500
+            }
+          }
+        }
+      }
     }
   },
   "$defs": {
@@ -611,33 +645,58 @@
         }
       },
       "then": {
-        "properties": {
-          "source": {
+        "anyOf": [
+          {
             "properties": {
-              "kind": {
-                "enum": [
-                  "Claim",
-                  "Event",
-                  "Thesis"
-                ]
+              "source": {
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "Claim",
+                      "Event",
+                      "Thesis"
+                    ]
+                  }
+                }
+              },
+              "target": {
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "Claim",
+                      "Event",
+                      "Thesis"
+                    ]
+                  }
+                }
+              },
+              "evidence_refs": {
+                "minItems": 1
               }
             }
           },
-          "target": {
+          {
             "properties": {
-              "kind": {
-                "enum": [
-                  "Claim",
-                  "Event",
-                  "Thesis"
-                ]
+              "source": {
+                "properties": {
+                  "kind": {
+                    "const": "ArticleRevision"
+                  }
+                }
+              },
+              "target": {
+                "properties": {
+                  "kind": {
+                    "const": "ArticleRevision"
+                  }
+                }
+              },
+              "evidence_refs": {
+                "minItems": 2
               }
             }
-          },
-          "evidence_refs": {
-            "minItems": 1
           }
-        }
+        ]
       }
     },
     {

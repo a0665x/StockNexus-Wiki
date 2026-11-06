@@ -172,7 +172,7 @@ def validate_snapshot(body):
         raise ValueError('搜尋資訊格式錯誤')
     rss_region=validate_region(search.get('rss_region'))
     # Never persist credentials, request headers or arbitrary form fields.
-    search = {k: str(search[k])[:200] for k in ('query','ticker','start','end') if k in search}
+    search = {k: str(search[k])[:200] for k in ('query','ticker','instrument','start','end') if k in search}
     if rss_region is not None:search['rss_region']=rss_region
     return {'name': str(body.get('name') or search.get('query') or search.get('ticker') or '新聞圖譜')[:120],
             'search': search, 'view': {'selected_id':selected_id,'highlight_mode':highlight_mode,'graph_channel':graph_channel,'relation_views':relation_views,'render_budget':render_budget,'relation_cache_version':cache_version,'relation_scope_sources':scope_sources,'relation_scope':relation_scope,'relation_scope_ids':scope_ids,'relations_pending':pending,'sources': sources, 'separate': view['separate'], 'positions': positions, 'mode':mode, 'channel_filter':channel_filter, 'cutoff':cutoff, 'timeline_zoom':zoom, 'channel_definitions':frozen_defs, 'timeline_style':timeline_style, 'exploration':exploration, 'glow':normalized_glow, 'focus':focus, 'time_focus':time_focus, 'price_focus':validate_price_focus(view.get('price_focus'),valid_view_ids), 'relation_settings':relation_settings(view.get('relation_settings'))},

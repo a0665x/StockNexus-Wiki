@@ -6,6 +6,8 @@ import importlib.metadata
 import json
 from pathlib import Path
 import sqlite3
+import sys
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 
 
 def audit(path, sample_size=30):
@@ -66,8 +68,14 @@ def audit(path, sample_size=30):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--db', type=Path, default=Path(__file__).resolve().parents[1] / 'data/news-atlas.sqlite3')
+    parser.add_argument('--ticker', help='Read data/graph/<ticker> instead of unassigned')
     parser.add_argument('--sample-size', type=int, default=30)
     args = parser.parse_args()
     if not 1 <= args.sample_size <= 100:
         parser.error('sample-size must be between 1 and 100 per provider')
+    if not args.db.exists():
+        symbol=(args.ticker or '_unassigned').upper() if args.ticker else '_unassigned'
+        from news_atlas.graph_storage import ticker_name
+        if args.ticker:symbol=ticker_name(args.ticker)
+        args.db=args.db.parent/'graph'/symbol/'news-atlas.sqlite3'
     print(json.dumps(audit(args.db, args.sample_size), ensure_ascii=False, indent=2))

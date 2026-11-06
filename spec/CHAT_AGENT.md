@@ -16,7 +16,7 @@ handlers → acknowledgement with updated state. The host socket is
 
 `chat/service.mjs` owns bounded browser sessions, a thread per conversation, actual
 SDK events, cancellation, disconnect handling and a 10-minute turn timeout.
-`chat/mcp.mjs` exposes get_state, read_news, read_edges and act. These are real MCP
+`chat/mcp.mjs` exposes get_state, read_news, read_edges, read_wiki and act. These are real MCP
 tools, not OpenAPI annotations. The browser proxy does not expose the tool route.
 
 ## Start and stop
@@ -101,3 +101,31 @@ execution; this integration explicitly approves only its four bounded MCP tools.
 ## Separate Wiki compiler (2026-11-05)
 
 The same private host process now also serves a tool-free structured-output Wiki compiler. Its `/wiki/*` socket routes are not exposed through `/api/chat/*`; the separate Python Wiki API controls plans, jobs, citations and per-instrument persistence. Chat keeps its existing localhost-only boundary. See [WIKI_RUNTIME](WIKI_RUNTIME.md) for the opt-in continuous compiler and explicit trusted-origin setting.
+
+## 2026-11-06 聊天訊息操作
+
+整合頁的 assistant 訊息不附逐則複製按鈕；文字仍可選取，原始來源連結仍可開啟。模型的中間說明與最終回答均沿用真實事件，MCP 決策／操作／回報流程不受影響。獨立 3210 範例不屬於本次 UI 修改。
+
+Wiki Chat uses a separately mounted widget, session and runtime. `read_wiki` is paginated (maximum 20 nodes) and returns interpretations, citations and histories for the current stock/version/date scope. It rejects a News surface. Wiki actions expose only visible type/relation/category/version controls and node selection; version changes await the actual load before acknowledging. News `AtlasRuntime` stays mounted and unchanged. The compiler and chat discussion remain separate model workflows.
+
+News 與 Wiki 共用的聊天輸入採文字框內右下角紙飛機 submit 圖示，保留中英文 aria-label／title 與鍵盤送出。空白及回覆中停用；移除原本獨立的全寬送出列。訊息與模型工具流程不變。
+
+## UI language ownership and lifecycle
+
+`AtlasI18n` owns the UI language. Both News and Wiki runtime contexts include
+`language`; sessions, selections and datasets remain separate. `chat-panel.js`
+owns all of its UI labels and keeps canonical status plus parameters, rendering
+with the current language on every async update and `atlas-language` event.
+Context cards use exact templates, then insert data. The global DOM translator
+skips these owned regions and raw messages. User input, model replies and citation
+labels remain original; only generated source-link labels and known UI/error
+messages are translated. Unknown diagnostic details stay verbatim.
+
+Same-origin tabs in the same browser profile receive localStorage changes through
+the same update path as the language picker. Different origins/profiles do not
+share this preference; host workspace recovery is a separate mechanism. A late
+connect, sync or stream callback must not restore an old locale. Cancellation
+acknowledgement must not overwrite a completed/stopped stream status.
+
+Regression: [browser_chat_language.py](../tests/browser_chat_language.py);
+causes and test boundaries: [language runtime incident](references/lesson-20261106-language-runtime.md).

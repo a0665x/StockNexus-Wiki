@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 86" role="img" aria-labelledby="title desc">
+<title id="title">Knowledge extraction</title><desc id="desc">Structured evidence passes through a scan into linked knowledge nodes.</desc>
+<g id="base" fill="none" stroke-linejoin="round">
+ <path d="M8 26V18h8M8 62v8h8M82 18h6v8M88 62v8h-6" stroke="#3d5a6d" stroke-width="1"/>
+ <path d="M13 29h29v34H13zM17 24h29v34H17z" fill="#102331" stroke="#466477" stroke-width="1.2"/>
+ <rect x="21" y="19" width="29" height="34" rx="1.5" fill="#122b38" stroke="#8ab3c3" stroke-width="1.2"/>
+ <path d="M26 27h18M26 32h13M26 37h18M26 42h9M26 47h15" stroke="#577e8f" stroke-width="1.2"/>
+ <path d="M51 36h8l8-11h12M51 43h14l9 2M51 49h8l9 14h11M74 45l5-20M74 45l5 18" stroke="#42697a" stroke-width="1"/>
+ <g fill="#102331" stroke="#83c9c2" stroke-width="1.4"><circle cx="79" cy="25" r="3.2"/><circle cx="74" cy="45" r="4.6"/><circle cx="79" cy="63" r="3.2"/></g>
+ <path d="M23 74h4m4 0h4m4 0h4m4 0h4m4 0h4" stroke="#45697b" stroke-width="1.5"/>
+</g>
+<g id="scan"><path d="M19 23h33" stroke="#79e3c2" stroke-width="1.4"/><path d="M22 25h27" stroke="#79e3c2" stroke-opacity=".2" stroke-width="3"/></g>
+<g id="signal"><circle cx="74" cy="45" r="2" fill="#d7bc86"/><circle cx="74" cy="45" r="8" fill="none" stroke="#83c9c2" stroke-opacity=".25" stroke-width=".8"/></g>
+</svg>

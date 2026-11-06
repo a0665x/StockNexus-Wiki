@@ -15,7 +15,7 @@ class ProgressiveSearchTests(unittest.TestCase):
             store.save('google',query_key('google','test'),[article('google','Test','https://example.test/old','2025-12-31T00:00:00Z')],[])
             req=normalize_request({'query':'test','sources':['google'],'start':'2025-12-31','end':'2026-01-01'},today=dt.date(2026,11,2))
             stream=server.search_events(req,'',store)
-            with patch.object(server,'build_relations',side_effect=AssertionError('Relation calculation delayed the first visible news')):
+            with patch('news_atlas.graph_payload.build_relations',side_effect=AssertionError('Relation calculation delayed the first visible news')):
                 first=next(stream)
             self.assertEqual(first['type'],'cache')
             self.assertEqual(len(first['graph']['articles']),1)
@@ -49,7 +49,7 @@ class ProgressiveSearchTests(unittest.TestCase):
             store=Store(Path(folder)/'fixture.sqlite3')
             req=normalize_request({'query':'test','sources':['google'],'start':'2026-01-01','end':'2026-01-02'},today=dt.date(2026,11,2))
             rows=[article('google','Test','https://example.test/a','2026-01-01T00:00:00Z')]
-            with patch.object(server,'search_source',return_value={'source':'google','articles':rows}),patch.object(server,'build_relations',side_effect=RuntimeError('controlled failure')):
+            with patch.object(server,'search_source',return_value={'source':'google','articles':rows}),patch('news_atlas.graph_payload.build_relations',side_effect=RuntimeError('controlled failure')):
                 events=list(server.search_events(req,'',store))
             self.assertEqual(next(e for e in events if e['type']=='source')['graph']['total_articles'],1)
             self.assertEqual(events[-2]['type'],'graph_error')
@@ -65,7 +65,7 @@ class ProgressiveSearchTests(unittest.TestCase):
             req=normalize_request({'query':'test','sources':['google'],'start':'2026-01-01','end':'2026-01-02'},today=dt.date(2026,11,2))
             normalized=deduplicate(store.read('google',query_key('google','test'),req['start'],req['end']))
             warm=build_cached(store,server.graph_payload,normalized,store.list_channels(),req['relation_settings'])
-            with patch.object(server,'search_source',return_value={'source':'google','articles':normalized}) as provider,patch.object(server,'build_relations',side_effect=AssertionError('warm edges recomputed')):
+            with patch.object(server,'search_source',return_value={'source':'google','articles':normalized}) as provider,patch('news_atlas.graph_payload.build_relations',side_effect=AssertionError('warm edges recomputed')):
                 stream=server.search_events(req,'',store)
                 first=next(stream)
                 self.assertEqual(first['graph'],warm)

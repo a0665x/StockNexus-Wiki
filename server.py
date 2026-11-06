@@ -7,7 +7,6 @@ import json
 import os
 import queue
 import signal
-import itertools
 import functools
 import logging
 import time
@@ -15,13 +14,15 @@ import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from news_atlas.model import SCHEMA_VERSION, article, clean, timestamp, deduplicate, build_relations
+from news_atlas.model import SCHEMA_VERSION, article, clean, timestamp, deduplicate
 from news_atlas.search import normalize_request, query_key, search_source
 from news_atlas.storage import Store
+from news_atlas.graph_storage import GraphRepository, select as graph_store
 from news_atlas import api, credentials, chat_proxy, price_lens
 from news_atlas.graph_cache import build_cached, lookup_cached
+from news_atlas.graph_payload import graph_payload
 from news_atlas.openapi import specification
-from news_atlas.channels import definitions, annotate, classify, version as channel_version
+from news_atlas.channels import classify, version as channel_version
 
 cache_logger=logging.getLogger('news_atlas.graph_cache')
 cache_logger.setLevel(logging.INFO)
@@ -30,42 +31,6 @@ if not cache_logger.handlers:
 
 ROOT = Path(__file__).resolve().parent
 
-
-def graph_payload(rows, channels=None, relation_settings=None, include_relations=True):
-    from news_atlas.relation_settings import settings
-    cfg=settings(relation_settings)
-    stage_times={}
-    def relations_for(label, subset, cross_only=False):
-        tick=time.perf_counter()
-        result=build_relations(subset,cross_only=cross_only,relation_settings=cfg)
-        stage_times[label]=round((time.perf_counter()-tick)*1000,2)
-        return result
-    channels = channels or definitions()
-    all_rows = annotate(deduplicate(rows), channels)
-    shown = all_rows
-    source_graphs = {}
-    for provider in ('google', 'yahoo', 'massive'):
-        own = annotate(deduplicate([r for r in rows if r['source']['provider'] == provider]), channels)
-        subset = own
-        source_graphs[provider] = {'articles': subset, 'relations': relations_for(provider,subset) if include_relations else [], 'total_articles': len(own)}
-    # Separate cross-source budgets preserve all existing within-source relations.
-    cross = {}
-    for left, right in itertools.combinations(source_graphs,2):
-        a,b = source_graphs[left]['articles'],source_graphs[right]['articles']
-        if not include_relations or not a or not b:
-            continue
-        candidates=deduplicate(a+b)
-        for edge in relations_for(left+'_'+right,candidates,True):
-            cross[tuple(sorted((edge['source'],edge['target'])))]={**edge,'cross_sources':[left,right]}
-    combined=relations_for('combined',shown) if include_relations else []
-    if include_relations:
-        cache_logger.info('graph_compute_ms %s',json.dumps(stage_times))
-    return {'schema_version': SCHEMA_VERSION, 'articles': shown, 'relations': combined,
-            'source_graphs': source_graphs, 'cross_relations': list(cross.values()),
-            'channel_definitions': channels, 'channel_version': channel_version(channels),
-            'total_articles': len(all_rows), 'display_limit': None,
-            'relation_settings': cfg, 'relations_pending': not include_relations,
-            'relation_note': '規則關聯並非因果；分數為排序用啟發式指標，不是機率。'}
 
 def retain_known_edges(pending, previous):
     """Keep provisional evidence only for unchanged endpoints while fresh rules run."""
@@ -84,6 +49,7 @@ def retain_known_edges(pending, previous):
 
 
 def search_events(request, key, store):
+    store=store.for_query(request) if isinstance(store,GraphRepository) else store
     start_time = time.monotonic()
     by_source = {}
     cfg=request.get('relation_settings')
@@ -165,6 +131,9 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_GET(self):
+        if self.path=='/api/workspace':
+            from news_atlas.workspace import handle
+            handle(self);return
         if self.path.startswith('/api/wiki/'):
             from news_atlas.wiki.http import handle
             handle(self);return
@@ -182,8 +151,10 @@ class Handler(BaseHTTPRequestHandler):
             ident=path.rsplit('/',1)[-1]
             if not re.fullmatch(r'[a-f0-9]{24}',ident):
                 self.json_response(400,{'error':'文章 ID 必須是標準 24 字元 ID'});return
-            with self.store.connection() as db:
-                rows=db.execute('SELECT payload FROM articles WHERE id=? ORDER BY provider',(ident,)).fetchall()
+            if isinstance(self.store,GraphRepository):rows=self.store.article_rows(ident)
+            else:
+                with self.store.connection() as db:
+                    rows=db.execute('SELECT payload FROM articles WHERE id=? ORDER BY provider',(ident,)).fetchall()
             self.json_response(200 if rows else 404,{'articles':[json.loads(r['payload']) for r in rows]} if rows else {'error':'文章不存在'});return
         if path == '/api/status':
             self.json_response(200, {'schema_version': SCHEMA_VERSION, 'db': self.store.stats(), 'massive_configured': bool(credentials.load_key(self.store.path) or os.environ.get('MASSIVE_API_KEY'))})
@@ -199,7 +170,7 @@ class Handler(BaseHTTPRequestHandler):
             saved = self.store.load_snapshot(path.rsplit('/',1)[-1])
             self.json_response(200 if saved else 404, saved or {'error':'快照不存在'})
             return
-        files = {'/wiki-view.js': ('dist/wiki-view.js','text/javascript; charset=utf-8'), '/wiki-view.css': ('dist/wiki-view.css','text/css; charset=utf-8'), '/view-relations.js': ('dist/view-relations.js','text/javascript; charset=utf-8'), '/price-chart.js': ('dist/price-chart.js','text/javascript; charset=utf-8'), '/docking.js': ('dist/docking.js','text/javascript; charset=utf-8'), '/price-lens.js': ('dist/price-lens.js','text/javascript; charset=utf-8'), '/chat-panel.js': ('dist/chat-panel.js','text/javascript; charset=utf-8'), '/chat-panel.css': ('dist/chat-panel.css','text/css; charset=utf-8'), '/relation-settings.js': ('dist/relation-settings.js','text/javascript; charset=utf-8'), '/time-lens.js': ('dist/time-lens.js','text/javascript; charset=utf-8'), '/docs': ('dist/docs.html','text/html; charset=utf-8'), '/docs/': ('dist/docs.html','text/html; charset=utf-8'), '/vendor/swagger-ui-bundle.js': ('dist/vendor/swagger-ui-bundle.js','text/javascript; charset=utf-8'), '/vendor/swagger-ui.css': ('dist/vendor/swagger-ui.css','text/css; charset=utf-8'), '/interaction.js': ('dist/interaction.js','text/javascript; charset=utf-8'), '/date-range.js': ('dist/date-range.js','text/javascript; charset=utf-8'), '/glow.js': ('dist/glow.js','text/javascript; charset=utf-8'), '/i18n.js': ('dist/i18n.js','text/javascript; charset=utf-8'), '/explorer-ui.js': ('dist/explorer-ui.js','text/javascript; charset=utf-8'), '/schema/news-atlas.schema.json': ('schema/news-atlas.schema.json','application/json; charset=utf-8'), '/': ('dist/index.html', 'text/html; charset=utf-8'), '/3d-force-graph.min.js': ('dist/3d-force-graph.min.js', 'text/javascript; charset=utf-8'), '/app.js': ('dist/app.js', 'text/javascript; charset=utf-8'), '/graph-view.js': ('dist/graph-view.js', 'text/javascript; charset=utf-8'), '/timeline.js': ('dist/timeline.js', 'text/javascript; charset=utf-8')}
+        files = {'/floating-resize.js': ('dist/floating-resize.js','text/javascript; charset=utf-8'), '/knowledge-mining.svg': ('dist/knowledge-mining.svg','image/svg+xml'), '/wiki-layout.js': ('dist/wiki-layout.js','text/javascript; charset=utf-8'), '/workspace.js': ('dist/workspace.js','text/javascript; charset=utf-8'), '/stocknexus-wiki.png': ('dist/stocknexus-wiki.png','image/png'), '/wiki-view.js': ('dist/wiki-view.js','text/javascript; charset=utf-8'), '/wiki-view.css': ('dist/wiki-view.css','text/css; charset=utf-8'), '/view-relations.js': ('dist/view-relations.js','text/javascript; charset=utf-8'), '/price-chart.js': ('dist/price-chart.js','text/javascript; charset=utf-8'), '/docking.js': ('dist/docking.js','text/javascript; charset=utf-8'), '/price-lens.js': ('dist/price-lens.js','text/javascript; charset=utf-8'), '/chat-panel.js': ('dist/chat-panel.js','text/javascript; charset=utf-8'), '/chat-panel.css': ('dist/chat-panel.css','text/css; charset=utf-8'), '/relation-settings.js': ('dist/relation-settings.js','text/javascript; charset=utf-8'), '/time-lens.js': ('dist/time-lens.js','text/javascript; charset=utf-8'), '/docs': ('dist/docs.html','text/html; charset=utf-8'), '/docs/': ('dist/docs.html','text/html; charset=utf-8'), '/vendor/swagger-ui-bundle.js': ('dist/vendor/swagger-ui-bundle.js','text/javascript; charset=utf-8'), '/vendor/swagger-ui.css': ('dist/vendor/swagger-ui.css','text/css; charset=utf-8'), '/interaction.js': ('dist/interaction.js','text/javascript; charset=utf-8'), '/date-range.js': ('dist/date-range.js','text/javascript; charset=utf-8'), '/glow.js': ('dist/glow.js','text/javascript; charset=utf-8'), '/i18n.js': ('dist/i18n.js','text/javascript; charset=utf-8'), '/explorer-ui.js': ('dist/explorer-ui.js','text/javascript; charset=utf-8'), '/schema/news-atlas.schema.json': ('schema/news-atlas.schema.json','application/json; charset=utf-8'), '/': ('dist/index.html', 'text/html; charset=utf-8'), '/3d-force-graph.min.js': ('dist/3d-force-graph.min.js', 'text/javascript; charset=utf-8'), '/app.js': ('dist/app.js', 'text/javascript; charset=utf-8'), '/graph-view.js': ('dist/graph-view.js', 'text/javascript; charset=utf-8'), '/timeline.js': ('dist/timeline.js', 'text/javascript; charset=utf-8')}
         if path not in files:
             self.send_error(404)
             return
@@ -226,6 +197,9 @@ class Handler(BaseHTTPRequestHandler):
         self.json_response(200 if removed else 404, {'channels':self.store.list_channels()} if removed else {'error':'自訂 channel 不存在'})
 
     def do_POST(self):
+        if self.path=='/api/workspace':
+            from news_atlas.workspace import handle
+            handle(self);return
         if self.path.startswith('/api/wiki/'):
             from news_atlas.wiki.http import handle
             handle(self);return
@@ -237,7 +211,7 @@ class Handler(BaseHTTPRequestHandler):
                 if not isinstance(body,dict):raise ValueError('Invalid price request')
                 key=body.get('massive_key') or credentials.load_key(self.store.path) or os.environ.get('MASSIVE_API_KEY','')
                 if not isinstance(key,str) or len(key)>512 or any(ord(c)<32 or ord(c)>126 for c in key):raise ValueError('Invalid Massive key')
-                self.json_response(200,price_lens.load(self.store,body,key))
+                self.json_response(200,price_lens.load(graph_store(self.store,body.get('ticker','')),body,key))
             except (ValueError,TypeError) as error:self.json_response(400,{'error':str(error)})
             except price_lens.SourceError as error:self.json_response(502,{'error':str(error),'code':error.code})
             return
@@ -263,7 +237,8 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if self.path == '/api/graph/preview':
                 from news_atlas.preview import validate, stream
-                groups, cfg, stage = validate(body, self.store)
+                scoped=graph_store(self.store,body.get('ticker',''))
+                groups, cfg, stage = validate(body, scoped)
                 include_cross=body.get('include_cross',True)
                 if not isinstance(include_cross,bool): raise ValueError('無效跨來源計算設定')
                 self.send_response(200)
@@ -271,7 +246,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_header('Cache-Control','no-store')
                 self.send_header('X-Accel-Buffering','no')
                 self.end_headers()
-                events = stream(groups, cfg, stage, self.store.path.with_name(self.store.path.name+'.pairs.sqlite3'), include_cross=include_cross)
+                events = stream(groups, cfg, stage, scoped.path.with_name(scoped.path.name+'.pairs.sqlite3'), include_cross=include_cross)
                 try:
                     for event in events:
                         self.wfile.write((json.dumps(event,ensure_ascii=False)+'\n').encode())
@@ -282,7 +257,8 @@ class Handler(BaseHTTPRequestHandler):
                     events.close()
                 return
             if self.path in api.POST_PATHS:
-                self.json_response(200,api.dispatch(self.path,body,self.store,functools.partial(build_cached,self.store,graph_payload)));return
+                scoped=self.store.for_query(normalize_request(body)) if self.path=='/api/cache/graph' and isinstance(self.store,GraphRepository) else graph_store(self.store,body.get('ticker',''))
+                self.json_response(200,api.dispatch(self.path,body,scoped,functools.partial(build_cached,scoped,graph_payload)));return
             if self.path == '/api/channels':
                 saved = self.store.save_channel(body)
                 self.json_response(200, {'channel':saved,'channels':self.store.list_channels()})
@@ -347,14 +323,14 @@ if __name__ == '__main__':
     signal.signal(signal.SIGTERM, stop_server)
     server = create_server()
     try:
-        store = Store()
+        store = GraphRepository()
         server.store = store
         from news_atlas.wiki.compiler import WikiService
         server.wiki = WikiService(store)
         port = server.server_port
         if os.environ.get('NEWS_ATLAS_CACHE_ONLY') == '1':
             print('離線搜尋模式：只讀 DB，不向新聞來源發送請求。', flush=True)
-        print(f'News Atlas: http://127.0.0.1:{port}\nListening: 0.0.0.0:{port} (LAN: http://<host-ip>:{port})\nSQLite: {store.path}', flush=True)
+        print(f'News Atlas: http://127.0.0.1:{port}\nListening: 0.0.0.0:{port} (LAN: http://<host-ip>:{port})\nGraph databases: {store.data_root}/graph/<ticker>/news-atlas.sqlite3', flush=True)
         server.serve_forever()
     except KeyboardInterrupt:
         pass

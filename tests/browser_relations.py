@@ -15,7 +15,7 @@ def generate(destination):
         html,assets=served_document(harness.request)
         graph=server.graph_payload(rows())
         replies={}
-        for url in ['/api/status','/api/channels','/api/snapshots','/schema/news-atlas.schema.json']:
+        for url in ['/api/workspace','/api/status','/api/channels','/api/snapshots','/schema/news-atlas.schema.json']:
             _,body=harness.request('GET',url);replies[url]=json.loads(body)
         variants={}
         for key,cfg in [('off',{**UNIFIED,'entity':False,'topic':False,'title':False}),('unified',UNIFIED),('original',settings())]:

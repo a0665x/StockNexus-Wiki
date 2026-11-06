@@ -11,7 +11,7 @@ class YearBoundaryTests(unittest.TestCase):
     def test_graph_retains_all_articles_across_years(self):
         rows=[model.article('google','headline '+str(i),'https://example.test/'+str(i),'2026-10-01T00:00:00Z') for i in range(801)]
         rows.append(model.article('google','older headline','https://example.test/old','2025-11-03T00:00:00Z'))
-        with patch.object(server,'build_relations',return_value=[]):
+        with patch('news_atlas.graph_payload.build_relations',return_value=[]):
             graph=server.graph_payload(rows)
         for selected in [graph['articles'],graph['source_graphs']['google']['articles']]:
             self.assertEqual(len(selected),len(rows))

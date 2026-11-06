@@ -35,7 +35,7 @@
   function initSearch($,dates){
     const providers=['google','yahoo','massive'],saved=read('searchDraft',{});
     if(saved&&typeof saved==='object'){
-      for(const [id,max]of [['query',200],['ticker',20]])if(typeof saved[id]==='string')$(id).value=saved[id].slice(0,max);
+      for(const [id,max]of [['query',200],['ticker',40]])if(typeof saved[id]==='string')$(id).value=saved[id].slice(0,max);
       if(Array.isArray(saved.sources)&&saved.sources.every(p=>providers.includes(p)))for(const p of providers)$('source-'+p).checked=saved.sources.includes(p);
       if(['TW','US','HK','JP','GB'].includes(saved.rss_region))$('rssRegion').value=saved.rss_region;
 
@@ -54,13 +54,16 @@
   function initFloatingPanel($,{key,panelId,bodyId,handleId,toggleId,resetId,onChange=()=>{}}){
     const panel=$(panelId),body=$(bodyId),handle=$(handleId),toggle=$(toggleId),stage=$('stage');
     let group=floatingStages.get(stage);if(!group){group={panels:[],busy:false};floatingStages.set(stage,group);}
-    const saved=read(key,{});let x=Number(saved?.x)||0,y=Number(saved?.y)||0,collapsed=saved?.collapsed===true,drag=null,suppressClick=false;
-    const persist=()=>write(key,{x,y,collapsed});
+    const saved=read(key,{});let x=Number(saved?.x)||0,y=Number(saved?.y)||0,collapsed=saved?.collapsed===true,drag=null,suppressClick=false,resizer=null;
+    const persist=()=>write(key,{x,y,collapsed,...resizer?.state()});
     const rectOf=()=>panel.getBoundingClientRect();
     const areaOf=()=>{const r=stage.getBoundingClientRect(),counter=$('activityCounters')?.getBoundingClientRect?.(),reserved=counter?.height?counter.bottom-r.top+12:114,gap=Math.min(Math.max(114,reserved),Math.max(r.height*.25,r.height-80));return {left:r.left,right:r.right,top:r.top+gap,bottom:r.bottom,width:r.width,height:r.height-gap};};
     const overlaps=(a,b)=>a.left<b.left+b.width+8&&a.left+a.width+8>b.left&&a.top<b.top+b.height+8&&a.top+a.height+8>b.top;
     function avoid(){
       if(group.busy)return;
+      // Resize observers of inactive tools must yield to the tool the user opened.
+      const active=group.panels.find(p=>p.panel===group.active);
+      if(active&&active.panel!==panel&&!root.AtlasDock?.docked(active.panel)){active.constrain();return;}
       group.busy=true;
       try{
         for(const other of group.panels){
@@ -85,30 +88,39 @@
               for(const [left,top] of [[area.left,area.top],[area.right-small.width,area.top],[area.left,area.bottom-small.height],[area.right-small.width,area.bottom-small.height]]){
                 other.moveTo(left,top);if(place()){placed=true;break;}
               }
-              if(!placed){collapsed=true;paint();place();persist();}
+              if(!placed){
+                // Keep the requested tool open; scroll its body in the remaining space.
+                panel.style.maxHeight=Math.max(72,area.height-small.height-8)+'px';
+                other.moveTo(area.left,area.top);place();persist();
+              }
             }
           }
         }
       }finally{group.busy=false;}
     }
     function constrain(){
-      if(root.AtlasDock?.docked(panel)){onChange();return;}
-      const area=areaOf(),rect=panel.getBoundingClientRect(),baseX=rect.left-x,baseY=rect.top-y;
+      if(root.AtlasDock?.docked(panel)){panel.style.maxHeight='';onChange();return;}
+      resizer?.constrain();
+      const area=areaOf();
+      const sibling=group.panels.some(p=>p.panel!==panel&&!root.AtlasDock?.docked(p.panel));
+      const reserve=!collapsed&&sibling&&rectOf().width+80>area.width?80:0;
+      panel.style.maxHeight=Math.max(72,area.height-reserve)+'px';
+      const rect=panel.getBoundingClientRect(),baseX=rect.left-x,baseY=rect.top-y;
       x=Math.max(area.left-baseX,Math.min(area.right-baseX-rect.width,x));
       y=Math.max(area.top-baseY,Math.min(area.bottom-baseY-Math.min(rect.height,area.height),y));
       panel.style.transform=`translate(${x}px,${y}px)`;avoid();onChange();
     }
     function paint(){body.hidden=collapsed;panel.classList.toggle('collapsed',collapsed);toggle.setAttribute('aria-expanded',String(!collapsed));handle.setAttribute('aria-expanded',String(!collapsed));panel.style.transform=`translate(${x}px,${y}px)`;constrain();root.AtlasDock?.reflow(panel);}
-    function fold(){const before=panel.getBoundingClientRect();collapsed=!collapsed;paint();const after=panel.getBoundingClientRect();x+=before.left-after.left;y+=before.top-after.top;panel.style.transform=`translate(${x}px,${y}px)`;constrain();persist();}
+    function fold(){const before=panel.getBoundingClientRect();collapsed=!collapsed;if(!collapsed)group.active=panel;paint();const after=panel.getBoundingClientRect();x+=before.left-after.left;y+=before.top-after.top;panel.style.transform=`translate(${x}px,${y}px)`;constrain();persist();}
     toggle.onclick=fold;
     $(resetId).onclick=()=>{x=0;y=0;panel.style.transform='';constrain();if(x===0&&y===0)panel.style.transform='';persist();};
     panel.addEventListener('click',e=>{if(e.target===panel&&collapsed&&!suppressClick)fold();});
     handle.onclick=e=>{if(suppressClick&&e?.detail!==0){suppressClick=false;return;}if(collapsed)fold();};
     const start=e=>{
-      if(e.button!==0)return;
+      if(e.button!==0||e.target?.closest?.('[data-resize-edge]'))return;
       const control=e.target?.closest?.('button,input,select,textarea,a,label,summary,svg,[role="slider"],[contenteditable="true"]');
       if(control&&control!==handle)return;
-      drag={id:e.pointerId,cx:e.clientX,cy:e.clientY,x,y,moved:false,docked:root.AtlasDock?.docked(panel),grabX:e.clientX-rectOf().left,grabY:e.clientY-rectOf().top};panel.setPointerCapture(e.pointerId);e.preventDefault();e.stopPropagation();
+      group.active=panel;drag={id:e.pointerId,cx:e.clientX,cy:e.clientY,x,y,moved:false,docked:root.AtlasDock?.docked(panel),grabX:e.clientX-rectOf().left,grabY:e.clientY-rectOf().top};panel.setPointerCapture(e.pointerId);e.preventDefault();e.stopPropagation();
     };
     const move=e=>{if(!drag||drag.id!==e.pointerId)return;drag.moved ||= Math.hypot(e.clientX-drag.cx,e.clientY-drag.cy)>4;if(!drag.moved)return;if(drag.docked){root.AtlasDock.undock(panel);x=0;y=0;panel.style.transform='';const r=rectOf();drag.x=e.clientX-r.left-Math.min(drag.grabX,r.width-20);drag.y=e.clientY-r.top-Math.min(drag.grabY,24);drag.cx=e.clientX;drag.cy=e.clientY;drag.docked=false;}root.AtlasDock?.preview(e);x=drag.x+e.clientX-drag.cx;y=drag.y+e.clientY-drag.cy;panel.style.transform=`translate(${x}px,${y}px)`;constrain();};
     const end=e=>{if(!drag||drag.id!==e.pointerId)return;suppressClick=drag.moved;if(drag.moved)root.AtlasDock?.finish(panel,e,e.type!=='pointerup');if(suppressClick)setTimeout(()=>{suppressClick=false;},0);drag=null;if(panel.hasPointerCapture?.(e.pointerId))panel.releasePointerCapture(e.pointerId);persist();};
@@ -119,8 +131,9 @@
     }
     handle.addEventListener('keydown',e=>{const delta={ArrowLeft:[-20,0],ArrowRight:[20,0],ArrowUp:[0,-20],ArrowDown:[0,20]}[e.key];if(!delta)return;e.preventDefault();x+=delta[0];y+=delta[1];panel.style.transform=`translate(${x}px,${y}px)`;constrain();persist();});
     if(typeof ResizeObserver!=='undefined'){let queued=false;const observer=new ResizeObserver(()=>{if(queued)return;queued=true;requestAnimationFrame(()=>{queued=false;constrain();});});observer.observe(stage);observer.observe(panel);const counters=$('activityCounters');if(counters?.nodeType===1)observer.observe(counters);}
-    group.panels.push({panel,rect:rectOf,moveTo(left,top){const rect=rectOf();x+=left-rect.left;y+=top-rect.top;panel.style.transform=`translate(${x}px,${y}px)`;constrain();persist();},compact(){if(collapsed)return;const before=rectOf();collapsed=true;paint();const after=rectOf();x+=before.left-after.left;y+=before.top-after.top;panel.style.transform=`translate(${x}px,${y}px)`;constrain();persist();}});
-    paint();return {constrain,state:()=>({x,y,collapsed})};
+    group.panels.push({panel,rect:rectOf,constrain,moveTo(left,top){const rect=rectOf();x+=left-rect.left;y+=top-rect.top;panel.style.transform=`translate(${x}px,${y}px)`;constrain();persist();},compact(){if(collapsed)return;const before=rectOf();collapsed=true;paint();const after=rectOf();x+=before.left-after.left;y+=before.top-after.top;panel.style.transform=`translate(${x}px,${y}px)`;constrain();persist();}});
+    resizer=root.AtlasFloatingResize?.attach({panel,bounds:areaOf,collapsed:()=>collapsed,initial:saved,onStart(){group.active=panel;},onMove(dx,dy){x+=dx;y+=dy;panel.style.transform=`translate(${x}px,${y}px)`;constrain();},onFinish(){constrain();persist();}});
+    paint();return {constrain,state:()=>({x,y,collapsed,...resizer?.state()})};
   }
   const initSourcePanel=$=>initFloatingPanel($,{key:'sourcePanel',panelId:'sourcePanel',bodyId:'sourcePanelBody',handleId:'sourcePanelDrag',toggleId:'sourcePanelToggle',resetId:'sourcePanelReset'});
   const initTimePanel=($,onChange)=>initFloatingPanel($,{key:'timePanel',panelId:'timeFocusBar',bodyId:'timeFocusBody',handleId:'timePanelDrag',toggleId:'timePanelToggle',resetId:'timePanelReset',onChange});

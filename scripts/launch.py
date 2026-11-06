@@ -208,8 +208,8 @@ def run_server(httpd, mode, name=None, https_port=None):
     proxy = None
     worker = None
     try:
-        from news_atlas.storage import Store
-        httpd.store = Store()
+        from news_atlas.graph_storage import GraphRepository
+        httpd.store = GraphRepository()
         worker = threading.Thread(target=httpd.serve_forever, daemon=True)
         worker.start()
         port = httpd.server_address[1]
@@ -256,6 +256,7 @@ def run_server(httpd, mode, name=None, https_port=None):
                     httpd.shutdown()
                     worker.join(timeout=3)
             finally:
+                if hasattr(httpd,"wiki"):httpd.wiki.close()
                 httpd.server_close()
 
 

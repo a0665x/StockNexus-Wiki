@@ -20,6 +20,14 @@ def main():
     args = parser.parse_args()
     if args.start > args.end:
         parser.error('start must be on or before end')
+    if not args.db.exists():
+        graph=args.db.parent/'graph'
+        candidates=[graph/args.ticker.upper()/'news-atlas.sqlite3',graph/'_unassigned'/'news-atlas.sqlite3']
+        for candidate in candidates:
+            if candidate.exists():
+                with sqlite3.connect(candidate.resolve().as_uri()+'?mode=ro',uri=True) as probe:
+                    if probe.execute("SELECT 1 FROM sqlite_master WHERE name='daily_prices'").fetchone():
+                        args.db=candidate;break
     try:
         db = sqlite3.connect(args.db.resolve().as_uri() + '?mode=ro', uri=True)
         try:

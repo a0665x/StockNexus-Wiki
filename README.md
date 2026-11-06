@@ -85,3 +85,20 @@ GitHub 儲存庫：[a0665x/StockNexus-Wiki](https://github.com/a0665x/StockNexus
 首次使用 Chat Agent：在專案目錄執行 `./run.sh chat setup`，需要登入時執行 `npx --no-install codex login`，再 `./run.sh up`。使用 8765 網頁右側 Chat Agent 分頁；`./run.sh --help` 提供完整指引。`node server.mjs --open` 是另開 3210 的獨立對話範例，沒有新聞畫面上下文。
 
 本機離線搜尋：`./run.sh local --offline`；Docker 可用 `NEWS_ATLAS_CACHE_ONLY=1 ./run.sh up`。此模式即使勾選強制更新也只讀 DB，不自動補抓缺口。已下載的日線股價可用 `python3 scripts/read_prices.py NVDA` 離線匯出 CSV。
+
+### 開著網頁合併另一台電腦／USB 的資料
+
+`./run.sh up` 成功後會印出對應實際資料位置的指令；另開終端執行即可。來源可指定 `data`、`graph`、`llm_wiki` 或單股目錄：
+
+```bash
+./merge_data.sh --from /media/usb/data --to ./data --dry-run
+./merge_data.sh --from /media/usb/data --to ./data
+```
+
+把來源換成實際 USB 路徑，目標以啟動器印出的路徑為準。Web UI 可保持開啟；先暫停欲合併股票的 Wiki 工作／持續維護。合併後 Wiki 下拉選單約 6 秒內出現新增股票；不自動更換目前選取或啟動模型。
+
+工具自動備份、去重，保留本地資料與來源衝突副本；不搬金鑰、不呼叫 LLM。衝突、備份、僅新聞匯入與復原詳見 [合併說明](spec/DATA_MERGE.md)。
+
+資料布局：新聞圖 `data/graph/<ticker>/`、Wiki `data/llm_wiki/<ticker>/`；無法確認歸屬保留於 `graph/_unassigned/`。舊主 DB 在啟動時備份並遷移，見 [儲存說明](spec/GRAPH_STORAGE.md)。
+
+目前完整功能與計算方法見 [專案現況](spec/CURRENT_STATE.md) 及 [計算定義](spec/CALCULATION_METHODS.md)；AI 協作前先讀 [修改偏好](spec/ai-dev-experience-preferences.md)。

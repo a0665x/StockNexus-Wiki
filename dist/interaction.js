@@ -55,11 +55,16 @@
       if(event.pointerType==='touch'||cancelled){pointer=null;focus.offer(null);}else focus.offer(pick(event)?.id||null);
     }
     const refresh=()=>{if(pointer&&!gesture&&enabled())focus.offer(pick(pointer)?.id||null);};
-    const controls=getGraph()?.controls?.();controls?.addEventListener?.('change',refresh);
+    const controls=getGraph()?.controls?.();
+    // Trackball's global A/S/D shortcuts also observe typing and can outlive focus.
+    if(Array.isArray(controls?.keys)){controls.keys=[];controls.keyState=-1;}
+    const resetCamera=()=>{if(gesture)end({pointerId:gesture.pointerId,preventDefault(){},stopImmediatePropagation(){}},true);background=null;pointer=null;focus.clear();if(controls&&'keyState' in controls){controls.keyState=-1;controls.state=-1;}};
+    root.addEventListener?.('blur',resetCamera);
+    controls?.addEventListener?.('change',refresh);
     const up=e=>end(e),cancel=e=>end(e,true),leave=()=>{if(gesture)return;pointer=null;focus.offer(null);},click=e=>{if(suppressClick){suppressClick=false;e.preventDefault();e.stopImmediatePropagation();}};
     const listeners=[['wheel',onActivity],['pointermove',move],['pointerdown',down],['pointerup',up],['pointercancel',cancel],['lostpointercapture',cancel],['pointerleave',leave],['click',click]];
     for(const [name,fn]of listeners)element.addEventListener(name,fn,true);
-    return {supported:true,hasPointer:()=>pointer!==null||focus.get()!==null,isDragging:()=>gesture!==null,refresh,guide(id=focus.get()){if(id==null)return null;const point=project(id)[0];return point?{id:point.id,radius:point.radius}:null;},clear(){background=null;if(gesture){const g=gesture;gesture=null;g.controls.enabled=g.controlsEnabled;if(g.node)Object.assign(g.node,g.fixed);if(element.hasPointerCapture?.(g.pointerId))element.releasePointerCapture(g.pointerId);}pointer=null;focus.clear();},dispose(){this.clear();focus.dispose();controls?.removeEventListener?.('change',refresh);for(const [name,fn]of listeners)element.removeEventListener(name,fn,true);}};
+    return {supported:true,hasPointer:()=>pointer!==null||focus.get()!==null,isDragging:()=>gesture!==null,refresh,guide(id=focus.get()){if(id==null)return null;const point=project(id)[0];return point?{id:point.id,radius:point.radius}:null;},clear(){background=null;if(gesture){const g=gesture;gesture=null;g.controls.enabled=g.controlsEnabled;if(g.node)Object.assign(g.node,g.fixed);if(element.hasPointerCapture?.(g.pointerId))element.releasePointerCapture(g.pointerId);}pointer=null;focus.clear();},dispose(){this.clear();root.removeEventListener?.('blur',resetCamera);focus.dispose();controls?.removeEventListener?.('change',refresh);for(const [name,fn]of listeners)element.removeEventListener(name,fn,true);}};
   }
   const api={nearest,stableFocus,attach,adaptiveRadius,idleFocus};root.AtlasInteraction=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);

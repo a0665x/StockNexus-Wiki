@@ -36,7 +36,7 @@
           let result=null,finished=false;
           try{
             const response=await fetch('/api/graph/preview',{method:'POST',headers:{'Content-Type':'application/json'},signal:request.signal,
-              body:JSON.stringify({source_graphs:scope.groups,relation_settings:scope.cfg,include_cross:!scope.separate,stage})});
+              body:JSON.stringify({ticker:scope.ticker||'',source_graphs:scope.groups,relation_settings:scope.cfg,include_cross:!scope.separate,stage})});
             if(!response.ok||!response.body)throw Error(`HTTP ${response.status}`);
             const reader=response.body.getReader(),decoder=new TextDecoder();let buffer='';
             while(true){

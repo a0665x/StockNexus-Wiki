@@ -1,6 +1,6 @@
 # 本地資料
 
-啟動 `python3 server.py` 時自動建立 `news-atlas.sqlite3`。這是持續累積、跨重啟使用的單一 SQLite 資料庫，不會每次搜尋另建一份。
+新聞圖資料按明確 Massive ticker 保存於 `graph/<ticker>/news-atlas.sqlite3`，未填代號或舊資料無法確認歸屬時保留於 `graph/_unassigned/`。Wiki 位於 `llm_wiki/<ticker>/wiki.sqlite3`。詳見 [儲存布局](../spec/GRAPH_STORAGE.md)。
 
 - `articles`：各來源文章及標準化欄位。
 - `memberships`：查詢與文章的對應，避免把其他查詢的文章當成本次結果。

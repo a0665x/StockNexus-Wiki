@@ -28,15 +28,25 @@ def handle(handler):
             if path=='status':
                 handler.json_response(200,{**service.info(),'writable':writable(handler)});return
             ident=params.get('instrument',[''])[0]
-            from .store import instrument,digest
+            from .store import instrument,folder_name
             instrument(ident)
-            if not (service.root/digest(ident)[:24]/'wiki.sqlite3').exists(): raise ValueError('此股票尚未建立Wiki')
+            if not (service.root/folder_name(ident)/'wiki.sqlite3').exists(): raise ValueError('此股票尚未建立Wiki')
             store=service.store(ident)
             version=params.get('version',[None])[0]
-            if path=='graph': data=store.graph(version,params.get('as_of',[None])[0])
+            if path=='graph': data={**store.graph(version,params.get('as_of',[None])[0],start=params.get('start',[None])[0],end=params.get('end',[None])[0]),'coverage':service.coverage(store)}
             elif path=='jobs':
                 with store.connection() as db: latest=db.execute('SELECT COALESCE(max(version),0) FROM versions').fetchone()[0]
-                data={'jobs':store.jobs(),'config':store.config(),'version':latest}
+                data={'jobs':store.jobs(),'config':store.config(),'version':latest,'coverage':service.coverage(store)}
+            elif path=='node':
+                with store.connection() as db:row=db.execute('SELECT payload FROM nodes WHERE id=? AND created_version<=?',(params.get('id',[''])[0],int(version) if version else 2147483647)).fetchone()
+                if not row:raise ValueError('此版本找不到觀點')
+                data=json.loads(row[0])
+                from .evidence import cached_market
+                refs=[c['article_revision_id'] for c in data.get('citations',[])]
+                with store.connection() as db:articles=[json.loads(r[0]) for r in db.execute('SELECT payload FROM articles WHERE id IN (SELECT value FROM json_each(?))',(json.dumps(refs),))]
+                horizon=int(params.get('price_horizon',['3'])[0])
+                if horizon not in (1,3,5,7):raise ValueError('無效股價交易日範圍')
+                data['current_market']=list(cached_market(service.news,store.instrument,articles,horizon).values())
             elif path=='article':
                 with store.connection() as db: row=db.execute('SELECT payload FROM articles WHERE id=?',(params.get('id',[''])[0],)).fetchone()
                 if not row: raise ValueError('引用版本不存在')
@@ -50,7 +60,7 @@ def handle(handler):
         if handler.headers.get('Content-Type','').split(';')[0]!='application/json' or not 0<length<=32*1024*1024: raise ValueError('無效Wiki請求大小')
         body=json.loads(handler.rfile.read(length))
         if not isinstance(body,dict): raise ValueError('需要JSON object')
-        action={'plan':service.plan,'jobs':service.start,'configure':service.configure,'cancel':service.cancel}.get(path)
+        action={'plan':service.plan,'apply':service.apply,'jobs':service.start,'configure':service.configure,'cancel':service.cancel,'resume':service.resume}.get(path)
         if not action: handler.json_response(404,{'error':'Unknown Wiki endpoint'});return
         handler.json_response(202 if path=='jobs' else 200,action(body))
     except (ValueError,TypeError,KeyError) as error: handler.json_response(400,{'error':str(error)})

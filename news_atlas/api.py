@@ -21,13 +21,14 @@ def capabilities():
 
 def dispatch(path,body,store,build):
     if path=='/api/cache/graph':
-        req=normalize_request(body);rows=[];coverage={}
+        from .graph_storage import GraphRepository
+        req=normalize_request(body);store=store.for_query(req) if isinstance(store,GraphRepository) else store;rows=[];coverage={}
         for provider in req['sources']:
             key=query_key(provider,req['ticker'] if provider=='massive' else req['query'],req.get('rss_region'))
             rows.extend(store.read(provider,key,req['start'],req['end']))
             fresh,gaps=store.coverage(provider,key,req['start'],req['end'])
             coverage[provider]={'fresh_days':fresh,'missing_ranges':gaps,'end_exclusive':req['end']}
-        return {'graph':build(rows,store.list_channels()),'coverage':coverage,'network_requests':0}
+        return {'graph':build(rows,store.list_channels(),include_relations=not req['defer_relations']),'coverage':coverage,'network_requests':0}
     if path=='/api/normalize':
         rows=body.get('articles')
         if not isinstance(rows,list): raise ValueError('articles 必須是陣列')

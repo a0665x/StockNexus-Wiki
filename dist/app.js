@@ -188,7 +188,7 @@ function rebuild(payload,relationUpdate=false) {
   rootSearchTicket++;
   interaction?.clear();
   const previousCount = articles.length;
-  if (payload) {basePayload = payload;classificationEpoch++;if(!relationUpdate){viewRevision++;viewRequestedSettings=null;completedRelationViews.clear();if(!restoringRelations){restoredRelationSeed=null;restoredRelationViews=[];}}}
+  if (payload) {globalThis.scheduleNewsWorkspace?.();basePayload = payload;classificationEpoch++;if(!relationUpdate){viewRevision++;viewRequestedSettings=null;completedRelationViews.clear();if(!restoringRelations){restoredRelationSeed=null;restoredRelationViews=[];}}}
   if(basePayload.channel_definitions)channelDefinitions=basePayload.channel_definitions;
   renderChannelFilter();
   currentView = AtlasView.select(basePayload, viewSources(), isSeparate());
@@ -237,7 +237,7 @@ function renderNetwork(){
     restoredPositions.clear();
     graph.graphData({ nodes, links: slice.relations.map(r => ({ ...r, from: r.source, to: r.target })) });
     lastNetworkRender={graph,slice};
-    if (articles.length && !old.size) { clearTimeout(fitTimer); fitTimer = setTimeout(() => graph?.zoomToFit(reducedMotion ? 0 : 500, 65), 1000); }
+    if (articles.length && !old.size) { clearTimeout(fitTimer); fitTimer = setTimeout(() => graph?.zoomToFit(0, 65), 1000); }
    } catch(error) {reportGraphFailure('context-lost',error.message||String(error));}
   }
   updateActivity();
@@ -398,13 +398,14 @@ $('form').addEventListener('submit', async e => {
   if(e.target&&e.target!==$('form'))return;
   e.preventDefault(); if (controller) return;dateRange.refresh();persistSearchDraft();
   const sources = [...document.querySelectorAll('.sources input:checked')].map(x => x.value);
-  const query = $('query').value.trim(), ticker = $('ticker').value.trim(), key = $('key').value.trim()||($('rememberKey').checked?AtlasUI.read('massiveKey',''):'');
+  const query = $('query').value.trim(), instrument = $('ticker').value.trim().toUpperCase(), ticker = instrument.split(':').at(-1), key = $('key').value.trim()||($('rememberKey').checked?AtlasUI.read('massiveKey',''):'');
   persistKey();
   const status = $('status'); status.replaceChildren(); sourceStates = {};
+  if(!/^[A-Z][A-Z0-9_-]{1,15}:[A-Z0-9][A-Z0-9.-]{0,19}$/.test(instrument)){status.append(el('p','請填入完整股票識別，例如 NASDAQ:GOOGL。','error'));$('ticker').reportValidity();return;}
   if (!sources.length || (!query && !ticker)) { status.append(el('p', '請選擇來源並填寫關鍵字或股票代碼。', 'error')); return; }
   const request = ++currentSearch;controller = new AbortController();const searchController=controller;sourceArticles=new Map();
   const preferred=relationUI?.preferred();relationUI?.setSearchBusy(true);
-  pendingSearchMeta={query,ticker,rss_region:$('rssRegion').value||'TW',start:$('start').value,end:$('end').value,sources:{}};
+  pendingSearchMeta={query,ticker,instrument,rss_region:$('rssRegion').value||'TW',start:$('start').value,end:$('end').value,sources:{}};
   const searchBody={...pendingSearchMeta,defer_relations:!!globalThis.AtlasViewRelations,sources,massive_key:key,force_refresh:$('forceRefresh').checked,relation_settings:preferred};
   searchPhase='sources';searchStarted=Date.now();operationNotice='';timelineFocusRequested=true;
   clearInterval(searchClock);searchClock=setInterval(updateActivity,1000);updateGraphMessage();
@@ -459,10 +460,10 @@ $('saveDB').onclick = async () => {
 async function loadSnapshots() {
   try {const response=await fetch('/api/snapshots');if(!response.ok)return;const data=await response.json();const root=$('snapshots');root.replaceChildren();for(const saved of data.snapshots || []){const button=el('button',`${saved.name} · ${date(saved.created_at)}`,'raw');button.addEventListener('click',()=>restoreSnapshot(saved.id));root.append(button);}if(!data.snapshots?.length)root.append(el('p','尚無已儲存圖譜','muted'));} catch {}
 }
-async function restoreSnapshot(id) {
+async function restoreSnapshot(id,workspaceSaved=null) {
   if(controller || saving){$('saveStatus').textContent='請等待目前搜尋／儲存完成。';return;}
   try {
-    const response=await fetch('/api/snapshots/'+encodeURIComponent(id));const saved=await response.json();if(!response.ok)throw new Error(saved.error);
+    const response=workspaceSaved?null:await fetch('/api/snapshots/'+encodeURIComponent(id));const saved=workspaceSaved||await response.json();if(response&&!response.ok)throw new Error(saved.error);
     restoringRelations=true;viewRelationJob?.cancel();
     networkPositions.clear();internalLengths.clear();
     for(const p of providers)$('view-'+p).checked=saved.view.sources.includes(p);
@@ -549,7 +550,8 @@ const persistKey=AtlasUI.initKey($,{
 });
 AtlasUI.initResize($,()=>{if(viewMode==='timeline')renderTimeline();});
 let schemaLoaded=false;$('jsonInspector').addEventListener('toggle',async()=>{if(!$('jsonInspector').open||schemaLoaded)return;try{const response=await fetch('/schema/news-atlas.schema.json');if(!response.ok)throw new Error();AtlasUI.jsonTree($('schemaJson'),await response.json());schemaLoaded=true;}catch{$('schemaJson').textContent='Schema 載入失敗，請關閉後重試。';}});
-$('language').value=AtlasI18n.language();$('language').onchange=()=>{AtlasI18n.setLanguage($('language').value);rebuild();};
+$('language').value=AtlasI18n.language();$('language').onchange=()=>AtlasI18n.setLanguage($('language').value);
+globalThis.addEventListener('atlas-language',()=>rebuild());
 AtlasI18n.start();
 
 function syncGlowControls(){
@@ -568,6 +570,8 @@ idleFocus=AtlasInteraction.idleFocus(clearFocus,{isBusy:()=>globalThis.AtlasChat
 function attachGraphBehaviors(){
   glowLayer=AtlasGlow.attach($('glowCanvas'),glowState);
   if(timeLensAvailable)timeSizer=AtlasTimeLens.attach(graph,()=>({config:timeFocus,dates:sizeBounds(),scale:(n,v)=>priceLens?.scale(n,v,timeFocus.enabled)??v}));
+  graph?.controls()?.addEventListener?.('start',()=>clearTimeout(fitTimer));
+  $('graph').addEventListener('pointerdown',()=>clearTimeout(fitTimer),true);
   interaction=AtlasInteraction.attach($('graph'),{getGraph:()=>graph,enabled:()=>viewMode==='network'&&!!graph,onHover:setHovered,onSelect:showArticle,onDragEnd:()=>rememberNetwork(),onBackground:clearGraphSelection,onActivity:touchFocus,strength:()=>Number($('stickyStrength').value)});
 }
 attachGraphBehaviors();
@@ -629,6 +633,7 @@ document.addEventListener?.('keydown',event=>{if(event.key==='Escape'&&!$('relat
 if(globalThis.AtlasRelations)relationUI=AtlasRelations.init($,{
   status:state=>{relationActivity=state;updateActivity();},
   get:()=>basePayload,
+  ticker:()=>exportMeta.ticker||'',
   put:payload=>{rememberNetwork(true);rebuild(payload,true);},
   ...(globalThis.AtlasViewRelations?{applyView:cfg=>{viewRelationJob?.cancel();viewRequestedSettings=cfg;basePayload={...basePayload,relation_scope:'view',relations_pending:true};viewRevision++;scheduleViewRelations();}}:{}),
   view:payload=>{const view=AtlasView.select(payload,viewSources(),isSeparate());return {...view,relations:AtlasView.filterEdges(view.relations,exploration)};}
@@ -658,7 +663,7 @@ syncSourceColors();
   function state(){
     if(lastArticles!==focusView.articles||lastEdges!==focusView.relations){dataset++;lastArticles=focusView.articles;lastEdges=focusView.relations;}
     const scope=highlightMode==='category'&&viewMode==='network'?Array.from(categoryTrace.nodes.keys()):lockedRoots.length?Array.from(new Set([...lockedRoots,...activeTrace.nodes.keys()])):selected?[selected]:currentView.articles.map(a=>a.id);
-    const state={dataset,view_mode:viewMode,highlight_mode:highlightMode,selected_article:selected,root_ids:[...lockedRoots],category:graphChannel,channel_filter:channelFilter,scope_ids:scope,scope_kind:highlightMode==='category'&&viewMode==='network'?'category':lockedRoots.length?'roots_and_relations':selected?'article':'visible_results',visible_ids:currentView.articles.map(a=>a.id),counts:{loaded:focusView.articles.length,visible:currentView.articles.length,scope:scope.length,edges:focusView.relations.length,rendered:renderedCount},sources:viewSources(),search:{query:exportMeta.query||'',ticker:exportMeta.ticker||'',start:exportMeta.start||'',end:exportMeta.end||''},cutoff:timelineCutoff,render_budget:renderBudget,exploration:{...exploration},glow:{...glowConfig},time_focus:{...timeFocus},price_focus:priceLens?.state(),tool_dock:globalThis.AtlasDock?.state(),relation_settings:basePayload.relation_settings||{},busy:{search:!!controller,relations:!!relationActivity.busy,root_search:rootSearchBusy},graph_error:graphFailure?.message||null,controls:[...clickIds.map(id=>control(id,'click')),...setIds.map(id=>control(id,'set'))].filter(Boolean),recent_actions:recent.slice()};
+    const state={dataset,language:AtlasI18n.language(),view_mode:viewMode,highlight_mode:highlightMode,selected_article:selected,root_ids:[...lockedRoots],category:graphChannel,channel_filter:channelFilter,scope_ids:scope,scope_kind:highlightMode==='category'&&viewMode==='network'?'category':lockedRoots.length?'roots_and_relations':selected?'article':'visible_results',visible_ids:currentView.articles.map(a=>a.id),counts:{loaded:focusView.articles.length,visible:currentView.articles.length,scope:scope.length,edges:focusView.relations.length,rendered:renderedCount},sources:viewSources(),search:{query:exportMeta.query||'',ticker:exportMeta.ticker||'',start:exportMeta.start||'',end:exportMeta.end||''},cutoff:timelineCutoff,render_budget:renderBudget,exploration:{...exploration},glow:{...glowConfig},time_focus:{...timeFocus},price_focus:priceLens?.state(),tool_dock:globalThis.AtlasDock?.state(),relation_settings:basePayload.relation_settings||{},busy:{search:!!controller,relations:!!relationActivity.busy,root_search:rootSearchBusy},graph_error:graphFailure?.message||null,controls:[...clickIds.map(id=>control(id,'click')),...setIds.map(id=>control(id,'set'))].filter(Boolean),recent_actions:recent.slice()};
     const fingerprint=JSON.stringify(state);if(fingerprint!==previous){previous=fingerprint;revision++;}return {...state,revision};
   }
   function data(){return {articles:focusView.articles.map(a=>({id:a.id,title:a.title,summary:a.summary||'',url:a.url,published_at:a.published_at,source:{provider:a.source?.provider,publisher:a.source?.publisher},channels:a.channels,entities:a.entities})),edges:focusView.relations.map(e=>({id:AtlasView.identity(e),source:AtlasView.endpoint(e.source),target:AtlasView.endpoint(e.target),type:e.type,score:e.score,evidence:e.evidence}))};}
@@ -708,7 +713,7 @@ syncSourceColors();
   globalThis.AtlasRuntime={state,data,act,record:note};
 })();
 
-if(globalThis.AtlasPrice)priceLens=AtlasPrice.init($,{articles:()=>focusView.articles,ticker:()=>$('ticker').value,focus:()=>({bounds:sizeBounds(),date:timeFocus.date}),onDate:date=>updateTimeCurve({date}),onChange:()=>{syncTimeFocus();if(viewMode==='timeline')renderTimeline();const n=articles.find(a=>a.id===selected);if(n)showArticle(n,false);}});
+if(globalThis.AtlasPrice)priceLens=AtlasPrice.init($,{articles:()=>focusView.articles,ticker:()=>$('ticker').value.split(':').at(-1),focus:()=>({bounds:sizeBounds(),date:timeFocus.date}),onDate:date=>updateTimeCurve({date}),onChange:()=>{syncTimeFocus();if(viewMode==='timeline')renderTimeline();const n=articles.find(a=>a.id===selected);if(n)showArticle(n,false);}});
 
 globalThis.addEventListener?.('atlas-dock',layoutTimeBar);
 
@@ -727,7 +732,7 @@ function scheduleViewRelations(){
   const cfg=viewRequestedSettings||basePayload.relation_settings||AtlasRelations.defaults;
   const ids=slice.articles.map(a=>a.id).sort();
   const sources=Object.keys(groups).sort(),separate=isSeparate();
-  const scope={key:JSON.stringify([viewRevision,ids,cfg,separate,sources]),groups,cfg,ids,separate};
+  const scope={key:JSON.stringify([viewRevision,ids,cfg,separate,sources,exportMeta.ticker]),ticker:exportMeta.ticker||'',groups,cfg,ids,separate};
   const remembered=restoredRelationViews.find(v=>JSON.stringify([ids,sources,cfg,separate])===JSON.stringify([v.ids,v.sources,v.relation_settings,v.separate]));
   if(remembered)viewRelationJob.seed(scope.key,{...remembered,stage:'complete',pairs_checked:0});
   const saved=restoredRelationSeed;
@@ -779,7 +784,30 @@ globalThis.AtlasWikiContext={
     const groups=AtlasView.groups(basePayload),visibleSources=mode==='global'?providers:viewSources();
     const focus=new Set([selected,...lockedRoots,...graphTrace().nodes.keys()].filter(Boolean));
     const rows=visibleSources.flatMap(p=>(groups[p]?.articles||[]).filter(a=>mode!=='focus'||focus.has(a.id)||focus.has(p+'::'+a.id)));
-    return {articles:rows.map(a=>({id:a.id,title:a.title,summary:a.summary||'',url:a.url,published_at:a.published_at,source:{provider:a.source.provider}})),sources:visibleSources,search:{query:exportMeta.query||'',ticker:exportMeta.ticker||'',rss_region:exportMeta.rss_region||'TW'}};
+    return {graph_universe:{ticker:(exportMeta.ticker||'').toUpperCase(),separate:isSeparate(),articles:viewSources().flatMap(p=>(groups[p]?.articles||[]).map(a=>({id:a.id,provider:p})))},graph_selection:highlightMode!=='category'?{ticker:(exportMeta.ticker||'').toUpperCase(),trees:(activeTrace.trees||[]).map(tree=>({root_id:tree.root,title:focusView.articles.find(a=>a.id===tree.root)?.title||tree.root,articles:[...tree.nodes.keys()].map(id=>focusView.articles.find(a=>a.id===id)).filter(Boolean).map(a=>({id:a.id.split('::').at(-1),provider:a.source.provider}))}))}:{ticker:(exportMeta.ticker||'').toUpperCase(),trees:[]},graph_settings:{relation_settings:basePayload.relation_settings||relationUI?.applied()||{},exploration:{...exploration}},price_horizon:priceLens?.state().horizon||3,graph_edges:relations.slice(0,30000).map(e=>({source:AtlasView.endpoint(e.source),target:AtlasView.endpoint(e.target),weight:Math.max(0,Math.min(100,Number(e.weight||e.score||1)))})),articles:rows.map(a=>({id:a.id,title:a.title,summary:a.summary||'',url:a.url,published_at:a.published_at,source:{provider:a.source.provider}})),sources:visibleSources,search:{instrument:exportMeta.instrument||'',query:exportMeta.query||'',ticker:exportMeta.ticker||'',rss_region:exportMeta.rss_region||'TW'}};
   },
-  visible(open){if(open){clearTimeout(fitTimer);graph?.pauseAnimation();}else if(viewMode==='network')graph?.resumeAnimation();}
+  visible(open){if(open){if(typeof rememberNews==='function'&&!workspaceRestoring)rememberNews();clearTimeout(fitTimer);graph?.pauseAnimation();}else if(viewMode==='network')graph?.resumeAnimation();}
 };
+
+// News and Wiki own separate persisted runtime records. No automatic source search.
+let workspaceRestoring=true,workspaceTimer;
+const tickerSymbol=()=>String($('ticker').value).trim().toUpperCase().split(':').at(-1);
+let autoQuerySymbol=tickerSymbol();
+function syncTickerQuery(){const symbol=tickerSymbol(),parts=$('query').value.split(/[,，]/).map(x=>x.trim()).filter(Boolean);if(autoQuerySymbol&&parts[0]?.toUpperCase()===autoQuerySymbol)parts.shift();if(symbol&&symbol!==parts[0]?.toUpperCase())parts.unshift(symbol);$('query').value=parts.join(', ');autoQuerySymbol=symbol;persistSearchDraft();}
+$('ticker').addEventListener('change',()=>{$('ticker').value=$('ticker').value.trim().toUpperCase();syncTickerQuery();});
+function rememberNews(){if(workspaceRestoring||controller)return;const value={draft:AtlasUI.read('searchDraft',{})};if(focusView.articles.length&&viewSources().length){value.snapshot=savedPayload();const c=graph?.cameraPosition();if(c)value.camera={x:c.x,y:c.y,z:c.z};}AtlasWorkspace.save('news',value);}
+globalThis.addEventListener('pagehide',rememberNews);
+globalThis.scheduleNewsWorkspace=()=>{if(workspaceRestoring)return;clearTimeout(workspaceTimer);workspaceTimer=setTimeout(rememberNews,1000);};
+for(const event of ['input','change','pointerup','click'])document.addEventListener(event,e=>{if(e.target.closest?.('#wikiPanel,#wikiSettings,.chat-compose'))return;scheduleNewsWorkspace();});
+AtlasWorkspace.ready.then(async()=>{try{
+ const value=AtlasWorkspace.state.news;
+ if(value?.draft){const d=value.draft;for(const id of ['query','ticker','rssRegion'])if(d[id==='rssRegion'?'rss_region':id]!==undefined)$(id).value=d[id==='rssRegion'?'rss_region':id];dateRange.restore(d.dates);for(const p of providers)if(d.sources)$('source-'+p).checked=d.sources.includes(p);persistSearchDraft();}
+ if(value?.snapshot){await restoreSnapshot(null,value.snapshot);if(value.camera)graph?.cameraPosition(value.camera);}
+ else if(!focusView.articles.length){
+  const symbol=tickerSymbol()||AtlasWorkspace.state.wiki?.instrument?.split(':')[1];
+  if(symbol){const body={ticker:symbol,query:$('query').value||symbol,start:$('start').value,end:$('end').value,rss_region:$('rssRegion').value,sources:providers.filter(p=>$('source-'+p).checked),defer_relations:true};const response=await fetch('/api/cache/graph',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!response.ok){const error=await response.json();throw Error(error.error||'無法讀取本機新聞');}if(response.ok){const result=await response.json();exportMeta={...body,instrument:AtlasWorkspace.state.wiki?.instrument?.endsWith(':'+symbol)?AtlasWorkspace.state.wiki.instrument:''};rebuild(result.graph);$('saveStatus').textContent='已從本機 DB 恢復新聞，未重新抓取來源。';}}
+  if(!focusView.articles.length){const response=await fetch('/api/snapshots');if(response.ok){const saved=(await response.json()).snapshots?.find(s=>!symbol||s.ticker===symbol||s.name?.includes(symbol));if(saved)await restoreSnapshot(saved.id);}}
+ }
+ if(!$('ticker').value.includes(':')){const symbol=tickerSymbol()||exportMeta.ticker;if(symbol){const ws=AtlasWorkspace.state.wiki?.instrument;const id=exportMeta.instrument||(ws?.split(':')[1]===symbol?ws:null);if(id)$('ticker').value=id;}}
+ autoQuerySymbol=tickerSymbol();
+ }catch(e){$('saveStatus').textContent='工作畫面恢復失敗：'+e.message;}finally{workspaceRestoring=false;scheduleNewsWorkspace();}});

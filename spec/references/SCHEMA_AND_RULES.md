@@ -24,7 +24,7 @@ Merged UI 用 canonical ID；來源分組時用 `provider::id` 並保留 article
 
 if/elif 優先順序如上，不是累加三種 edge。規則可由 `relation_settings` 切換或調整；未提供時完整保留上表 defaults（rules-v1）。自訂為 rules-v2：三類開關、各自 1–366 天窗口、topic/title Jaccard、來源內 0–6／跨來源 0–2 預算；half_life 0 關閉，1–366 時乘 `2^(-days/half_life)`，證據附 base_score、time_factor 及完整設定。始終保留孤立點，無 embedding 或 channel 加權。權威設定與驗證在 `news_atlas/relation_settings.py`。
 
-普通 degree budget 預設 6；graph_payload 對來源內獨立建圖，再以各來源配對、交錯候選最多 800、每端 budget 2 補 cross 關聯。cross_only 排除 origins 重疊的 pair。不能為了圖更密而虛構 evidence。
+普通 degree budget 預設 6；graph_payload 對來源內獨立建圖，再以各來源配對完整候選、每端 budget 2 補 cross 關聯（舊 800 候選截斷已移除）。cross_only 排除 origins 重疊的 pair。不能為了圖更密而虛構 evidence。
 
 Channel 對 title/summary literal keywords 作 any/all，多標籤且有 primary_channel；內建晶片製造、生產供應鏈、財報、股價、產品、政策及 fallback other。自訂分類／版本與詳細限制以 channels.py 為準。
 
@@ -36,7 +36,7 @@ Channel 對 title/summary literal keywords 作 any/all，多標籤且有 primary
 
 延伸參數預設：internalMin=0、crossMin=0、depth=2、branchLimit=4、pathMin=.25、maxNodes=150。限制：深度 1–6、分支 1–12，每樹最多 150。先套 edge 篩選，再 BFS、較強邊優先、沿途 weight 相乘，遇訪問過節點／預算／門檻停止。不是最強路徑演算法。
 
-多樹的其他 selected roots 是 barrier，不被另一 root 吃成分支；共同非 root 節點可屬多棵樹。JS 合併 nodes 保存 memberships/parents，採最小 depth 決定亮度；各樹邊取聯集，不重複造新聞。整張可見圖仍最多 800 節點。
+多樹的其他 selected roots 是 barrier，不被另一 root 吃成分支；共同非 root 節點可屬多棵樹。JS 合併 nodes 保存 memberships/parents，採最小 depth 決定亮度；各樹邊取聯集，不重複造新聞。整張可見圖受當下 GPU 預算限制（預設 800、最高 2400），不縮小搜尋全集或 Wiki root 工作輸入。
 
 ## 快照設定
 

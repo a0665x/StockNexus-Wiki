@@ -17,6 +17,8 @@ test('session isolation, current selection, browser acknowledgement, cancellatio
  let stream=await start();assert.equal(stream.status,200);
  assert.equal((await post('/turn',{message:'second'},key)).status,409);
  assert.equal((await post('/tool',{name:'read_news',args:{}},toolToken)).data.total,1);
+ await post('/sync',{context:{revision:1,surface:'wiki',instrument:'NASDAQ:GOOGL',version:8,scope_ids:['n']},graph:{articles:[{id:'a',title:'Source'}],nodes:[{id:'n',kind:'Thesis',title:'Interpretation',citations:[{article_revision_id:'a'}]},{id:'hidden',kind:'Claim'}],edges:[],histories:{n:{original:{id:'old'}}}}},key);
+ const wikiRead=(await post('/tool',{name:'read_wiki',args:{}},toolToken)).data;assert.equal(wikiRead.total,1);assert.equal(wikiRead.instrument,'NASDAQ:GOOGL');assert.equal(wikiRead.nodes[0].kind,'Thesis');assert.equal(wikiRead.histories.n.original.id,'old');
  const action=post('/tool',{name:'act',args:{kind:'click',id:'modeTimeline',revision:1}},toolToken);
  await new Promise(r=>setTimeout(r,30));
  assert.equal((await post('/sync',{context:{revision:1}},other)).data.commands.length,0);

@@ -20,13 +20,71 @@ class WikiTests(unittest.TestCase):
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
         self.news=Store(Path(self.tmp.name)/'news.sqlite3');self.calls=[]
         def run(store,job,a,context):
-            self.calls.append(a['revision_id']);return {'proposal':proposal(a),'usage':{'input_tokens':30,'output_tokens':20}}
+            self.calls.append(a['revision_id']);return {'proposal':({'nodes':[],'relations':[]} if job['payload'].get('operation')=='review' else proposal(a)),'usage':{'input_tokens':30,'output_tokens':20}}
         self.service=WikiService(self.news,runner=run,start_worker=False)
         self.store=self.service.store('NASDAQ:TSLA')
     def plan(self,rows=None,**kw):
         return self.service.plan(dict(instrument='NASDAQ:TSLA',model='fixture',batch_size=5,daily_limit=20,articles=rows if rows is not None else [row()],sources=['massive'],search={'ticker':'TSLA'},**kw))
     def start(self,rows=None,continuous=False):
         p=self.plan(rows);self.service.start({'plan_id':p['plan_id'],'continuous':continuous});self.service.tick();return self.store.graph()
+    def test_invalid_temporal_relation_is_repaired_once_and_all_usage_counted(self):
+        attempts=[]
+        def run(store,job,a,context):
+            attempts.append(job.get('repair'))
+            p=proposal(a)
+            p['nodes'].append(dict(p['nodes'][0],key='n2',kind='Event',title='event'))
+            if len(attempts)==1:p['relations']=[dict(source='n2',target='n1',type='TEMPORALLY_PRECEDES',rationale='sequence',citations=p['nodes'][0]['citations'])]
+            return {'proposal':p,'usage':{'input_tokens':10,'output_tokens':2}}
+        self.service.runner=run;g=self.start()
+        self.assertEqual(g['jobs'][0]['status'],'completed')
+        self.assertEqual(len(attempts),2)
+        self.assertIn('時間順序只能連接事件',attempts[1]['error'])
+        self.assertEqual(g['jobs'][0]['usage']['input_tokens'],20)
+        self.assertEqual(g['version'],1)
+        self.assertFalse(any(e['relation_type']=='TEMPORALLY_PRECEDES' for e in g['edges']))
+
+    def test_repair_stays_bounded_without_daily_quota(self):
+        attempts=[]
+        def bad(store,job,a,context):
+            attempts.append(1);p=proposal(a);p['nodes'][0]['citations'][0]['quote']='not in source'
+            return {'proposal':p,'usage':{'input_tokens':9}}
+        self.service.runner=bad
+        plan=self.service.plan({'instrument':'NASDAQ:TSLA','model':'fixture','batch_size':1,'daily_limit':1,'articles':[row()]})
+        self.service.start({'plan_id':plan['plan_id']});self.service.tick()
+        self.assertEqual(len(attempts),2);self.assertEqual(self.store.jobs()[0]['status'],'failed')
+        self.assertEqual(self.store.jobs()[0]['usage']['input_tokens'],18);self.assertEqual(self.store.graph()['version'],0)
+
+    def test_resume_drains_saved_scope_and_reuses_completed_articles(self):
+        rows=[row(suffix=str(i)) for i in range(4)]
+        self.news.save('massive',query_key('massive','TSLA'),rows,[])
+        p=self.service.plan({'instrument':'NASDAQ:TSLA','model':'fixture','batch_size':1,'daily_limit':20,'articles':rows,'sources':['massive'],'search':{'ticker':'TSLA'}})
+        self.service.start({'plan_id':p['plan_id']});self.service.tick()
+        c=self.service.coverage(self.store);self.assertEqual((c['scope_done'],c['scope_total']),(4,4))
+        self.service.resume({'instrument':'NASDAQ:TSLA'})
+        for _ in range(5):self.service.tick()
+        c=self.service.coverage(self.store);self.assertEqual(c['scope_percent'],100);self.assertEqual(len(self.calls),4)
+        self.assertFalse(self.store.config()['catch_up']);self.service.resume({'instrument':'NASDAQ:TSLA'});self.service.tick();self.assertEqual(len(self.calls),4)
+        self.assertTrue((self.news.path.parent/c['storage']).exists())
+        newer=row(suffix='new-day');self.news.save('massive',query_key('massive','TSLA'),[newer],[])
+        self.service.resume({'instrument':'NASDAQ:TSLA'});self.service.tick();self.assertEqual(len(self.calls),5)
+
+    def test_classification_is_unverified_and_versioned(self):
+        def run(store,job,a,context):
+            p=proposal(a);p['nodes'][0]['kind']='Thesis';p['nodes'][0]['assessment']={'category':'direct','rationale':'Company earnings channel; returns not tested.'}
+            return {'proposal':p}
+        self.service.runner=run;g=self.start();n=g['perspectives']['theses'][0]
+        self.assertEqual(n['assessment']['status'],'unverified');self.assertIsNone(n['assessment']['predictive_association'])
+        self.assertEqual(g['perspectives']['categories']['direct'],1)
+        self.assertEqual(self.store.graph(version=0)['perspectives']['total_theses'],0)
+
+    def test_reopened_global_scope_reuses_saved_evidence_and_empty_start_preserves_config(self):
+        self.start()
+        p=self.service.plan({'instrument':'NASDAQ:TSLA','model':'fixture','scope':'global','articles':[],'sources':[],'search':{}})
+        self.assertEqual(p['selected'],1);self.assertEqual(p['reused'],1)
+        cfg=self.store.config();before=len(self.store.jobs())
+        self.assertEqual(self.service.start({'plan_id':p['plan_id']})['status'],'noop')
+        self.assertEqual(self.store.config(),cfg);self.assertEqual(len(self.store.jobs()),before)
+
     def test_preview_zero_calls_duplicate_start_and_cached_extraction(self):
         p=self.plan();self.assertEqual(self.calls,[]);self.assertEqual(self.store.pending('fixture'),[])
         self.service.start({'plan_id':p['plan_id']});self.service.tick()
@@ -60,10 +118,11 @@ class WikiTests(unittest.TestCase):
             store.cancel(job['id']);return {'proposal':proposal(a)}
         self.service.runner=late;g=self.start()
         self.assertEqual(g['version'],0);self.assertEqual(g['jobs'][0]['status'],'cancelled')
-    def test_daily_limit_counts_attempts_before_results(self):
+    def test_legacy_limits_do_not_stop_processing(self):
         p=self.service.plan({'instrument':'NASDAQ:TSLA','model':'fixture','batch_size':5,'daily_limit':1,'articles':[row(suffix=str(i)) for i in range(3)]})
         self.service.start({'plan_id':p['plan_id'],'continuous':True});self.service.tick();self.service.tick()
-        self.assertEqual(len(self.calls),1);self.assertEqual(self.store.jobs()[0]['status'],'budget_paused')
+        self.assertEqual(len(self.calls),3);self.assertEqual(self.store.jobs()[0]['status'],'completed')
+        self.assertEqual(self.service.coverage(self.store)['daily_calls'],3)
     def test_restart_does_not_retry_paid_interrupted_call(self):
         p=self.plan();self.service.start({'plan_id':p['plan_id'],'continuous':True})
         with self.store.connection() as db:
@@ -149,13 +208,13 @@ class WikiTests(unittest.TestCase):
         context=self.store.context(capture(row(title='Tesla earnings update',suffix='another')))
         self.assertTrue(any(n['title']=='Tesla earnings grow' for n in context))
 
-    def test_partial_review_resumes_without_reviewing_same_batch(self):
+    def test_explicit_review_can_revisit_existing_viewpoints(self):
         self.start([row(suffix=str(i)) for i in range(3)])
         body={'instrument':'NASDAQ:TSLA','model':'fixture','articles':[row(suffix=str(i)) for i in range(3)],'batch_size':1,'operation':'review'}
-        for remaining in [3,2,1,0]:
+        for remaining in [3,3]:
             p=self.service.plan(body);self.assertEqual(p['pending'],remaining)
             self.service.start({'plan_id':p['plan_id']});self.service.tick()
-        self.assertEqual(len(self.calls),6)
+        self.assertEqual(len(self.calls),9)
 
     def test_old_snapshot_does_not_hide_explicitly_selected_latest_revision(self):
         latest=capture(row(title='Tesla latest earnings'));old=capture(row(title='Tesla old earnings'))

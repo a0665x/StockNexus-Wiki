@@ -67,7 +67,7 @@ class ViewRelationsTests(HTTPTests):
 
     def test_browser_search_defers_all_relation_work(self):
         req=normalize_request({'query':'test','sources':['google'],'start':'2026-01-01','end':'2026-01-02','defer_relations':True},today=dt.date(2026,11,4))
-        with patch.object(server,'search_source',return_value={'source':'google','articles':[row('google')]}),patch.object(server,'build_relations',side_effect=AssertionError('full graph computation')):
+        with patch.object(server,'search_source',return_value={'source':'google','articles':[row('google')]}),patch('news_atlas.graph_payload.build_relations',side_effect=AssertionError('full graph computation')):
             events=list(server.search_events(req,'',self.store))
         self.assertEqual(events[-1]['type'],'done')
         self.assertTrue(next(e for e in events if e['type']=='source')['graph']['relations_pending'])

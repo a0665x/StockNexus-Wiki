@@ -3,12 +3,14 @@ const assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('nod
 class Element {
   constructor(){this.value='';this.children=[];this.handlers={};this.style={};this.classList={add(){},remove(){},toggle(){}};}
   set textContent(v){this.children=[];this.text=String(v)} get textContent(){return (this.text||'')+this.children.map(c=>c.textContent||'').join('')}
+  setCustomValidity(){} reportValidity(){}
   setAttribute(k,v){this[k]=v} append(...e){this.children.push(...e)} replaceChildren(...e){this.text='';this.children=e}
   addEventListener(k,fn){this.handlers[k]=fn} getBoundingClientRect(){return {width:900,height:600,left:0,top:0}} click(){}
 }
 const elements=new Map(),get=id=>{if(!elements.has(id))elements.set(id,new Element());return elements.get(id)};
 const logs=[];
 const context={ResizeObserver:class{observe(){}},document:{documentElement:{},getElementById:get,createElement:()=>new Element(),createElementNS:()=>new Element(),querySelectorAll:()=>[],body:new Element()},ForceGraph3D(){throw Error('Error creating WebGL context.');},console:{...console,error:(...args)=>logs.push(args.join(' '))},Date,URL,Blob,TextDecoder,TextEncoder,Uint8Array,AbortController,setTimeout:()=>0,clearTimeout(){},setInterval:()=>0,clearInterval(){},fetch:async()=>({ok:true,json:async()=>({db:{articles:1},channels:[],snapshots:[]})})};
+context.addEventListener=()=>{};context.document.addEventListener=()=>{};context.AtlasWorkspace={ready:new Promise(()=>{}),save(){}};
 vm.createContext(context);
 for(const file of ['i18n','explorer-ui','graph-view','timeline','glow','date-range','interaction','time-lens','app'])vm.runInContext(fs.readFileSync('dist/'+file+'.js','utf8'),context);
 vm.runInContext(`rebuild({articles:[{id:'one',title:'Test article',source:{provider:'google'},published_at:'2026-10-28',summary:'',symbols:[]}],relations:[]})`,context);
