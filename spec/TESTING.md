@@ -18,7 +18,7 @@
 
 本輪瀏覽器：retry 31 checks PASS、restore 30 checks PASS；research real HTTP/Chrome PASS。瀏覽器使用隔離資料、可控 API 回應／模型 fixture，包含實際 pointer 點擊、桌面與 390px overflow，不等於對正式模型做付費驗收。新增 HTTP／cache 3 tests、classifier 6 tests 先各自通過；完整 `python3 -m unittest discover -s tests`：289 tests / 133.543s / OK（有既有測試連線 ResourceWarning；無失敗）。部署已於 2026-11-07 06:42 UTC 完成：L1 與 research_jobs 都沒有 running 時持有 DB 寫鎖停止容器，再以新版 image 啟動。未中斷在途模型。`node --check dist/wiki-view.js`、spec 路由驗證、diff whitespace 通過。一次 UI detector 無命中；獨立 reviewer 的兩項 findings 均 resolved，documenter 確認沒有新的設計系統規則。
 
-正式驗證：container healthy；HTTP 提供的 wiki-view.js 與本地完全一致，容器 compiler.py／store.py 位元組也相同。`GET /api/wiki/status` 317.7ms、TSM jobs 三次 425.8／1328.5／408.7ms，全部 200（本機小樣本，非效能 SLA）。同一 TSM job 重啟後 running，done 22→62、version 10→11；原 model/high、Graph root、日期 2025-11-06→2026-11-07 及凍結圖範圍完全相同。quick_check ok。新容器觀察期間無 database-is-locked／HTTP 503；啟動時有客戶端斷線 BrokenPipe，後續 graph/jobs 200。測試不新增付費工作，既有使用者佇列正常接續。程式修正已推送 `1457de8`（llm_wiki）；本段為部署證據補記。
+正式驗證：container healthy；HTTP 提供的 wiki-view.js 與本地完全一致，容器 compiler.py／store.py 位元組也相同。`GET /api/wiki/status` 317.7ms、TSM jobs 三次 425.8／1328.5／408.7ms，全部 200（本機小樣本，非效能 SLA）。同一 TSM job 重啟後 running，done 22→62、version 10→11；原 model/high、Graph root、日期 2025-11-06→2026-11-07 及凍結圖範圍完全相同。quick_check ok。新容器觀察期間無 database-is-locked；啟動時有一筆已斷線客戶端的 BrokenPipe，handler 在已送出 200 後嘗試寫 503 並再次失敗，因此 log 留有一筆 503，不能聲稱完全無 503 紀錄。其後實測 graph/jobs 皆為 200；本輪未改通用斷線例外處理。測試不新增付費工作，既有使用者佇列正常接續。程式修正已推送 `1457de8`（llm_wiki）；本段為部署證據補記。
 
 原有 11 個 Wiki DB 已以 SQLite backup 保存到 gitignored `data/private/wiki-responsive-backup-20261107/`，舊執行 image tag 為 `news-atlas:pre-wiki-responsive-20261107`。本次沒有新 schema migration，不刪資料。回退優先使用舊程式/image 與現有 DB；如要還原備份需先停工作，確認接受備份之後新增成果的損失，不能自動覆蓋較新 DB。
 
