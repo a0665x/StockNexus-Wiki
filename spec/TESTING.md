@@ -408,3 +408,15 @@ PYTHONPATH=.:tests python tests/browser_chat_language.py
 - `python3 spec/scripts/verify_docs.py`：PASS，37 份 spec Markdown 本地連結；額外檢查 README.md 與 docs/media/README.md 的本地連結全部存在。
 - `git diff --check`：PASS。README 使用 repo 相對路徑，圖檔一起提交；中文預設展示，英文 details 展開及直接連結。
 - 未驗證：GitHub 網頁實際展開渲染；無 UI／backend 行為變更，未重跑行為測試、重啟服務、修改 DB 或呼叫 Wiki 模型。
+
+## 2026-11-07 — L2 跨股票忙碌與狀態恢復
+
+- 正式重現：TSM 無 queued/running L1；`research/availability?instrument=NASDAQ:TSM` 回 busy=true、instruments=[NASDAQ:GOOGL]。GOOGL cb7b2bbc72bf4b68b243532033e4ef54 有近期 updated_at；全局模型槽守門正確，缺陷是操作旁沒有原因，只藏在 tooltip。
+- RED：`/usr/bin/python3 tests/browser_research.py` 新增別股 GOOGL 工作 fixture，在「idle current stock must visibly name the other stock blocking L2 without hover」失敗。初次使用環境 python3 缺 websocket，改用已有依賴的 /usr/bin/python3；不是產品故障。修正版首次測試又碰到初始化 checking，改為先等 ready 再加入阻擋工作，避免把初始載入誤判成忙碌。
+- GREEN：同指令 PASS。覆蓋真實 HTTP／Chromium 的跨股原因、前往股票／返回／草稿與期間保存、工作完成解除、availability 503 與恢復；既有建立研究／來源／live 保存／版本／desktop/mobile overflow 皆通過。使用 fixture runner，沒有真實模型呼叫。
+- 正式操作：`/usr/bin/python3 tests/browser_live_research_availability.py --url https://ubuntu.tail9e662c.ts.net:8765/` PASS。攔截 workspace 寫入並拒絕模型寫入；實際點擊到 TSM 研究入口，當時 availability=false，建立按鈕 enabled。跨股忙碌／跳轉是在隔離 HTTP 測試驗證，不能說成正式仍忙碌時也重跑成功。
+- 使用者在部署前已取消 GOOGL L1（15:19:58 UTC）；部署前快照無活動 L1，v588。安全邊界檢查亦確認無 running 研究才停容器，不復活取消工作。最後保留 v588／done604／cancelled，全部原 Wiki 版本未倒退；無 migration 或清庫。
+- 第一輪部署的 `/api/status` 健康探測失敗：實測全庫統計 3.364 秒，超過內部 timeout=3。`tests/test_healthcheck.py` 從實際 Dockerfile 讀探測路徑，給不可用 stats；舊路徑 RED，新 `/api/capabilities` GREEN（1 test），確認不掃描資料庫。這是 HTTP serving readiness，不宣稱 DB 或模型供應商可用；統計 API 保留。
+- 最後容器 2026-11-07 15:24:01 UTC 啟動 healthy，served research-view.js 與原始碼 byte 相同；capabilities HTTP 200／0.003469 秒。回退映像 `news-atlas:pre-l2-availability-20261107`；回退不覆蓋資料庫。
+- 另觀察到部署後外部發起的 GOOGL L2 工作因「缺少比較基線，不可宣稱動能變化」失敗；不是本測試建立，未放寬驗證或付費重試。按鈕恢復不代表所有研究推論都能通過證據檢查。
+- 中英文 PNG 目視確認移除限制／警語旁註；核心新聞屬性、具體觀點與分類、選取 L2 引用圖保留。`node --check dist/research-view.js`、spec 37 份連結與 `git diff --check` PASS；未重跑完整 backend suite。

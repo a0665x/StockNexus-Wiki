@@ -15,3 +15,5 @@
 - 兩圖由內建 imagegen 依使用者確認的構圖製作，屬向量插畫風格的 PNG，不是可編輯 SVG。生成指令見 [architecture-prompts.md](architecture-prompts.md)。
 - 三層指 News → L1 → L2；Classifier／Taxonomy 是 L1 支援元件。圖示與連線為概念示意，不代表逐欄 DB schema、每個 root 都符合抽取條件，或已驗證的市場結論。
 - 維護箭頭是更新調度，不是 L2 回灌成新聞。候選詞需審核；價格與語意解析等實作限制與 README／RESEARCH_LAYERS 同步。
+
+2026-11-07 更新：兩圖依目前 UI 修正新聞節點／連線／來源屬性、具體觀點與多標籤、目前選取研究的 L1 快照疊圖。依使用者回饋移除圖上警語與限制旁註，只保留核心流程；技術邊界查 spec。

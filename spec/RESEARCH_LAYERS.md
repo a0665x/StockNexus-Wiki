@@ -23,7 +23,7 @@
 
 使用者確認白底、柔和配色、圓角框、AI 插畫、節點簇與清晰箭頭的構圖符合產品概念。三層金字塔是 **News／Evidence → 共享通用 L1 → 客製 L2**；不改程式的兩個觀點層命名，Classifier／Taxonomy 仍是支援元件。圖上 Root Trees 是新聞分組示意，不能把 News 規則邊當成已驗證的支持／因果關係。
 
-[README](../README.md) 提供 [中文圖](../docs/media/stocknexus-architecture-zh-TW.png)／[英文圖](../docs/media/stocknexus-architecture-en.png)。圖必須與第一版限制並列：確定性 Lens、分類＋文字檢索、候選詞受控審核、價格／敘事基線缺口；持續累積不等於保證正確。維護回路是新增證據、檢查反證、修訂受影響觀點與刷新研究，不許把 L2 推論當 L1 外部證據。這次只更新介紹與圖，不宣稱新增 runtime 能力。
+[README](../README.md) 提供 [中文圖](../docs/media/stocknexus-architecture-zh-TW.png)／[英文圖](../docs/media/stocknexus-architecture-en.png)。技術文件保留第一版限制（介紹圖不放限制旁註）：確定性 Lens、分類＋文字檢索、候選詞受控審核、價格／敘事基線缺口；持續累積不等於保證正確。維護回路是新增證據、檢查反證、修訂受影響觀點與刷新研究，不許把 L2 推論當 L1 外部證據。這次只更新介紹與圖，不宣稱新增 runtime 能力。
 
 ## 現況與整合
 
@@ -123,3 +123,9 @@ python3 scripts/wiki_taxonomy_upgrade.py --instrument NASDAQ:GOOGL --apply
 ## 2026-11-07：研究層的等待與切換
 
 由工具列切 L2 時，讀取／空結果／錯誤重試必須在主畫面可見，不依賴研究側欄是否開啟。無 L2 引導到「研究問題 · L2」，不要求重新整理 L1。讀取回覆同時核對股票、頁面 generation、層選擇與 run 請求序號；切回 L1／切歷史／換股票後的舊回應不能搶回畫面；開啟研究表單時清除已被新導覽取代的圖層 loading。來源和模型資料不因 UI 狀態改寫。實際操作與回歸見 TESTING。
+
+## 2026-11-07：跨股票模型槽的可見性
+
+研究可用性使用全局 L1／分類工作狀態；主畫面進度僅屬目前股票，不能推斷其他股票也閒置。當 TSM 閒置但 GOOGL 整理中，建立研究旁直接顯示 GOOGL 與共用模型忙碌原因，並可前往該股票；不靠停留 tooltip 才發現。前往後不自動停止工作，返回原股票保留研究草稿與觀察期間。忙碌解除由輪詢恢復按鈕，不建立額外模型工作。
+
+BDD：本股閒置／別股 busy → 顯示 ticker 與可操作導覽；別股 completed → 不重新開頁即解除；availability 503 → 明示無法確認及重試，不假稱 L1 忙碌；恢復 200 → 清除錯誤；晚回覆不覆蓋新股票／較新檢查。正式狀態查詢與隔離瀏覽器驗證分開記於 TESTING。

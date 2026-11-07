@@ -105,6 +105,32 @@ def main():
      js("$('researchOpen').click()")
      wait("!$('researchPanel').hidden&&$('researchTaxonomy').children.length>0")
      assert js("!$('researchInclude')&&!$('researchExclude')&&!$('researchTaxonomy').querySelector('input')")
+     wait("!$('researchSubmit').disabled")
+     # Another stock owns the global model slot while this stock is idle.
+     blocker=wiki.store('NASDAQ:GOOGL')
+     with blocker.connection() as db:db.execute("INSERT INTO jobs(id,created_at,updated_at,status,payload) VALUES ('blocker',?,?,'running','{}')",(now(),now()))
+     wait("$('researchSubmit').disabled")
+     assert js("!!$('researchAvailability')&&!$('researchAvailability').hidden&&$('researchAvailability').textContent.includes('NASDAQ:GOOGL')"), 'idle current stock must visibly name the other stock blocking L2 without hover'
+     assert js("!$('researchBlockers').hidden&&$('researchBlockers').textContent.includes('NASDAQ:GOOGL')"), 'provide navigation to the blocking stock'
+     js("$('researchQuestion').value='AI 需求與風險';$('researchWindow').value='90';$('researchBlockers').querySelector('button').id='fixtureBlocker'")
+     wait("[...$('wikiSaved').options].some(o=>o.value==='NASDAQ:GOOGL')")
+     click('fixtureBlocker')
+     wait("$('wikiInstrument').value==='NASDAQ:GOOGL'&&$('researchPanel').hidden")
+     choose('wikiSaved',js("[...$('wikiSaved').options].findIndex(o=>o.value==='NASDAQ:TSLA')"))
+     wait("$('wikiInstrument').value==='NASDAQ:TSLA'")
+     click('researchOpen');wait("!$('researchPanel').hidden&&!$('researchSubmit').classList.contains('research-working')")
+     assert js("$('researchQuestion').value==='AI 需求與風險'&&$('researchWindow').value==='90'"), 'viewing blocking work preserves the original research draft'
+     with blocker.connection() as db:db.execute("UPDATE jobs SET status='completed'")
+     wait("!$('researchSubmit').disabled")
+     assert js("$('researchAvailability').hidden&&$('researchBlockers').hidden"), 'finished work must release research without reloading'
+     # Availability failure is not an active L1 job, and recovery clears it.
+     js("window.availabilityFetch=fetch;window.availabilityOutage=true;window.fetch=(u,o)=>availabilityOutage&&String(u).includes('/research/availability?')?Promise.resolve(new Response(JSON.stringify({error:'Controlled availability outage'}),{status:503})):availabilityFetch(u,o)")
+     wait("$('researchSubmit').disabled")
+     assert js("$('researchAvailability').textContent.includes('無法確認')&&!$('researchAvailability').textContent.includes('整理中')&&$('researchBlockers').textContent.includes('重新確認')"), 'network failure must not pretend L1 is busy'
+     js('availabilityOutage=false')
+     wait("!$('researchSubmit').disabled")
+     assert js("$('researchAvailability').hidden"), 'availability recovery clears stale error'
+     print('PASS cross-stock busy visibility, release, availability outage and recovery',flush=True)
      with paused.connection() as db:db.execute("UPDATE jobs SET status='queued'")
      wait("$('researchSubmit').disabled")
      js("$('researchSubmitWrap').focus()")

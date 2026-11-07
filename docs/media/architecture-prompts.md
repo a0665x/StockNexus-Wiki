@@ -44,3 +44,7 @@ pyramid top "客製觀點／L2 Wiki", middle "共享觀點／L1 Wiki", bottom "�
 bottom ribbon "概念持續累積，陳述可被修訂；保留證據時間與成立條件。"
 "Conceptual architecture" -> "概念架構圖"
 Important: keep classifier as sidecar not separate layer. Do not introduce arrows that feed personalized L2 conclusions into shared L1 or news as evidence. Outer purple maintenance paths represent controller updates, not evidence return; remove upward arrowhead INTO maintenance box at its bottom; use one continuous path originating at maintenance and branching toward three layers. Final image entirely Chinese apart from explicitly preserved proper identifiers. Do not change illustration or remove details.
+
+## Current UI revision and clean presentation (2026-11-07)
+
+The final pair replaces the original conceptual figures. Built-in imagegen edited the approved UI diagram to show article nodes, relation edges and source attributes; substantive O1/O2 sentences with separate multi-label categories; and the selected L2 run plus its cited L1 snapshot on a shared canvas. The user requested removal of warning/limitation footnotes, unavailable-price notes, L1-busy notes, correctness disclaimers and implementation-boundary captions from the figure. Preserve conditional opinion text and the workflow; keep technical scope in the spec. Produce a matching fully English localization with the same layout. Source originals remain in the generator output directory; repository copies are the canonical README assets.
