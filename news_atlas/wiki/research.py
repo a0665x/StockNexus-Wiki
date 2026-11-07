@@ -30,6 +30,14 @@ SEEDS = [
  ('analysis.risk','analysis_dimension','風險',['risk','風險']),
 ]
 
+def quality_terms():
+    rows=[
+        ('analysis.noise','低相關／噪聲',['noise','low relevance','重複轉載','低相關','噪聲'],
+         '依引用判讀與股票研究低相關、重複轉載或缺乏新增資訊的內容；不代表來源造假，也不可只因沒有價格影響就判為噪聲。'),
+        ('analysis.fact_check','查核／更正',['fact check','correction','debunk','查核','澄清','更正','撤回','闢謠'],
+         '針對新聞主張進行交叉查核、反覆驗證、澄清、更正或撤回的觀點；標籤不代表新聞已被證實錯誤。判定錯誤必須另有可引用的支持與反證。')]
+    return [{'id':i,'facet':'analysis_dimension','label':label,'aliases':aliases,'definition':definition,'include':aliases,'exclude':[],'related_terms':[],'status':'active'} for i,label,aliases,definition in rows]
+
 def enabled():
     return os.environ.get('NEWS_ATLAS_RESEARCH','1') != '0'
 
@@ -66,7 +74,7 @@ def obj(db,ident,kind=None,owner=OWNER):
 def taxonomy(db,cutoff=None):
     rows=db.execute("SELECT payload FROM research_objects WHERE kind='taxonomy' AND owner='' ORDER BY created_at DESC,id DESC").fetchall()
     if not rows:
-        tax={'revision_id':uuid.uuid4().hex,'available_at':now(),'terms':[{'id':i,'facet':f,'label':l,'aliases':a,'definition':l+'相關的原子主張','include':a,'exclude':[], 'related_terms':[],'status':'active'} for i,f,l,a in SEEDS]}
+        tax={'revision_id':uuid.uuid4().hex,'available_at':now(),'terms':[{'id':i,'facet':f,'label':l,'aliases':a,'definition':l+'相關的原子主張','include':a,'exclude':[], 'related_terms':[],'status':'active'} for i,f,l,a in SEEDS]+quality_terms()}
         put(db,'taxonomy',tax,'',tax['revision_id']);return tax
     for row in rows:
         tax=json.loads(row[0])
@@ -180,11 +188,8 @@ def bundle(db,lens):
         seen=set()
         while key in updates and key not in seen:seen.add(key);key=updates[key]
         return key
-    classified={}
-    for r in db.execute("SELECT payload FROM research_objects WHERE kind='classification' AND owner=''"):
-        a=json.loads(r[0])
-        if a.get('classifier_version')=='llm-v1' and a['taxonomy_revision']==tax['revision_id'] and instant(a['available_at'])<=cutoff:classified[a['opinion_revision']]=a
-    from .classifier import groups
+    from .classifier import groups, assignments as model_assignments
+    classified=model_assignments(db,tax['revision_id'],cutoff)
     membership=groups({'nodes':list(nodes.values()),'edges':edges})
     inherited={i:[] for i in nodes}
     for root,members in membership.items():
@@ -235,8 +240,8 @@ def bundle(db,lens):
     selected=bounded;selected_ids={n['revision_id'] for n in selected}
     relations=[e for e in edges if e['source']['stable_id'] in selected_ids and e['target']['stable_id'] in selected_ids][:100]
     state=epochs(db)
-    manifest={'schema':SCHEMA,'instrument':lens['instrument'],'cutoff':lens['time_spec']['as_of'],'epochs':state,'taxonomy_revision':tax['revision_id'],'source_revisions':sorted({e['revision_id'] for n in selected for e in n['evidence']}),'opinion_revisions':sorted(selected_ids),'enabled_retrieval_channels':['classification','full_text'],'classification_state':'partial','market_state':'unavailable','index_state':'transactional_scan','candidate_count':len(candidates),'selected_count':len(selected),'truncated':len(candidates)>len(selected),'excluded':excluded,'baseline':'unavailable','graph_expansion':{'hops':1,'max_nodes':24,'max_edges':100}}
-    result={'lens':lens,'manifest':manifest,'opinions':selected,'relations':relations,'assignments':[a for a in assignments if a['opinion_revision'] in selected_ids],'features':[],'outcomes':[], 'computed_at':now(), 'gaps':['價格資料缺少可驗證的歷史可知性，價格動能 unavailable','沒有可比歷史敘事基線，不推斷敘事轉強','僅引用已取得的標題與摘要；新聞來源取得可能不完整','既有觀點採相容包裝，成立條件及展望未知','分類採可解釋詞彙規則，未分類仍可由全文召回']}
+    manifest={'schema':SCHEMA,'instrument':lens['instrument'],'cutoff':lens['time_spec']['as_of'],'epochs':state,'taxonomy_revision':tax['revision_id'],'source_revisions':sorted({e['revision_id'] for n in selected for e in n['evidence']}),'opinion_revisions':sorted(selected_ids),'enabled_retrieval_channels':['classification','full_text'],'classification_state':'partial','unassessed_term_ids':sorted({term for a in classified.values() for term in a.get('unassessed_term_ids',[])}),'market_state':'unavailable','index_state':'transactional_scan','candidate_count':len(candidates),'selected_count':len(selected),'truncated':len(candidates)>len(selected),'excluded':excluded,'baseline':'unavailable','graph_expansion':{'hops':1,'max_nodes':24,'max_edges':100}}
+    result={'lens':lens,'manifest':manifest,'opinions':selected,'relations':relations,'assignments':[a for a in assignments if a['opinion_revision'] in selected_ids],'features':[],'outcomes':[], 'computed_at':now(), 'gaps':['價格資料缺少可驗證的歷史可知性，價格動能 unavailable','沒有可比歷史敘事基線，不推斷敘事轉強','僅引用已取得的標題與摘要；新聞來源取得可能不完整','既有觀點採相容包裝，成立條件及展望未知','分類採模型標籤；未分類仍可由全文召回，新增術語尚未評估時沿用原版本標籤']}
     manifest['snapshot_id']='snapshot-'+digest(result)
     # Exclude clock/observation timestamp from content fingerprint. Time eligibility itself is included.
     effective={'opinions':selected,'relations':relations,'taxonomy':tax,'query':lens['query'],'filter':lens['filter_ast'],'dimensions':lens['dimensions'],'time_policy':lens['time_policy'],'gaps':result['gaps']}

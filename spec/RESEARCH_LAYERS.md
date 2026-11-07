@@ -78,3 +78,21 @@ L1 與分類工作共用模型槽；全局仍有 queued/running 時，研究頁�
 BDD 增補：分類補足重入不重複付費；未知 term 不部分發布；同定義資料合併不丟模型分類；分類不跨 RELATED_TO 擴散；忙碌拒絕新 L2 但舊圖可讀；真實指標拖拉不重建圖；停留提示時限；L1/L2 切換共用相同 3D 實例；Chat 工具依選取回傳 L2、L1 與精確來源。GET research 新增 `availability`、`runs`，仍遵守原本機來源／owner 邊界。
 
 交叉審查補充邊界：純 L1 只讀目前所選 L1 版本，切換歷史版本會退出研究疊圖；L2 引用背景明示固定研究快照，bundle 保留原節點 kind。隱藏的選取會同步從 Chat 清除，無選取時只以畫面可見節點為預設範圍。返回設定／切換股票再回來會接續原研究 job，availability 可找回該股票活動工作；不因重新開頁重送模型。分類工作可用同一停止按鈕取消，取消後的模型例外不能把 cancelled 改成 failed，已提交標籤保留。
+
+
+## 2026-11-07：分類圖表與漸進詞彙升級
+
+Wiki 選單、日期柱狀圖與群列表共用 `classifier.enrich()` 的 `opinion_index`，每個 L1 群以根觀點計一次，引用多日取所選區間內最新日期；多標籤各計一次，所以分類合計可超過獨立群數。顏色與分類 ID 同 taxonomy；原 assessment 財務影響保留於詳細屬性，不再作另一套圖表分類。`__pending`／`__unclassified` 只是 UI 缺資料狀態，不是模型分類。選單採原生 select，不再在 focus 時疊加第二個分類清單，輪詢亦不替換正在操作的選項。
+
+新增 `analysis.noise`（低相關／噪聲）與 `analysis.fact_check`（查核／更正）。後者包含反覆驗證、澄清及更正，不代表新聞已證實錯誤；不得從舊 assessment 或關鍵字猜貼標。無相應 assignment 時數量為零。
+
+詞彙純新增時，僅在舊 vocabulary 全部定義／別名／狀態等欄位完整保持不變的條件下重用原 assignment；保留確切舊 taxonomy revision，以 `unassessed_term_ids` 記錄未評估新詞。新 revision 的 assignment 優先於較晚到達的相容舊工作。定義修改失效、歷史 cutoff 不借用未來 taxonomy／assignment。L2 bundle 使用相同 lookup，保留原引用版本與缺口。讀取／升級不啟動模型；既有凍結工作不換詞彙，下次新 L1 呼叫使用新定義。
+
+無 SQLite schema migration、無刪除資料。部署新版後可先預覽，再顯式執行：
+
+```bash
+python3 scripts/wiki_taxonomy_upgrade.py --instrument NASDAQ:GOOGL
+python3 scripts/wiki_taxonomy_upgrade.py --instrument NASDAQ:GOOGL --apply
+```
+
+腳本經公開 taxonomy API 以 expected_revision CAS 附加缺少的兩個詞；可多次傳 `--instrument`，重跑為 unchanged，不覆蓋同 ID 自訂詞彙。舊庫須執行此步，新庫 seed 已包含。回退程式優先保留現有 DB；新增 taxonomy revision 不刪舊版，但回退到只接受完全相同 taxonomy revision 的程式會將舊分類視為待補，應保留此相容 lookup 或暫停補分類，避免重算。

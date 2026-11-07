@@ -2,6 +2,20 @@
 
 入口：[PROJECT_MAP.md](PROJECT_MAP.md)。測試使用隔離 fixture／暫存 DB，不應改寫使用者的 data/news-atlas.sqlite3。
 
+## 2026-11-07：同一分類來源與穩定下拉選單
+
+| Given／When 邊界 | Then／驗證 |
+| --- | --- |
+| 一個群有兩個模型標籤，其他群待分類／未歸類 | 選單、柱狀圖與列表以同一群索引計數，多標籤各一次；不退回舊財務分類 |
+| 點柱狀圖，再開原生下拉選單 | 同步圖譜與明細；沒有額外 plan/jobs；工具列及畫布幾何不變，沒有第二浮層 |
+| 新增分類詞但舊詞定義完整不變 | 重用原 assignment 和 taxonomy revision，L2 檢索同樣重用；新增詞記未評估；enqueue unchanged |
+| 修改舊詞定義／查閱升級前 snapshot | 定義變更不套用舊分類；歷史仍使用原 taxonomy，不借未來知識 |
+| 沒有噪聲或查核 assignment | 保持零筆；未分類不能冒充錯誤新聞 |
+
+`test_wiki_taxonomy_view.py`：先 2 failures／1 error 重現，修正後 3 tests OK，另補 L2 lookup 斷言通過。Wiki focused 77 tests OK；完整 `python3 -m unittest discover -s tests -q` 304 tests／61.177s／OK（既有 ResourceWarning 不隱藏）。`browser_wiki_layout.py` 真實 Chromium／pointer 34 checks PASS，含桌面與 390px 版面；`browser_research.py` 真實隔離 HTTP／Chrome 流程 PASS。第一次使用 conda Python 缺 websocket-client，改用原已安裝依賴的 `/usr/bin/python3`，未安裝新依賴。瀏覽器使用隔離 TSLA fixture，不等於正式模型語意驗證；正式工作仍限 GOOGL 一個月。
+
+一次 UI detector 指到已移除巢狀 topic 樹的舊 border 樣式；確認無使用者後刪除。桌面／手機實際截圖檢查與最終補驗列於交付紀錄。未要求模型為新增詞重算全部歷史。
+
 ## 2026-11-07：GOOGL 資料先行與月範圍維護
 
 先執行 `python3 scripts/wiki_data_audit.py --instrument NASDAQ:GOOGL`：正式資料庫 schema 1、quick_check ok，13943 article revisions／421 versions／2164 nodes／1373 edges，文章 hash、引用 span/hash、端點及版本關係均無錯誤。939 個知識節點缺舊版未記錄的 opinion_metadata、283 缺翻譯，標為 legacy；保留原文、ID、日期與模型成果，不虛構補齊。node.scope 是模型的研究適用描述，不應誤當必須等於 EXCHANGE:TICKER 的股票欄位；股票隔離核對 DB metadata 與 edge.instrument_id。

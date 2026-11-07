@@ -12,11 +12,24 @@ from .research import taxonomy, put, instant, OWNER
 COLORS=['#7de3bd','#7db6f2','#d3a5ef','#efbc78','#ec9da6','#91cbd3','#c7cb80']
 
 def assignments(db,revision,cutoff=None):
+    # Additive definitions do not invalidate labels whose complete old vocabulary
+    # is unchanged. Keep their exact original revision; never pretend new terms
+    # have been evaluated, and never borrow future knowledge for a cutoff.
+    taxonomies={}
+    for r in db.execute("SELECT payload FROM research_objects WHERE kind='taxonomy' AND owner=''"):
+        tax=json.loads(r[0])
+        if cutoff and instant(tax['available_at'])>cutoff:continue
+        taxonomies[tax['revision_id']]={t['id']:t for t in tax['terms']}
+    target=taxonomies.get(revision,{})
+    compatible={key:sorted(set(target)-set(terms)) for key,terms in taxonomies.items() if terms and all(target.get(i)==t for i,t in terms.items())}
     out={}
     for r in db.execute("SELECT payload FROM research_objects WHERE kind='classification' AND owner='' ORDER BY created_at,id"):
-        a=json.loads(r[0])
-        if a.get('classifier_version')!='llm-v1' or a['taxonomy_revision']!=revision:continue
+        a=json.loads(r[0]);source=a.get('taxonomy_revision')
+        if a.get('classifier_version')!='llm-v1' or source not in compatible:continue
         if cutoff and instant(a['available_at'])>cutoff:continue
+        previous=out.get(a['opinion_revision'])
+        if previous and previous['taxonomy_revision']==revision and source!=revision:continue
+        if source!=revision:a={**a,'unassessed_term_ids':compatible[source]}
         out[a['opinion_revision']]=a
     return out
 
@@ -71,9 +84,16 @@ def enrich(db,graph,cutoff=None):
         for i in ids:labels[i].update(own)
     for n in graph['nodes']:
         own=known.get(n['id']);labels[n['id']].update(x['term_id'] for x in (own or {}).get('assignments',[]))
+        n['classification_taxonomy_revision']=(own or {}).get('taxonomy_revision');n['unassessed_term_ids']=(own or {}).get('unassessed_term_ids',[])
         n.update(layer='L1',classification_terms=sorted(labels[n['id']]),classification_status=(own or {}).get('status','pending'),opinion_roots=[r for r,ids in members.items() if n['id'] in ids])
     graph['taxonomy']={**tax,'terms':[{**t,'color':COLORS[int(digest(t['id'])[:8],16)%len(COLORS)],'opinion_ids':[r for r in members if t['id'] in labels[r]],'node_ids':[i for i in labels if t['id'] in labels[i]]} for t in tax['terms']]}
     graph['opinion_groups']=members
+    from .workbench import news_day
+    byid={n['id']:n for n in graph['nodes']}
+    refs={c['article_revision_id'] for n in graph['nodes'] for c in n.get('citations',[])}
+    dates={r['id']:news_day(json.loads(r['payload']).get('published_at')) for r in db.execute('SELECT id,payload FROM articles WHERE id IN (SELECT value FROM json_each(?))',(encode(sorted(refs)),))}
+    graph['opinion_index']=[{**{k:byid[root][k] for k in ('id','kind','title','translations','classification_terms','classification_status') if k in byid[root]},
+        'dates':sorted({dates[c['article_revision_id']] for i in ids for c in byid[i].get('citations',[]) if dates.get(c['article_revision_id'])})} for root,ids in members.items()]
     return graph
 
 def enqueue(store,model,effort,date_range=None):

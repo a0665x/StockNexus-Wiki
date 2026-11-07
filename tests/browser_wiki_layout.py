@@ -168,10 +168,35 @@ def main():
             check('language preserves icon and accessible label',"!!$('fixtureSend').querySelector('svg')&&$('fixtureSend').getAttribute('aria-label')==='Send'")
             call('Emulation.setDeviceMetricsOverride',{'width':1238,'height':1005,'deviceScaleFactor':1,'mobile':False});time.sleep(.3)
             check('desktop bounds preserve global controls and center pane',"$('wikiPanel').getBoundingClientRect().top>=document.querySelector('body>header').getBoundingClientRect().bottom&&$('wikiSide').getBoundingClientRect().right<=innerWidth+1&&$('wikiCanvas').getBoundingClientRect().width>=259")
+            # BDD: the dropdown, chart and group list share model classifications.
+            js("""AtlasI18n.setLanguage('zh-TW');
+              fixtureWiki.taxonomy={terms:[{id:'topic.cloud',label:'雲端',color:'#7de3bd'},{id:'analysis.fact_check',label:'查核／更正',color:'#7db6f2'},{id:'analysis.noise',label:'低相關／噪聲',color:'#d3a5ef'}]};
+              fixtureWiki.nodes[1].classification_terms=['topic.cloud','analysis.fact_check'];fixtureWiki.nodes[1].classification_status='classified';
+              fixtureWiki.nodes[2].classification_terms=[];fixtureWiki.nodes[2].classification_status='pending';
+              fixtureWiki.nodes.push({id:'d',kind:'Claim',title:'Unclassified opinion',classification_terms:[],classification_status:'unclassified'});
+              fixtureWiki.opinion_groups={b:['a','b'],c:['c'],d:['d']};
+              const selectedDate=new Date(Number($('wikiRangeEnd').value)*86400000).toISOString().slice(0,10);
+              fixtureWiki.opinion_index=fixtureWiki.nodes.slice(1).map(n=>({...n,dates:[selectedDate]}));fixtureWiki.total_nodes=4;
+              window.writesBefore=wikiCalls.filter(c=>c.body).length;await AtlasWiki.refresh();
+            """)
+            check('taxonomy counts opinion groups once per label',"['topic.cloud','analysis.fact_check','__pending','__unclassified'].every(id=>Array.from($('wikiAssessment').options).some(o=>o.value===id&&o.textContent.endsWith(' · 1')))&&Array.from($('wikiAssessment').options).some(o=>o.value==='analysis.noise'&&o.textContent.endsWith(' · 0'))")
+            check('chart uses model tags and explicit missing states, never legacy assessment',"Array.from($('wikiTimeline').querySelectorAll('rect[data-count]')).reduce((sum,r)=>sum+Number(r.dataset.count),0)===4&&!$('wikiTimeline').textContent.includes('直接營運')&&!$('wikiInsights').textContent.includes('間接影響')&&!!Array.from($('wikiTimeline').querySelectorAll('rect')).find(r=>r.dataset.category==='analysis.fact_check')")
+            js("Array.from($('wikiTimeline').querySelectorAll('rect')).find(r=>r.dataset.category==='analysis.fact_check').id='fixtureTaxBar'")
+            click('fixtureTaxBar')
+            check('bar selection synchronizes dropdown graph and opinion detail',"$('wikiAssessment').value==='analysis.fact_check'&&fixtureWikiRenderer.graphData().nodes.map(n=>n.id).sort().join(',')==='a,b'&&$('wikiDetail').querySelectorAll('.wiki-viewpoint').length===1&&wikiCalls.filter(c=>c.body).length===writesBefore")
+            js("$('wikiAssessment').value='';$('wikiAssessment').dispatchEvent(new Event('change'));window.toolbarBefore=document.querySelector('.wiki-toolbar').getBoundingClientRect().toJSON();window.canvasBefore=$('wikiCanvas').getBoundingClientRect().toJSON()")
+            click('wikiAssessment')
+            check('native dropdown opens without a second menu or layout shift',"document.activeElement===$('wikiAssessment')&&!$('wikiClassLegend')&&$('wikiAssessment').size<=1&&JSON.stringify(document.querySelector('.wiki-toolbar').getBoundingClientRect().toJSON())===JSON.stringify(toolbarBefore)&&JSON.stringify($('wikiCanvas').getBoundingClientRect().toJSON())===JSON.stringify(canvasBefore)")
+            call('Input.dispatchKeyEvent',{'type':'keyDown','key':'Escape','code':'Escape','windowsVirtualKeyCode':27})
+            call('Input.dispatchKeyEvent',{'type':'keyUp','key':'Escape','code':'Escape','windowsVirtualKeyCode':27})
+            js("$('wikiAssessment').blur()")
             import base64
             Path('/tmp/wiki-split-desktop.png').write_bytes(base64.b64decode(call('Page.captureScreenshot',{'format':'png'})['data']))
             call('Emulation.setDeviceMetricsOverride',{'width':390,'height':844,'deviceScaleFactor':1,'mobile':True});time.sleep(.2)
             check('mobile layout fits without resize handles',"$('wikiPanel').scrollWidth<=$('wikiPanel').clientWidth+1&&$('wikiResizeRight').getBoundingClientRect().width===0")
+            js("$('wikiAssessment').scrollIntoView({block:'center'})")
+            Path('/tmp/wiki-split-mobile.png').write_bytes(base64.b64decode(call('Page.captureScreenshot',{'format':'png'})['data']))
+            check('mobile classification selector stays within viewport',"$('wikiAssessment').getBoundingClientRect().right<=innerWidth+1&&!$('wikiClassLegend')")
             check('no browser errors',"errors.length===0")
             print('PASS',len(checks)+len(results),'layout and physical interaction checks',flush=True)
             return 0

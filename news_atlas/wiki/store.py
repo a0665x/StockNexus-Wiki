@@ -320,7 +320,7 @@ class WikiStore:
         perspectives=extra.pop('filtered_perspectives')
         visible_ids={n['id'] for n in nodes}|{n['id'] for n in perspectives['theses']}
         extra['histories']={k:v for k,v in extra['histories'].items() if k in visible_ids}
-        return {**extra,'classification_jobs':classification_jobs,'taxonomy':classification['taxonomy'],'opinion_groups':classification['opinion_groups'],'instrument':self.instrument,'mode':'live_recorded','version':chosen,'versions':versions,'nodes':nodes,'edges':edges,'total_nodes':total,'captured_articles':count,'truncated':total>len(nodes),'config':self.config(),'jobs':self.jobs(),'perspectives':perspectives}
+        return {**extra,'classification_jobs':classification_jobs,'taxonomy':classification['taxonomy'],'opinion_groups':classification['opinion_groups'],'opinion_index':classification['opinion_index'],'instrument':self.instrument,'mode':'live_recorded','version':chosen,'versions':versions,'nodes':nodes,'edges':edges,'total_nodes':total,'captured_articles':count,'truncated':total>len(nodes),'config':self.config(),'jobs':self.jobs(),'perspectives':perspectives}
 
     def markdown(self,version=None):
         graph=self.graph(version=version)
