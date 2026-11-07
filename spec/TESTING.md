@@ -2,6 +2,24 @@
 
 入口：[PROJECT_MAP.md](PROJECT_MAP.md)。測試使用隔離 fixture／暫存 DB，不應改寫使用者的 data/news-atlas.sqlite3。
 
+## 2026-11-07：GOOGL 資料先行與月範圍維護
+
+先執行 `python3 scripts/wiki_data_audit.py --instrument NASDAQ:GOOGL`：正式資料庫 schema 1、quick_check ok，13943 article revisions／421 versions／2164 nodes／1373 edges，文章 hash、引用 span/hash、端點及版本關係均無錯誤。939 個知識節點缺舊版未記錄的 opinion_metadata、283 缺翻譯，標為 legacy；保留原文、ID、日期與模型成果，不虛構補齊。node.scope 是模型的研究適用描述，不應誤當必須等於 EXCHANGE:TICKER 的股票欄位；股票隔離核對 DB metadata 與 edge.instrument_id。
+
+正式 GOOGL 以 SQLite backup 保存在 gitignored `data/private/googl-month-20261107/backup.sqlite3`；另在 staging 副本驗證補分類清單，沒有先在正式 DB 亂改格式。UTC 2026-10-07→2026-11-07 共 2760 篇（Google 1063、Yahoo 1167、Massive 530），921 已抽取／1839 待處理；月內 694 個舊觀點群待補分類。僅計目前已取得來源，不表示供應商全年／月新聞完整。所有資料前置檢查完成後才執行本輪 BDD。
+
+| 場景邊界 | 驗證 |
+| --- | --- |
+| 相容舊版缺 metadata／翻譯 | audit ready、列 legacy，節點原文逐列不變 |
+| 來源被篡改、錯股票、未來 schema、缺 DB | 預檢失敗、不猜修補、不建立空庫 |
+| 月首／月底、前一天／後一天、未知日期、跨 UTC 時區 | 只將區間內證據所屬觀點排入分類；未知不混入 |
+| 同日期雙次開始／改成年度範圍 | 同工作重用；活動中的不同範圍拒絕，不偷偷擴大 |
+| 新聞已完成、僅缺分類 | plan 日期傳入分類並保存新範圍，不增加 extraction |
+
+本輪新增／修改測試位於 `test_wiki_data_audit.py`、`test_wiki_classifier.py`。集中 11 tests OK；完整 `python3 -m unittest discover -s tests`：294 tests / 68.429s / OK（既有 ResourceWarning 保留，無失敗）；文件連結及 diff whitespace 通過。隔離測試仍可用 TSLA fixture 驗證協定；正式維護驗收只用 GOOGL 一個月，不啟動其他股票。原始資料預檢不等於事實審查或完整付費模型驗收，正式執行結果另記。
+
+本次沒有 schema migration／刪庫；程式回退可用 `news-atlas:pre-googl-month-20261107` 搭配現有資料，但舊版補分類不具月範圍限制，回退後不可直接啟動分類。還原 DB 備份會失去之後新增成果，須先停止工作並確認需要，不能拿舊備份覆蓋正常增量資料。
+
 ## 2026-11-07：Wiki 503／單一整理入口回歸
 
 故障證據：正式服務 log 的 `GET /api/wiki/jobs?instrument=NASDAQ:TSM` 回 503，堆疊位於 WikiStore 初始化 executescript，錯誤 `database is locked`。隔離第二 SQLite 連線持有 BEGIN IMMEDIATE 時，舊路徑可重現失敗；修正後同一 HTTP jobs 讀取成功，不需釋放 writer。TSM 正式庫 read-only quick_check 為 ok；這不是歷史新聞內容正確性的保證。

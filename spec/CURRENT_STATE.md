@@ -1,5 +1,7 @@
 # 目前狀態
 
+2026-11-07 最新資料前置：GOOGL 正式庫唯讀預檢通過（13943 article revisions、421 versions、2164 nodes、1373 edges），保留歷史、不清空。維護測試改為 UTC 2026-10-07→2026-11-07，2760 篇中 921 可重用、1839 待整理，694 舊觀點群可補分類。已修正補分類未遵守日期的問題；來源與實際部署／執行證據見 WIKI_RUNTIME／TESTING。預檢是結構與引用核對，不等於事實審查。
+
 2026-11-07 最新修正：Wiki 狀態 GET 重跑初始化造成 SQLite 寫鎖／503，已改為已初始化 schema 純讀；coverage 有界快取、輪詢單飛、重進重用圖。整理入口合併為單一開始／繼續，明確點擊才 plan/jobs，含缺漏分類。首次錯誤重試、保存篩選同步圖形均有瀏覽器回歸。來源：`news_atlas/wiki/store.py`、`compiler.py`、`dist/wiki-view.js`；測試與部署以 [TESTING](TESTING.md) 本次紀錄為準。無資料刪除或破壞性 migration。 已部署 8765 且原 TSM 佇列接續；程式修正 commit `1457de8` 已推送 llm_wiki，實際延遲與保留設定核對見 TESTING。
 
 2026-11-07 本輪：依使用者十項畫面回饋，整合共用 L1/L2 圖譜與 Chat、模型分類與舊群補足、唯讀分類定位、進度區尺寸保存、L1 忙碌守門。原始碼與邊界見 [RESEARCH_LAYERS](RESEARCH_LAYERS.md)，測試／部署證據見 [TESTING](TESTING.md)。既有資料保留；新 L1 prompt 為 wiki-extract-v8。

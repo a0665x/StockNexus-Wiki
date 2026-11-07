@@ -79,3 +79,36 @@ class ClassifierTests(unittest.TestCase):
         self.assertEqual(self.research.read('job',result['job_id'])['payload']['operation'],'classify_l1')
         with self.store.connection() as db:
             self.assertEqual(db.execute('SELECT count(*) FROM jobs').fetchone()[0],before)
+
+    def test_month_backfill_respects_inclusive_utc_window_and_reuses_assignments(self):
+        from test_server import row
+        dates={'start':'2026-10-07','end':'2026-11-07'}
+        cases=[('before','2026-10-06T23:59:59Z'),('start','2026-10-07T00:00:00Z'),('end','2026-11-07T23:59:59Z'),('after','2026-11-08T00:00:00Z'),('unknown',None),('timezone','2026-10-07T00:30:00+08:00')]
+        for title,stamp in cases:
+            a=row(title=title+' demand',suffix=title);a['published_at']=stamp
+            plan=self.service.plan({'instrument':self.store.instrument,'model':'fixture','articles':[a]})
+            self.service.start({'plan_id':plan['plan_id']});self.service.process(self.store)
+        with self.store.connection() as db:
+            db.execute("DELETE FROM research_objects WHERE kind='classification'")
+        queued=classifier.enqueue(self.store,'fixture','high',date_range=dates)
+        payload=self.research.read('job',queued['job_id'])['payload']
+        with self.store.connection() as db:
+            titles={json.loads(r['payload'])['title'] for r in db.execute('SELECT id,payload FROM nodes') if r['id'] in payload['opinion_ids']}
+        self.assertIn('start demand',titles);self.assertIn('end demand',titles)
+        for title in ('before','after','unknown','timezone'):self.assertNotIn(title+' demand',titles)
+        self.assertEqual(payload['date_range'],dates)
+        self.assertEqual(classifier.enqueue(self.store,'fixture','high',date_range=dates)['job_id'],queued['job_id'])
+        with self.assertRaisesRegex(ValueError,'日期範圍不同'):
+            classifier.enqueue(self.store,'fixture','high',date_range={'start':'2025-10-07','end':'2026-11-07'})
+
+    def test_unified_start_passes_month_to_backfill_and_saves_scope_without_new_extraction(self):
+        with self.store.connection() as db:
+            a=json.loads(db.execute('SELECT payload FROM articles LIMIT 1').fetchone()[0])
+            before=db.execute('SELECT count(*) FROM extractions').fetchone()[0]
+        day=a['published_at'][:10];dates={'start':day,'end':day}
+        plan=self.service.plan({'instrument':self.store.instrument,'model':'fixture','articles':[{**a,'source':{'provider':a['provider']}}],'date_range':dates})
+        result=self.service.start({'plan_id':plan['plan_id'],'classify_missing':True})
+        self.assertEqual(self.research.read('job',result['job_id'])['payload']['date_range'],dates)
+        self.assertEqual(self.store.config()['date_range'],dates)
+        self.assertFalse(self.store.config()['catch_up'])
+        with self.store.connection() as db:self.assertEqual(db.execute('SELECT count(*) FROM extractions').fetchone()[0],before)

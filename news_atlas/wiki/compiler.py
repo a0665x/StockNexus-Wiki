@@ -184,10 +184,11 @@ class WikiService:
             classification=None
             if body.get('classify_missing') and plan['operation']=='update':
                 from .classifier import enqueue
-                classification=enqueue(store,plan['model'],plan.get('reasoning_effort','high'))
+                classification=enqueue(store,plan['model'],plan.get('reasoning_effort','high'),date_range=plan['date_range'])
             if not pending:
                 self.plans.pop(plan['id'],None)
                 if classification and classification.get('job_id'):
+                    store.configure({**store.config(),**{k:plan[k] for k in OPTION_KEYS if k in plan},'enabled':False,'catch_up':False,'model':plan['model'],'subscriptions':plan['subscriptions'],'date_range':plan['date_range'],'revision_ids':[a['revision_id'] for a in plan['rows']]})
                     self.wake.set()
                     return {**classification,'instrument':store.instrument}
                 return {'job_id':None,'instrument':store.instrument,'status':'noop','message':'此範圍沒有待辦；未啟動模型，原設定保留。'}

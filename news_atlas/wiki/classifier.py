@@ -4,6 +4,7 @@ Backfill is explicitly queued by catch-up. Reads do not spend tokens. A classifi
 batch is atomic; failures require an explicit retry and never overwrite old revisions.
 """
 import json
+import datetime as dt
 import uuid
 from .store import now, digest, encode
 from .research import taxonomy, put, instant, OWNER
@@ -75,17 +76,30 @@ def enrich(db,graph,cutoff=None):
     graph['opinion_groups']=members
     return graph
 
-def enqueue(store,model,effort):
+def enqueue(store,model,effort,date_range=None):
+    if date_range is not None:
+        if not isinstance(date_range,dict) or set(date_range)!={'start','end'}:raise ValueError('Invalid classification date range')
+        start=dt.date.fromisoformat(date_range['start']);end=dt.date.fromisoformat(date_range['end'])
+        if start>end:raise ValueError('Invalid classification date range')
+        date_range={'start':start.isoformat(),'end':end.isoformat()}
     with store.connection() as db:
         db.execute('BEGIN IMMEDIATE');tax=taxonomy(db);done=assignments(db,tax['revision_id'])
         graph={'nodes':[json.loads(r[0]) for r in db.execute('SELECT payload FROM nodes ORDER BY created_version,id')],'edges':[json.loads(r[0]) for r in db.execute('SELECT payload FROM edges')]}
         superseded={e['target']['stable_id'] for e in graph['edges'] if e['relation_type']=='UPDATES'}
         roots=groups(graph)
-        pending=[n for n in graph['nodes'] if n['id'] in roots and n['id'] not in done and n['id'] not in superseded]
-        active=db.execute("SELECT id FROM research_jobs WHERE json_extract(payload,'$.operation')='classify_l1' AND status IN ('queued','running')").fetchone()
-        if active:return {'job_id':active[0],'status':'queued'}
+        eligible=set(roots)
+        if date_range is not None:
+            from .workbench import news_day
+            selected={r['id'] for r in db.execute('SELECT id,payload FROM articles') if (day:=news_day(json.loads(r['payload']).get('published_at'))) and date_range['start']<=day<=date_range['end']}
+            byid={n['id']:n for n in graph['nodes']}
+            eligible={root for root,members in roots.items() if any(i in selected or any(c['article_revision_id'] in selected for c in byid[i].get('citations',[])) for i in members)}
+        pending=[n for n in graph['nodes'] if n['id'] in eligible and n['id'] not in done and n['id'] not in superseded]
+        active=db.execute("SELECT id,status,payload FROM research_jobs WHERE json_extract(payload,'$.operation')='classify_l1' AND status IN ('queued','running')").fetchone()
+        if active:
+            if json.loads(active['payload']).get('date_range')!=date_range:raise ValueError('分類工作日期範圍不同，請先停止舊工作再開始')
+            return {'job_id':active['id'],'status':active['status']}
         if not pending:return {'status':'unchanged','pending':0}
-        ident=uuid.uuid4().hex;stamp=now();payload={'operation':'classify_l1','key':ident,'model':model,'reasoning_effort':effort,'taxonomy':tax,'opinion_ids':[n['id'] for n in pending],'done':0,'total':len(pending)}
+        ident=uuid.uuid4().hex;stamp=now();payload={'operation':'classify_l1','date_range':date_range,'key':ident,'model':model,'reasoning_effort':effort,'taxonomy':tax,'opinion_ids':[n['id'] for n in pending],'done':0,'total':len(pending)}
         db.execute('INSERT INTO research_jobs VALUES (?,?,?,?,?,?,NULL)',(ident,OWNER,'queued',stamp,stamp,encode(payload)))
         return {'job_id':ident,'status':'queued','pending':len(pending)}
 
