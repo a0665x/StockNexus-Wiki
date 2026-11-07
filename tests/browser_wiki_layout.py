@@ -47,9 +47,34 @@ def main():
                 return result.get('result',{}).get('value')
             def click(id):
                 rect=js(f"(()=>{{const e=document.getElementById({json.dumps(id)});e.scrollIntoView({{block:'nearest'}});const r=e.getBoundingClientRect();return {{x:r.x+r.width/2,y:r.y+r.height/2}};}})()")
+                for _ in range(40):
+                    target=js("(()=>{const e=document.getElementById("+json.dumps(id)+");const r=e.getBoundingClientRect(),x=r.x+r.width/2,y=r.y+r.height/2;return {x,y,ready:e.contains(document.elementFromPoint(x,y))}})()")
+                    if target['ready']:break
+                    time.sleep(.05)
+                assert target['ready'],(id,'not pointer-accessible',target)
+                rect={'x':target['x'],'y':target['y']}
                 call('Input.dispatchMouseEvent',{'type':'mouseMoved',**rect})
                 call('Input.dispatchMouseEvent',{'type':'mousePressed','button':'left','clickCount':1,**rect})
                 call('Input.dispatchMouseEvent',{'type':'mouseReleased','button':'left','clickCount':1,**rect});time.sleep(.12)
+            def measure_feedback(ident):
+                js("""(()=>{const b=document.getElementById("""+json.dumps(ident)+""");window.clickFeedback=null;document.addEventListener('click',function observed(e){if(e.target.closest('button')?.id!==b.id)return;document.removeEventListener('click',observed,true);const start=performance.now();const frame=()=>{const b=document.getElementById("""+json.dumps(ident)+""");if(b?.disabled&&b.getAttribute('aria-busy')==='true'){clickFeedback=performance.now()-start;return;}if(performance.now()-start>2000){clickFeedback=-1;return;}requestAnimationFrame(frame)};requestAnimationFrame(frame)},{capture:true});})()""")
+                click(ident)
+                end=time.monotonic()+3
+                while js('clickFeedback===null') and time.monotonic()<end:time.sleep(.03)
+                elapsed=js('clickFeedback');print(json.dumps({'button':ident,'feedback_ms':elapsed}),flush=True)
+                if elapsed is None:
+                    print(js("(()=>{const e=document.getElementById("+json.dumps(ident)+");const r=e?.getBoundingClientRect();return JSON.stringify({slowCount,rect:r,element:e?.outerHTML,hit:r?document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.outerHTML:null})})()"),flush=True)
+                    import base64
+                    Path('/tmp/wiki-feedback-failure.png').write_bytes(base64.b64decode(call('Page.captureScreenshot',{'format':'png'})['data']))
+                assert elapsed is not None and 0<=elapsed<2000,(ident,elapsed)
+            def slow_action(ident,path,fail=False):
+                js("window.slowMatch="+json.dumps(path)+";window.slowCount=0;window.slowFail="+json.dumps(fail)+";window.slowRelease=null")
+                measure_feedback(ident);click(ident);time.sleep(2.05)
+                if ident=='wikiExport' and not fail:
+                    import base64
+                    Path('/tmp/wiki-feedback-busy.png').write_bytes(base64.b64decode(call('Page.captureScreenshot',{'format':'png'})['data']))
+                check(ident+' stays busy beyond 2s and blocks repeat click',"slowCount===1&&document.getElementById("+json.dumps(ident)+").getAttribute('aria-busy')==='true'")
+                js('slowMatch=null;slowRelease()');time.sleep(.5)
             for _ in range(100):
                 if js("typeof relationUI!=='undefined'&&relationUI!==null"):break
                 time.sleep(.05)
@@ -76,6 +101,8 @@ def main():
                   const body=JSON.parse(options.body);value={plan_id:'plan',instrument:body.instrument,selected:body.articles.length,pending:1,next_batch:1,reused:0,model:body.model,daily_limit:body.daily_limit,watch_sources:[],note:'Fixture'};
                 }
                 else if(url.includes('/graph?')){if(failGraph){failGraph=false;throw Error('Temporary graph 503');}value=fixtureWiki;}
+                else if(url.endsWith('/cancel')){fixtureWiki.jobs=[];value={status:'cancelled'};}
+                else if(url.endsWith('/configure')){fixtureWiki.config.enabled=false;value=fixtureWiki.config;}
                 else if(url.endsWith('/apply'))value={status:'saved',resumed:false};
                 else if(url.includes('/node?'))value={...fixtureWiki.nodes[1],kind:'Thesis'};
                 else if(url.endsWith('/resume'))value={config:fixtureWiki.config,coverage:fixtureWiki.coverage};
@@ -106,7 +133,7 @@ def main():
             time.sleep(4.4)
             check('slow status request never overlaps a later poll',"wikiCalls.filter(c=>c.url.includes('/jobs?')).length-pollBefore===1")
             js("deferPoll=false;pollRelease?.();window.deferPlan=true")
-            click('wikiStart')
+            measure_feedback('wikiStart')
             check('click immediately shows preparation and blocks double submit',"$('wikiStart').disabled&&$('wikiStart').getAttribute('aria-busy')==='true'&&$('wikiStatus').getAttribute('aria-busy')==='true'")
             click('wikiStart')
             check('one explicit plan and no model job before it resolves',"wikiCalls.filter(c=>c.url.endsWith('/plan')).length===1&&!wikiCalls.some(c=>c.url.endsWith('/jobs'))")
@@ -190,6 +217,35 @@ def main():
             call('Input.dispatchKeyEvent',{'type':'keyDown','key':'Escape','code':'Escape','windowsVirtualKeyCode':27})
             call('Input.dispatchKeyEvent',{'type':'keyUp','key':'Escape','code':'Escape','windowsVirtualKeyCode':27})
             js("$('wikiAssessment').blur()")
+            js("""window.slowMatch=null;window.slowCount=0;const fastFetch=fetch;window.fetch=async(u,o)=>{if(slowMatch&&String(u).includes(slowMatch)){slowCount++;await new Promise(r=>slowRelease=r);if(slowFail)throw Error('Controlled slow failure');}return fastFetch(u,o)};""")
+            for _ in range(3):slow_action('wikiExport','/markdown?')
+            slow_action('wikiExport','/markdown?',True)
+            check('failed export is retryable and has explicit error',"!$('wikiExport').disabled&&$('wikiExport').getAttribute('aria-busy')==='false'&&$('wikiStatus').textContent==='Controlled slow failure'")
+            js("fixtureWiki.config.enabled=true;await AtlasWiki.refresh()")
+            slow_action('wikiPause','/configure')
+            check('pause settles with visible completion',"!$('wikiPause').disabled&&$('wikiStatus').textContent.includes('已停止')")
+            js("fixtureWiki.jobs=[{id:'active',status:'running',done:0,payload:{revisions:['a'],model:'fixture',stage:'compiling'}}];await AtlasWiki.refresh()")
+            slow_action('wikiStop','/cancel',True)
+            check('failed stop remains retryable with existing graph',"!$('wikiStop').disabled&&$('wikiStatus').textContent==='Controlled slow failure'&&fixtureWikiRenderer.graphData().nodes.length>0")
+            js("window.staleRelease=null;window.captureStale=true;const priorPollFetch=fetch;window.fetch=async(u,o)=>{const r=await priorPollFetch(u,o);if(captureStale&&String(u).includes('/jobs?')){captureStale=false;await new Promise(resolve=>staleRelease=resolve);}return r}")
+            for _ in range(100):
+                if js('staleRelease!==null'):break
+                time.sleep(.05)
+            check('a pre-cancel status response is held in flight',"staleRelease!==null")
+            slow_action('wikiStop','/cancel')
+            js('staleRelease()');time.sleep(.25)
+            check('stop retains graph and reports completion',"!$('wikiStop')&&fixtureWikiRenderer.graphData().nodes.length>0&&$('wikiStatus').textContent.includes('已停止')")
+            click('relationOpen')
+            js("$('wikiStrategy').value='chronological';$('wikiStrategy').dispatchEvent(new Event('input'))")
+            slow_action('wikiApply','/apply',True)
+            check('settings error stays visible in its dialog and can retry',"$('wikiSettings').open&&!$('wikiApply').disabled&&$('wikiApplyStatus').textContent==='Controlled slow failure'")
+            slow_action('wikiApply','/apply')
+            check('settings settle with visible completion',"$('wikiApply').getAttribute('aria-busy')==='false'&&$('wikiStatus').textContent.includes('已套用')")
+            js("const bar=Array.from($('wikiTimeline').querySelectorAll('rect')).find(r=>r.dataset.category==='analysis.fact_check');bar.dispatchEvent(new MouseEvent('click',{bubbles:true}));$('wikiDetail').querySelector('.wiki-viewpoint').id='fixtureOpinion';$('wikinewsTab').click()")
+            slow_action('fixtureOpinion','/node?')
+            js("Array.from($('wikiDetail').querySelectorAll('button')).find(b=>b.textContent==='查看引用來源').id='fixtureSource'")
+            slow_action('fixtureSource','/article?')
+            check('source finishes as a usable external link',"!!Array.from($('wikiDetail').querySelectorAll('a')).find(a=>a.href==='https://example.test/')")
             import base64
             Path('/tmp/wiki-split-desktop.png').write_bytes(base64.b64decode(call('Page.captureScreenshot',{'format':'png'})['data']))
             call('Emulation.setDeviceMetricsOverride',{'width':390,'height':844,'deviceScaleFactor':1,'mobile':True});time.sleep(.2)

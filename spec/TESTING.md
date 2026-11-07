@@ -2,6 +2,25 @@
 
 入口：[PROJECT_MAP.md](PROJECT_MAP.md)。測試使用隔離 fixture／暫存 DB，不應改寫使用者的 data/news-atlas.sqlite3。
 
+## 2026-11-07：Wiki／L2 按鈕兩秒內回饋
+
+驗收時間定義：由真實滑鼠 click 到下一個 animation frame 已顯示處理狀態／目標畫面，門檻 2000ms；不把下載、讀圖或模型全部完成視為兩秒 SLA。這是本機 Chromium 樣本，不能保證所有硬體／網路永遠低於門檻。
+
+正式 Tailscale 網址先操作重現：進入 Wiki 約 72ms 顯示載入；延遲唯讀 Markdown 回應 3500ms 時，舊匯出按鈕超過 2 秒沒有回饋。補上共用按鈕處理態（文字、spinner、aria-busy、禁止重複請求、失敗復原）；停止按鈕輪詢保留 DOM，確認取消後不接受更舊的狀態／圖讀取。研究入口是導航，讀取未完成也能切股票；保存／刷新才鎖住發送按鈕。設定錯誤保留於尚未關閉的對話框。
+
+| 行為邊界 | 真實網頁操作驗證 |
+| --- | --- |
+| 開始整理，plan 尚未回覆 | 立即核對範圍狀態；雙點一個 plan，無過早模型 job |
+| 匯出三輪與失敗；停止維護／停止工作；套用設定與失敗 | 延遲超過 2 秒仍明示 busy，雙點單次請求；成功／失敗可見且可重試 |
+| 停止已成功，舊 jobs 回覆晚到 | 停止提示及已保存圖譜保留，不重新顯示 running |
+| 觀點與來源讀取 | 點可見按鈕立即顯示 loading，回覆後明細／外部連結可用 |
+| L2 建立／保存／更新，延遲 POST 2500ms | 真實隔離 HTTP＋Chromium 點擊；立即 busy，完成後保存／沿用結果 |
+| 研究資料載入中快切股票 | 不鎖住導航、不混用不同股票結果；原佇列續用 |
+
+`browser_wiki_layout.py` 最終 48 checks PASS，包含物理滑鼠、連點、慢回應、錯誤重試、晚到 poll、桌面／手機；其中 API 回應受控，不使用正式模型。新增的按鈕量測成功輪次約 10–23ms；觀點測試先因在 200ms 側欄動畫移動中點錯位置失敗，修正 driver 等 elementFromPoint 命中實際可見按鈕，不用程式 click 冒充。`browser_research.py` 隔離真實 HTTP／模型 fixture，建立／保存／更新量測 7.0／5.1／4.7ms，完整流程 PASS。22 個 Node suites、兩份 JS 語法及 diff 檢查通過；本次沒有修改 Python 後端，不重報前輪完整 Python suite 為本輪測試。
+
+`tests/browser_wiki_live_feedback.py --url <服務網址>` 提供正式頁面的唯讀重複點擊驗收：隔離工作區偏好寫入、保留模型工作，只讀 Markdown，沒有開始／停止正式模型。以 `/usr/bin/python3` 使用既有 websocket-client／Chromium；導覽、設定開關、研究開關及匯出三輪；結果 `/tmp/wiki-live-feedback.json`。正式部署後的結果另記於本節，不能用隔離 fixture 宣稱正式全部操作通過。
+
 ## 2026-11-07：同一分類來源與穩定下拉選單
 
 | Given／When 邊界 | Then／驗證 |

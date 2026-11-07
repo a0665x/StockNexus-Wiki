@@ -43,6 +43,14 @@ def main():
        if out.get('id')==serial:
         if 'exceptionDetails' in out.get('result',{}):raise RuntimeError(out)
         return out['result']['result'].get('value')
+     def measure(ident):
+      js("""(()=>{const b=document.getElementById("""+json.dumps(ident)+""");b.scrollIntoView({block:'center'});window.feedbackMs=null;b.addEventListener('click',()=>{const start=performance.now();const frame=()=>{if(b.disabled&&b.getAttribute('aria-busy')==='true'){feedbackMs=performance.now()-start;return;}if(performance.now()-start>2000){feedbackMs=-1;return;}requestAnimationFrame(frame)};requestAnimationFrame(frame)},{once:true,capture:true});})()""")
+      point=js("(()=>{const r=document.getElementById("+json.dumps(ident)+").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()")
+      for kind in ['mouseMoved','mousePressed','mouseReleased']:
+       nonlocal serial
+       serial+=1;ws.send(json.dumps({'id':serial,'method':'Input.dispatchMouseEvent','params':{'type':kind,**point,'button':'left','clickCount':1}}))
+       while json.loads(ws.recv()).get('id')!=serial:pass
+      wait('feedbackMs!==null');elapsed=js('feedbackMs');print(json.dumps({'button':ident,'feedback_ms':elapsed}),flush=True);assert 0<=elapsed<2000
      def wait(code):
       for _ in range(150):
        if js(code):return
@@ -72,15 +80,20 @@ def main():
      assert js("fetch('/api/wiki/research/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instrument:'NASDAQ:TSLA',query:'動能'})}).then(r=>r.status)")==400
      with paused.connection() as db:db.execute("UPDATE jobs SET status='completed'")
      wait("!$('researchSubmit').disabled")
-     js("$('researchQuestion').value='動能';$('researchForm').requestSubmit()")
+     js("$('researchQuestion').value='動能';const fast=fetch;window.fetch=async(u,o)=>{if(o?.method==='POST'&&String(u).startsWith('/api/wiki/research/'))await new Promise(r=>setTimeout(r,2500));return fast(u,o)}")
+     measure('researchSubmit')
      wait("$('researchStatus').textContent.includes('等待')")
      wiki.tick()
      wait("$('researchStatus').textContent.startsWith('研究完成')")
      assert js("$('researchResult').textContent.includes('價格動能')&&$('researchResult').textContent.includes('來源陳述')")
      js("[...$('researchResult').querySelectorAll('summary')].find(n=>n.textContent==='查看依據與條件').click()")
      assert js("!!$('researchResult').querySelector('blockquote')&&!!$('researchResult').querySelector('a[href^=\"https://\"]')")
-     js("[...$('researchResult').querySelectorAll('button')].find(n=>n.textContent==='持續追蹤').click()")
+     js("[...$('researchResult').querySelectorAll('button')].find(n=>n.textContent==='持續追蹤').id='fixtureSave'")
+     measure('fixtureSave')
      wait("$('researchSaved').textContent.includes('動能')")
+     js("[...$('researchSaved').querySelectorAll('button')].find(n=>n.textContent==='更新').id='fixtureRefresh'")
+     measure('fixtureRefresh')
+     wait("$('researchStatus').textContent.includes('證據未變')")
      before=len(wiki.store('NASDAQ:TSLA').jobs())
      js("$('researchBack').click();$('wikiBudget').value='1600';$('wikiBudget').dispatchEvent(new Event('change'));$('researchOpen').click()")
      assert len(wiki.store('NASDAQ:TSLA').jobs())==before
