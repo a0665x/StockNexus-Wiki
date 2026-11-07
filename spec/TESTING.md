@@ -27,6 +27,12 @@
 
 原始失敗與最終日誌位於 `/tmp/wiki-interaction-audit/`；L2 新回歸為預設流程的一部分，不依賴額外環境變數。沒有後端／schema 修改或資料刪除，未重跑完整 Python backend suite。正式部署及最後頁面驗證另記，不能用 fixture 宣稱正式服務已更新。
 
+正式交付：程式 `8480627`／`609f404` 已推送 llm_wiki。於所有 Wiki／Research 工作無 running 的提交空檔停止舊容器，2026-11-07 08:19:46 UTC 啟動新版且 healthy；`app.js`、`i18n.js`、`wiki-view.js`、`research-view.js`、`relation-settings.js` 的實際 HTTP 資產逐位元組符合本地。GOOGL 原工作 `cb7b2bbc72bf4b68b243532033e4ef54` 接續 running，v439／done61；模型、high、凍結 universe／settings／selection／strategy 與原私有紀錄一致，沒有為驗收新增模型工作。原映像 `news-atlas:pre-interaction-20261107` 可回退，沿用現有 DB，不覆蓋新增成果。等待程序曾為納入新發現的修正而撤回，實際服務只在最後提交空檔更新一次。
+
+正式 Chromium `browser_live_interactions.py --url https://ubuntu.tail9e662c.ts.net:8765/` 於 08:19–08:21 UTC PASS：13 項流程核對，包含 News／Timeline、縮放、預算與完整資料量、設定、Wiki 節點／分類、歷史／最新、L1/L2、L1 忙碌提示、返回 News、1681px／390px 無橫向溢出。5 次主入口量測 142.9–1034.1ms；17 次偏好寫入被隔離，model actions=0，無未處理 JS 錯誤／非允許寫入。結果 `/tmp/wiki-interaction-live.json`，正式桌面／窄版截圖 `/tmp/wiki-interaction-1681.png`／`wiki-interaction-390.png` 已目視核對。窄版是 Chromium viewport 模擬，未測實體手機、其他瀏覽器及無限制負載；這些樣本不是永久兩秒 SLA。沒有以正式帳戶重做付費研究或聊天語意品質驗證。
+
+最後補驗：預設 `browser_research.py` 已包含背景 News paint 不改 Wiki 設定標籤的紅綠回歸，完整流程再次 PASS；`test_relation_settings.cjs` 再次通過。新增 UI 檢查器無命中，37 份 spec 本地連結／必備入口與 diff whitespace 通過。其餘已列 suites 為本輪前面實際執行的結果，不聲稱每次單行修正後重跑全部測試。
+
 ## 2026-11-07：Wiki／L2 按鈕兩秒內回饋
 
 驗收時間定義：由真實滑鼠 click 到處理狀態／目標畫面已成立，再跨一個 animation frame 確認有繪製機會，門檻 2000ms；不把下載、讀圖或模型全部完成視為兩秒 SLA。這是本機 Chromium 樣本，不能保證所有硬體／網路永遠低於門檻。

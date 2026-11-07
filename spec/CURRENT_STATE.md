@@ -1,5 +1,7 @@
 # 目前狀態
 
+2026-11-07 完整交互驗收：實際操作跨 News／Timeline／Wiki／L2／設定／Chat，修正 L2 主畫面缺少載入／空／失敗重試提示、晚回覆搶回 L1、快照無回饋／重複點擊／舊回應覆蓋，以及背景 News 重繪改掉 Wiki 設定標籤。程式 `8480627`／`609f404` 已推送 llm_wiki，08:19 UTC 安全部署 healthy、實際資產一致。正式 13 項流程 PASS、入口 143–1034ms；隔離 News 33、native controls 23、Wiki 48、L2／工作區／Chat 與 22 Node suites PASS。完整 BDD、初始測試失敗原因、執行命令與限制見 [TESTING](TESTING.md)。資料無遷移或刪除；GOOGL 原月工作 v439／done61 接續，不代表整月完成。
+
 2026-11-07 按鈕回饋：Wiki／L2 非同步操作加即時 busy、防連點與失敗復原；停止成功拒絕舊 poll，導航保持可用。程式 `066d10b` 已推送 llm_wiki 並於 08:03 UTC 安全部署，正式資產一致、容器 healthy。真實正式頁面三輪 22 次回饋 84–1314ms；Wiki 隔離 48 checks、L2 流程與 22 Node suites 通過。2 秒指可見回饋，不是模型完成時間；寫入按鈕在隔離資料驗證。實作 `dist/wiki-view.js`／`research-view.js`，重跑 `tests/browser_wiki_live_feedback.py --url <服務網址>`，完整證據及測試 driver 修正見 [TESTING](TESTING.md)。原 GOOGL 月工作 v433／done43 持續 running，設定與成果保留；整月仍未完成，沒有新付費測試工作。
 
 2026-11-07 分類一致性：選單、柱狀圖與群列表共用模型分類群索引，原財務影響只留詳細屬性。新增噪聲／查核更正詞彙與相容舊 assignment 的增量升級；尚未分類明示，不以舊分類猜補。實作／升級見 RESEARCH_LAYERS，測試及部署見 TESTING。程式 `0b5915c` 已部署並推送；七個有效 Wiki 的兩術語已增量加入，重跑 unchanged，舊 assignment 保留。GOOGL 原月工作仍在原設定下推進至 v425／done 21，不代表整月完成。
