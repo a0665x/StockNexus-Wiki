@@ -72,3 +72,5 @@
 - [CHAT_AGENT.md](CHAT_AGENT.md)：右側聊天、主機登入橋接、runtime 情境與 MCP UI 操作。
 - [PRICE_LENS.md](PRICE_LENS.md)：明確 ticker 的交易日平均報酬、混合大小、股價快取與快照。
 - [TOOL_DOCK.md](TOOL_DOCK.md)：右側工具停靠、可調整分隔線、版面保存與拖曳邊界。
+
+- [RESEARCH_LAYERS.md](RESEARCH_LAYERS.md)：L1／分類／Lens／L2 垂直流程、BDD 邊界、API、遷移與限制。

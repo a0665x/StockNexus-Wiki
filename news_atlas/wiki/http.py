@@ -22,6 +22,9 @@ def handle(handler):
     url=urllib.parse.urlsplit(handler.path);path=url.path.removeprefix('/api/wiki/')
     params=urllib.parse.parse_qs(url.query)
     try:
+        if path.startswith('research/'):
+            from .research import handle_research
+            handle_research(handler,service,path.removeprefix('research/'),params,writable(handler));return
         if handler.command=='GET':
             if path=='models':
                 handler.json_response(200,service.bridge_request('/wiki/models',timeout=20));return

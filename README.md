@@ -102,3 +102,9 @@ GitHub 儲存庫：[a0665x/StockNexus-Wiki](https://github.com/a0665x/StockNexus
 資料布局：新聞圖 `data/graph/<ticker>/`、Wiki `data/llm_wiki/<ticker>/`；無法確認歸屬保留於 `graph/_unassigned/`。舊主 DB 在啟動時備份並遷移，見 [儲存說明](spec/GRAPH_STORAGE.md)。
 
 目前完整功能與計算方法見 [專案現況](spec/CURRENT_STATE.md) 及 [計算定義](spec/CALCULATION_METHODS.md)；AI 協作前先讀 [修改偏好](spec/ai-dev-experience-preferences.md)。
+
+### 研究問題與 Layer 2 Wiki
+
+在 **LLM Wiki → 我的研究 · L2** 選擇股票後輸入研究問題（例如「動能」）。系統重用既有 L1，按分類與全文尋找支持／反證，保存固定來源快照，再透過目前選定的模型產生可追溯 L2。可保存為持續追蹤或固定快照，展開來源圖及比較版本。分組方式共用同一 L1，不會因切換另建不相容資料庫。
+
+第一版價格動能在沒有合格歷史行情版本時顯示不可用；分類信心及檢索相關度不是投資機率。部署、API、BDD 邊界、migration 與已知限制見 [雙層研究規格](spec/RESEARCH_LAYERS.md)。

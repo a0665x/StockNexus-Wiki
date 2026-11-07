@@ -88,3 +88,9 @@ Wiki 開啟時約每 6 秒重讀股票目錄，視窗／選單取得焦點也會
 若只匯入新聞 graph 而沒有 Wiki，新資料可用對應股票／範圍從 DB 查詢；不會憑空新增一個「已建立的 Wiki」。目前 News 圖譜保留原探索狀態，需重新載入／查詢才能納入新文章；這與 Wiki 股票目錄自動更新是兩種行為。
 
 `tests/browser_live_merge.py` 在隔離的真實 HTTP 服務與 Chrome 上執行實際 CLI dry-run／合併，驗證新股票出現、既有版本更新、選擇與新聞圖譜保留及無模型呼叫。
+
+## 研究層相容補充（2026-11-07）
+
+新增 research_objects/lenses/jobs 可合併，活動研究工作也會阻止目標寫入。來源 captured_at 在新機器以匯入時間保存；已存在的相同 revision 保留本機時間。匯入前逐一核對引用 span／原文／hash、node ID 與版本外鍵。已重現並修正「匯入來源沿用舊取得時間」的歷史污染；程式開庫也拒絕未知較新 schema，不能重設 user_version 掩蓋不相容。
+
+研究 snapshot 自含證據，私人 L2 封存於 imported owner，不能自動冒充本機 local owner。目標 taxonomy 沿用，classification 由目標針對 exact revisions 增量重建；來源撤回事件在本機匯入時才開始可見。完整邊界與回退見 [RESEARCH_LAYERS](RESEARCH_LAYERS.md)。

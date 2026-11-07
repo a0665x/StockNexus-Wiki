@@ -2,12 +2,14 @@
 
 查核日期：2026-11-07；以目前本地工作區原始碼為準。部署驗收記在 [TESTING](TESTING.md)，不以本頁推斷遠端分支或任意正在執行的服務已同步。
 
-## 當前交接：Wiki 關聯端點驗證
+## 當前交接：雙層研究與合併資料驗證
 
-- 變更位置：`news_atlas/wiki/store.py`。模型引用不存在的 target 時，回饋明確標示關聯序號、端點角色與 ID，避免錯誤引導其修改合法 source。未放寬引用、端點或方向規則；驗證修正仍最多一次。
-- 驗證：`python3 -m unittest discover -s tests -q`，254 項通過（含 53 項 Wiki）；`tests/test_wiki.py` 新增缺失端點的修正成功／有界失敗 BDD。原始拒絕提案離線重播，文件連結檢查通過。
-- 多股公平輪替繼續有效；完成 root 整樹才讓出，既有 revision 重用。TSM 失敗前已完成的成果保留，依授權在固定年度範圍續跑一次；部署與正式恢復證據見 [TESTING](TESTING.md)。
-- 後續：觀察實際 jobs/coverage 與 receipts。同原因若續跑再失敗，保留成果並通知，不無限付費重試。來源 RSS 缺口不等於 Wiki 整理待辦。
+- 主契約：[RESEARCH_LAYERS.md](RESEARCH_LAYERS.md)，完整使用者架構來源位於 `L2_Archirecture/`。已接到既有 SQLite／單模型槽／API／Wiki，沒有另建 mock 平台。舊 L1 保留，新 L1 加入條件與修訂原因；分組方式共用同一資料庫。
+- 新入口：Wiki → 我的研究 · L2。分類／全文 → 固定 snapshot → L2 → live/pinned → 增量刷新與來源圖。分類、模型推論、價格及事後 outcome 分開；新 inference 另做一次有界語意審核。
+- merge_data 修正匯入 captured_at 前視污染，增加引用 span/hash 與版本檢查；未知未來 schema 不得被開庫降級。來源／目標備份與衝突保存沿用。
+- 驗證：279 Python tests；Node chat suites；真實隔離 Chrome 研究與 live CLI merge。實際數量及部署結果見 [TESTING](TESTING.md)。正式資料不作付費模型測試。
+- 舊七股 heartbeat 因本次架構工作已暫停；背景 AMD 保留並等發布空檔更新。其他額度失敗工作不自行復活。
+- 邊界：確定性 Lens parser、詞彙分類、單人 local owner、無合格歷史價格特徵。模型語意審核不等於證明，來源抓取缺口另計；不能把第一條垂直流程說成完整長期研究平台。
 
 ## 已完成
 
@@ -17,6 +19,7 @@
 | 圖譜 | 規則關聯、自適應補合格孤立點、來源分組／混合、星河多 root、3D／時間軸；完整資料與 GPU 預算分離 | [UI](UI.md)、[計算](CALCULATION_METHODS.md) |
 | 時間／行情 | 可塑形時間大小、1／3／5／7 後續交易日平均報酬、共同日期軸、K 線／十字線／縮放、缺資料提示 | [PRICE_LENS](PRICE_LENS.md) |
 | 工具版面 | 時間與來源工具可拖動、收合、四邊／角落縮放、內容捲動、邊緣停靠分割，尺寸與位置保存 | [TOOL_DOCK](TOOL_DOCK.md) |
+| 雙層研究 | 分類／全文檢索、Lens、快照、L2 與 live/pinned、來源圖；第一版限制見契約 | [RESEARCH_LAYERS](RESEARCH_LAYERS.md) |
 | LLM Wiki | 每股票版本化文章／陳述／事件／觀點，逐字引用驗證、增量處理、重審、相依索引、跨文章 RELATED_TO；最後 10 個版本可選，舊引用證據保留 | [WIKI_RUNTIME](WIKI_RUNTIME.md) |
 | Wiki 分組／進度 | 詞彙／時間／融合 5、10、15、20 篇；Graph 從完整 News 圖自動採樣樹，直到 Wiki 日期內目標皆涵蓋；Apply 可取消舊工作後按新設定接續 | [WIKI_RUNTIME](WIKI_RUNTIME.md) |
 | Wiki 閱讀 | 側欄唯一日期入口；互動分類時間圖、按大類／主題漸進展開；星河選取保留全圖並調暗背景；左右及上下分隔可調 | [WIKI_RUNTIME](WIKI_RUNTIME.md) |

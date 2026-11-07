@@ -25,6 +25,12 @@ class WikiService:
         for store in self.stores():
             with store.connection() as db:
                 interrupted=db.execute("UPDATE jobs SET status='interrupted',error='服務重啟；可預覽後續跑',updated_at=? WHERE status='running'",(now(),)).rowcount
+            with store.connection() as db:
+                for r in db.execute("SELECT payload FROM research_jobs WHERE status='running'").fetchall():
+                    payload=json.loads(r[0])
+                    if payload.get('lens_id'):
+                        db.execute("UPDATE research_lenses SET payload=json_set(payload,'$.last_error',?) WHERE id=?",('服務重啟；保留舊結果，請手動重試',payload['lens_id']))
+                db.execute("UPDATE research_jobs SET status='failed',error='服務重啟；保留舊結果，請手動重試',updated_at=? WHERE status='running'",(now(),))
             if interrupted:
                 cfg=store.config();cfg["enabled"]=False;cfg['catch_up']=False;store.configure(cfg)
         if start_worker:
@@ -326,10 +332,11 @@ class WikiService:
                 work=groups(rows,context_rows,forest);market_rows=context_rows
             else:
                 work=((g,meta,g) for g,meta in bounded_groups(batches(rows,job['payload'])));market_rows=rows
-            market=cached_market(self.news,store.instrument,market_rows,job['payload'].get('price_horizon',3))
+            # Forward outcomes are evaluation-only, never contemporaneous model evidence.
+            market={a['revision_id']:None for a in market_rows}
             completed_groups=0
             for group,group_info,covered in work:
-                article={**group[0],'_evidence':group,'_market':{a['revision_id']:market[a['revision_id']] for a in group},'_group':group_info,'_context_revisions':job['payload'].get('context_revisions')};article['_covered_articles']=covered
+                article={**group[0],'_evidence':group,'_market':{},'_group':group_info,'_context_revisions':job['payload'].get('context_revisions')};article['_covered_articles']=covered
                 if forest.get('mode')=='coverage':article['_context_revisions']=[a['revision_id'] for a in group]
                 revision=article['revision_id']
                 if self.stop.is_set(): return
@@ -387,6 +394,9 @@ class WikiService:
         for store in self.stores():
             if self.stop.is_set(): break
             self.refresh(store);self.process(store,max_groups=max_groups)
+            from .research import Research, enabled
+            if enabled() and not self.stop.is_set():
+                research=Research(store);research.observe_news(self.news);research.refresh_live();research.process(self)
 
     def loop(self):
         while not self.stop.is_set():

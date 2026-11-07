@@ -335,3 +335,7 @@ GraphRepository 以每次請求 ticker 路由搜尋、關聯快取、股價、�
 
 
 驗收與部署完成：241 項 Python、22 組 CJS、8 項 Chat/Wiki Node、48 項 Wiki 瀏覽器與 9 項先前互動回歸通過；兩個全新 Chrome profile 的真實 HTTP 恢復測試通過。已更新 8765 與主機 Chat bridge，備份 `data/private/wiki-workspace-20261106-150223`。兩個股票共 22 張 Wiki 資料表在部署及正式頁面驗收前後內容雜湊一致。GOOGL 保持 v369、gpt-6.1-sol high、lexical 20 篇，原工作已由使用者取消，因此維持停止。隔離正式頁面驗證恢復 89 篇最近七日 DB 新聞、10 個 selectable versions、10 節點星河與 Wiki Chat 連線；唯讀驗收不啟動模型、不保留測試偏好。第一次驗收的暫時偏好已核對後清除，正式控制值仍由原設定 high 恢復。
+
+## 2026-11-07：共享 L1 與 Lens／L2 垂直流程
+
+新增分類版本、Research Lens、固定證據快照、L2 claim registry、來源圖與 live/pinned。沿用單模型槽與資料庫；新推論有界語意核對，失敗保留前版。移除 L1 輸入的未來報酬。合併修正取得時間污染並嚴格驗證引用與 schema。真實修改／BDD／遷移／限制見 [RESEARCH_LAYERS](RESEARCH_LAYERS.md)，測試見 [TESTING](TESTING.md)。

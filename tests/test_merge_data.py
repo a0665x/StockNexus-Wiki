@@ -130,6 +130,30 @@ class MergeDataTests(unittest.TestCase):
         saved=json.loads((Path(report['backup'])/'report.json').read_text())
         self.assertEqual(saved['committed'],['graph/_unassigned/news-atlas.sqlite3'])
 
+    def test_bad_citation_rejects_import_before_writes(self):
+        a=self.wiki(self.sa,[row()])
+        with a.connection() as db:
+            r=db.execute("SELECT id,payload FROM nodes WHERE kind='Claim'").fetchone()
+            n=json.loads(r['payload']);n['citations'][0]['quote']='fabricated'
+            db.execute('UPDATE nodes SET payload=? WHERE id=?',(json.dumps(n),r['id']))
+        with self.assertRaisesRegex(ValueError,'citation span'):run(self.a,self.b)
+        self.assertFalse((self.b/'llm_wiki/TSLA/wiki.sqlite3').exists())
+
+    def test_newer_wiki_not_silently_downgraded_by_open(self):
+        a=self.wiki(self.sa,[row()])
+        with a.connection() as db:db.execute('PRAGMA user_version=999')
+        with self.assertRaisesRegex(ValueError,'Newer database'):WikiStore(self.a/'llm_wiki','NASDAQ:TSLA')
+        with sqlite3.connect(a.path) as db:self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0],999)
+
+    def test_imported_source_not_known_before_import(self):
+        a=self.wiki(self.sa,[row()])
+        with a.connection() as db:
+            db.execute("UPDATE articles SET captured_at='2000-01-01T00:00:00+00:00'")
+        run(self.a,self.b)
+        b=WikiStore(self.b/'llm_wiki','NASDAQ:TSLA')
+        with b.connection() as db:
+            self.assertGreater(db.execute('SELECT captured_at FROM articles').fetchone()[0], '2026-01-01')
+
     def test_newer_schema_rejected(self):
         with sqlite3.connect(self.sa.path) as d:d.execute('PRAGMA user_version=999')
         with self.assertRaisesRegex(ValueError,'Newer database'):run(self.a,self.b)

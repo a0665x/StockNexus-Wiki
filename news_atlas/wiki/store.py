@@ -9,7 +9,7 @@ import re
 import sqlite3
 import uuid
 
-PROMPT_VERSION = 'wiki-extract-v6'
+PROMPT_VERSION = 'wiki-extract-v7'
 KINDS = ('Claim', 'Event', 'Thesis')
 RELATIONS = ('SUPPORTS', 'CONTRADICTS', 'UPDATES', 'DEPENDS_ON', 'RELATED_TO', 'TEMPORALLY_PRECEDES')
 
@@ -73,6 +73,7 @@ class WikiStore:
         self.path=self.folder/'wiki.sqlite3'
         self.fixture=fixture
         with self.connection() as db:
+            if db.execute('PRAGMA user_version').fetchone()[0]>1:raise ValueError('Newer database format; update application before opening')
             db.execute('PRAGMA journal_mode=WAL')
             db.executescript('''
             CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY,value TEXT NOT NULL);
@@ -90,6 +91,8 @@ class WikiStore:
             CREATE INDEX IF NOT EXISTS nodes_version ON nodes(created_version DESC,id);
             PRAGMA user_version=1;
             ''')
+            from .research import migrate
+            migrate(db)
             db.execute('INSERT OR IGNORE INTO metadata VALUES (?,?)',('instrument',encode(ident)))
             actual=json.loads(db.execute("SELECT value FROM metadata WHERE key='instrument'").fetchone()[0])
             if actual!=ident: raise ValueError('Wiki資料庫股票識別不符')
@@ -201,6 +204,9 @@ class WikiStore:
             review=job['payload'].get('operation')=='review'
             if not review and db.execute('SELECT 1 FROM extractions WHERE revision=?',(article['revision_id'],)).fetchone(): return True
             if review and db.execute('SELECT 1 FROM reviews WHERE job_id=? AND revision=?',(job['id'],article['revision_id'])).fetchone(): return True
+            for edge in edges:
+                if edge['type']=='UPDATES' and db.execute("SELECT 1 FROM edges WHERE target=? AND json_extract(payload,'$.relation_type')='UPDATES'",(edge['target'],)).fetchone():
+                    raise ValueError('L1 revision conflict: the base opinion already has a newer revision')
             stamp=now();version=db.execute('INSERT INTO versions(created_at,job_id,model) VALUES (?,?,?)',(stamp,job['id'],job['payload']['model'])).lastrowid
             article_node={'id':article['revision_id'],'kind':'ArticleRevision','title':article['title'],'summary':article['summary'],'scope':self.instrument,'url':article['url'],'provider':article['provider'],'published_at':article['published_at'],'content_hash':article['content_hash'],'status':'source','citations':[]}
             article_nodes=[dict(article_node,id=a['revision_id'],title=a['title'],summary=a['summary'],url=a['url'],provider=a['provider'],published_at=a['published_at'],content_hash=a['content_hash']) for a in evidence]
@@ -356,6 +362,10 @@ def validate_proposal(article,proposal,context):
                 if not isinstance(fields,dict) or set(fields)!= {'title','summary','rationale'} or any(not isinstance(fields[k],str) or not 1<=len(fields[k])<=cap for k,cap in [('title',250),('summary',2000),('rationale',1500)]):raise ValueError('無效翻譯內容')
             node['translations']=localized
             node['id']='node-'+digest([node['id'],localized]);ident=node['id']
+        if 'opinion_metadata' in n:
+            meta=n['opinion_metadata']
+            if not isinstance(meta,dict) or set(meta)!={'claim_type','conditions','horizon','change_reason'} or meta['claim_type'] not in ('reported_claim','fact_excerpt','inference','hypothesis') or not isinstance(meta['conditions'],list) or len(meta['conditions'])>8 or any(not isinstance(x,str) or len(x)>500 for x in meta['conditions']) or not isinstance(meta['horizon'],str) or len(meta['horizon'])>300 or not isinstance(meta['change_reason'],str) or len(meta['change_reason'])>500:raise ValueError('Invalid opinion metadata')
+            node['opinion_metadata']=meta;node['id']='node-'+digest([node['id'],meta]);ident=node['id']
         mapped[n['key']]=node;nodes.append(node)
         for source_id in dict.fromkeys(c['article_revision_id'] for c in refs):
             edges.append({'source':source_id,'target':ident,'type':'SUPPORTS','rationale':'原文支持此LLM提案；只核對引用，不代表陳述已證實。','citations':[c for c in refs if c['article_revision_id']==source_id]})

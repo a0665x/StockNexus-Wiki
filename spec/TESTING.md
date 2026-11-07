@@ -218,3 +218,15 @@ PYTHONPATH=.:tests python tests/browser_chat_language.py
 同輪完整 Python 回歸：`python3 -m unittest discover -s tests -q`，254 項通過；文件連結檢查 36 份通過。
 
 部署：在所有 Wiki 工作均無 running 的發布邊界停止舊容器，六股 queued／done 原值保留，無需重送活動推論；重建後 8765 healthy。容器與主機 `news_atlas/wiki/store.py` SHA-256 同為 `17eebe73754948a0a92eb108f829776054ff631304963753486878b8af931390`。TSM 續跑依私有批次紀錄的一次額度進行；此部署驗證不等於後續全部推論已通過。
+
+## 雙層研究與合併邊界（2026-11-07）
+
+- `python3 -W ignore::ResourceWarning -m unittest discover -s tests -p 'test_*.py'`：279 tests OK（新增 L2 inference 語意拒絕、live 重啟不付費重試、時間窗、撤回、候選詞、CAS、合併引用等）。
+- `node --test tests/chat*.test.mjs`：9 個 Node 測試檔 OK；`tests/*.cjs` 全部通過。橋接為受控 fixture，不代表正式模型已成功推論。
+- `PYTHONPATH=tests /usr/bin/python3 tests/browser_research.py`：真實 HTTP＋Chrome PASS；含建立研究、來源鏈、live 保存、離開在途工作、切股票、圖 tooltip 轉義及 1393／390px 無水平溢出。WebSocket dependency 使用主機已有系統 Python。
+- `PYTHONPATH=tests /usr/bin/python3 tests/browser_live_merge.py`：真實 CLI 在 HTTP／Chrome 開啟下合併 PASS，新股票出現在選單、既有版本更新、使用者選擇及 News runtime 保留。
+- `test_imported_source_not_known_before_import` 修正前為 FAIL，修正後通過。新版 schema 拒絕、損壞引用拒絕與備份／雙向合併仍通過。
+- 新 UI detector 僅報既有 Wiki CSS 的舊 2px border；沒有修改該既有裝飾。獨立 review 的 6 個實質問題已修正，最後舊 await 回應 guard 已補。
+- 未驗證：新 L2 正式模型品質、真實行情特徵、跨使用者登入（本版為單人 local owner）。第一版限制與未完長期驗收項詳見 RESEARCH_LAYERS。
+
+部署驗證：11 個 Wiki SQLite 已以 SQLite backup 備份至 `data/private/research-migration-backup-20261107/`，舊映像保留為 `news-atlas:pre-research-20261107`。第一次部署在 AMD 完整提交邊界（version 24、done 371）停止，重啟後同一 job ID 正常 running，既有六個 failed 工作未復活；HTTP JS 與容器 research.py SHA-256 均和主機一致，容器 healthy，模型目錄可讀。沒有為新 L2 驗收呼叫正式模型。最後 UI guard 修正後再次執行隔離 Chrome PASS；關閉測試瀏覽器後的 BrokenPipe 是未完成輪詢連線被關閉，不是斷言失敗。
