@@ -142,8 +142,18 @@ def main():
      js("$('researchQuestion').value='動能';const fast=fetch;window.fetch=async(u,o)=>{if(o?.method==='POST'&&String(u).startsWith('/api/wiki/research/'))await new Promise(r=>setTimeout(r,2500));return fast(u,o)}")
      measure('researchSubmit')
      wait("$('researchStatus').textContent.includes('等待')")
+     assert js("!$('wikiResearchStatus').hidden&&$('wikiResearchStatus').getAttribute('aria-busy')==='true'&&$('wikiResearchStatus').textContent.includes('L2')"), 'running L2 must show progress in the main graph, not an empty-state invitation'
+     # A completed model job must survive a transient result-read failure even after leaving the sidebar.
+     js("window.runReadFetch=fetch;window.runReadOutage=true;window.fetch=(u,o)=>runReadOutage&&String(u).includes('/research/run?')?Promise.resolve(new Response(JSON.stringify({error:'Controlled result outage'}),{status:503})):runReadFetch(u,o)")
+     click('researchBack')
      wiki.tick()
+     wait("$('wikiResearchStatus').textContent.includes('Controlled result outage')")
+     with paused.connection() as db:completed_count=db.execute('SELECT count(*) FROM research_jobs').fetchone()[0]
+     js('runReadOutage=false')
      wait("$('researchStatus').textContent.startsWith('研究完成')")
+     with paused.connection() as db:assert db.execute('SELECT count(*) FROM research_jobs').fetchone()[0]==completed_count
+     click('researchOpen');wait("!$('researchSubmit').disabled")
+     print('PASS graph progress and completed-result read recovery without new model jobs',flush=True)
      assert js("$('researchResult').textContent.includes('價格動能')&&$('researchResult').textContent.includes('來源陳述')")
      js("[...$('researchResult').querySelectorAll('summary')].find(n=>n.textContent==='查看依據與條件').click()")
      assert js("!!$('researchResult').querySelector('blockquote')&&!!$('researchResult').querySelector('a[href^=\"https://\"]')")

@@ -420,3 +420,25 @@ PYTHONPATH=.:tests python tests/browser_chat_language.py
 - 最後容器 2026-11-07 15:24:01 UTC 啟動 healthy，served research-view.js 與原始碼 byte 相同；capabilities HTTP 200／0.003469 秒。回退映像 `news-atlas:pre-l2-availability-20261107`；回退不覆蓋資料庫。
 - 另觀察到部署後外部發起的 GOOGL L2 工作因「缺少比較基線，不可宣稱動能變化」失敗；不是本測試建立，未放寬驗證或付費重試。按鈕恢復不代表所有研究推論都能通過證據檢查。
 - 中英文 PNG 目視確認移除限制／警語旁註；核心新聞屬性、具體觀點與分類、選取 L2 引用圖保留。`node --check dist/research-view.js`、spec 37 份連結與 `git diff --check` PASS；未重跑完整 backend suite。
+
+
+## 2026-11-08 — README 雙語與 L2 進度／結果恢復
+
+正式觀察：GOOGL 研究 `7f2de70caff7434593d4f41978154f09` created 15:51:43、completed 15:52:50 UTC；公開 run 為 5 claims／20 入選 L1 claims。使用者截圖無法證明持續卡死；中間缺進度則可在隔離真實 UI 重現。另一程式缺陷是先清 pending 再讀 completed run，503 會失去自動恢復。沒有對正式資料另跑模型。
+
+- RED：`/usr/bin/python3 tests/browser_research.py`，`/tmp/research-progress-red.log`，在 queued 後中央仍為空／無 busy，assert「running L2 must show progress in the main graph」失敗。
+- GREEN：同命令，`/tmp/research-progress-green.log`，PASS。額外注入 completed run GET 503，關閉研究側欄，復原後既有圖出現、研究工作數不變；覆蓋跨股忙碌、晚回覆、來源、保存、1393/390px。建立／保存／刷新按鈕可見回饋約 30.1／31.2／20ms（隔離瀏覽器，非所有環境保證）。
+- `/usr/bin/python3 -m unittest discover -s tests -p test_research.py`：23 tests PASS。
+- `node --check dist/research-view.js`、`git diff --check`：PASS。兩 README 相對連結及圖片路徑存在，無 mp4/gif 入口；圖片人工核對語言、輸出框與箭頭。
+- 部署前唯讀 Chromium：`tests/browser_live_research_availability.py --stock NASDAQ:GOOGL --check-l2` PASS。原生下拉載入現有 run，全部 5 個 L2 節點與 API claim 數一致；零模型寫入，工作區偏好 POST 被隔離。
+- 2026-11-07 16:05:10 UTC 新容器 healthy；無 running 模型時停止舊容器，GOOGL v588 與其他股票既有版本保留、未恢復取消工作。HTTP `research-view.js`／`wiki-view.css` byte-match 本地。
+- 無 schema migration；回退程式可使用 `news-atlas:pre-l2-progress-20261108` 映像，既有 Wiki DB 不需還原。未以正式模型重演付費推論、未宣稱所有自然語言研究品質通過。
+
+
+本輪部署後的 HTTPS 冷啟動驗收曾失敗，並非忽略：`/tmp/live-l2-after-diagnostic.log` 顯示中央 `signal timed out`。本輪新增的 15 秒 GET 期限過短；又查到 handle_research 每次 job/runs/taxonomy GET 都 observe_news、掃描及 ingest 整份來源。先用 `PYTHONPATH=tests /usr/bin/python3 -m unittest test_research.ResearchTests.test_polling_and_catalog_reads_do_not_reingest_news` RED（poll reingested entire source corpus），再把這三個既有資料 GET 分離；run/lenses 的來源新鮮度觀察保留，GET 期限改為 45 秒。最終回歸及正式驗收見下方，早期失敗不是 PASS。
+
+
+最終回歸：`/tmp/l2-progress-python-final.log` 23 tests PASS；`/tmp/research-progress-final.log` 完整隔離 Chromium PASS，建立／保存／刷新回饋 24.6／32.7／22ms。最終部署 16:09:48 UTC healthy，HTTP JS/CSS 與本地一致；正式本機 GET runs 約 0.010 秒、job 約 0.005 秒。所有股票部署前無活動模型工作，未啟動新工作。
+
+
+最終正式 HTTPS 驗收 PASS：`/usr/bin/python3 tests/browser_live_research_availability.py --url https://ubuntu.tail9e662c.ts.net:8765/ --stock NASDAQ:GOOGL --check-l2`；證據 `/tmp/live-l2-final.log`、`/tmp/research-availability-live.json`、`/tmp/research-availability-live.png`。從新瀏覽器設定檔以滑鼠及原生下拉切 GOOGL→L2，現有「動能」run 的 5 個 L2 節點全數渲染、與 API claims 數一致；無 JS 錯誤、零模型動作，3 次工作區偏好寫入已隔離。

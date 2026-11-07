@@ -48,3 +48,10 @@ Important: keep classifier as sidecar not separate layer. Do not introduce arrow
 ## Current UI revision and clean presentation (2026-11-07)
 
 The final pair replaces the original conceptual figures. Built-in imagegen edited the approved UI diagram to show article nodes, relation edges and source attributes; substantive O1/O2 sentences with separate multi-label categories; and the selected L2 run plus its cited L1 snapshot on a shared canvas. The user requested removal of warning/limitation footnotes, unavailable-price notes, L1-busy notes, correctness disclaimers and implementation-boundary captions from the figure. Preserve conditional opinion text and the workflow; keep technical scope in the spec. Produce a matching fully English localization with the same layout. Source originals remain in the generator output directory; repository copies are the canonical README assets.
+
+
+## Explicit outputs and bilingual README (2026-11-08)
+
+Built-in imagegen, text-localization edit. Chinese source: `exec-f66810b8-cd34-49ac-af98-d4117e1d4247.png`; English output: `exec-cddd202d-33c9-4962-b15c-74648a0f74e6.png`. The originals remain in the conversation generated-images folder; project copies are `stocknexus-architecture-zh-TW.png` and `stocknexus-architecture-en.png`.
+
+Preserve the approved pastel layout, robots, graphs and anchored arrows. Explicit green output: reusable L1 opinion subgraphs; orange output: classification labels and alias index. Both feed question-based retrieval. Selected subgraphs and evidence feed L2 synthesis, whose result joins the shared graph. Translate all Chinese text naturally into English without adding warning captions. Keep the three-stage pyramid and incremental maintenance sidebar. Inspect label readability and arrow endpoints before publishing.

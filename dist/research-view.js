@@ -17,10 +17,12 @@
  const layerMessage=(text,working=false,retry=false)=>{layerText.textContent=text;layerStatus.hidden=!text;layerStatus.setAttribute('aria-busy',String(working));layerText.classList.toggle('research-working',working);layerRetry.hidden=!retry;};
  let layerRequest=0,runRequest=0;
  let stock='',serial=0,runId=null,timer=null,availabilityTimer=null,tipTimer=null,busy=false,submitting=false,lastAvailability=null;
- const pending=new Map(),drafts=new Map();let watching=null,availabilityError='',checking=false,availabilityRequest=0;
+ const pending=new Map(),drafts=new Map();let progressText='',watching=null,availabilityError='',checking=false,availabilityRequest=0;
  function rememberDraft(){if(stock)drafts.set(stock,{question:$('researchQuestion').value,window:$('researchWindow').value});}
  const status=text=>{$('researchStatus').textContent=text;};
- async function api(path,body){const r=await fetch('/api/wiki/research/'+path+(body===undefined?(path.includes('?')?'&':'?')+'instrument='+encodeURIComponent(stock):''),body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...body,instrument:stock})});const v=await r.json();if(!r.ok)throw Error(v.error||'研究請求失敗');return v;}
+ function progress(text){progressText=text;status(text);layerMessage(text,true);}
+ function finishProgress(){progressText='';layerMessage('');}
+ async function api(path,body){const r=await fetch('/api/wiki/research/'+path+(body===undefined?(path.includes('?')?'&':'?')+'instrument='+encodeURIComponent(stock):''),body===undefined?{signal:AbortSignal.timeout(45000)}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...body,instrument:stock})});const v=await r.json();if(!r.ok)throw Error(v.error||'研究請求失敗');return v;}
  function clearTip(){clearTimeout(tipTimer);$('researchBusyTip').hidden=true;}
  function busyReason(){return availabilityError?'無法確認模型狀態，正在重新連線…':checking?'正在確認模型狀態…':busy?'L1 整理中：'+(lastAvailability?.instruments?.join('、')||'其他工作')+'。共用模型目前忙碌；完成或停止後即可建立研究。':'';}
  function explain(){clearTip();if(busy&&!availabilityError&&!checking)tipTimer=setTimeout(()=>{if(!busy)return;$('researchBusyTip').textContent=busyReason()+' 可先停止 L1 資料補足；已保存的 L2 仍可閱讀。';$('researchBusyTip').hidden=false;},550);}
@@ -38,7 +40,7 @@
  }
  function syncButton(){ $('researchSubmit').setAttribute('aria-busy',String(submitting||checking));$('researchSubmit').disabled=busy||checking||submitting;$('researchSubmit').textContent=submitting?'分析中…':checking?'確認狀態…':'建立研究';$('researchSubmit').classList.toggle('research-working',submitting||checking);$('researchSubmitWrap').setAttribute('aria-describedby','researchAvailability researchBusyTip');availabilityMessage();if(!busy||availabilityError||checking)clearTip();}
  async function availability(){const token=serial;try{await availabilityOnce();if(token!==serial)return;if(pending.has(stock)&&watching!==pending.get(stock))track(pending.get(stock),token);}catch(e){/* Availability owns its visible error; polling will recover. */}finally{if(token===serial&&!panel.hidden){clearTimeout(availabilityTimer);availabilityTimer=setTimeout(availability,2000);}}}
- async function loadRun(id,animate=false,valid=()=>true){const token=serial,request=++runRequest,r=await api('run?id='+encodeURIComponent(id));if(token!==serial||request!==runRequest||!valid()||r.bundle.lens.instrument!==stock)return;runId=id;layerMessage('');wiki.setResearch(r,id,animate);render(r);}
+ async function loadRun(id,animate=false,valid=()=>true){const token=serial,request=++runRequest,r=await api('run?id='+encodeURIComponent(id));if(token!==serial||request!==runRequest||!valid()||r.bundle.lens.instrument!==stock)return false;runId=id;layerMessage('');wiki.setResearch(r,id,animate);render(r);return true;}
  function render(r){
   result.hidden=false;result.replaceChildren();$('wikiLower').classList.add('research-visible');
   result.append(node('h3',r.bundle.lens.normalized_question));
@@ -64,16 +66,42 @@
   }
  }
  async function terms(){const token=serial,t=await api('taxonomy');if(token!==serial)return;const box=$('researchTaxonomy');box.replaceChildren();for(const term of t.terms){const b=button(term.label+' · '+(term.opinion_ids?.length||0)+' 組',()=>{$('wikiLayer').value='L1';$('wikiLayer').dispatchEvent(new Event('change'));wiki.filterTerm(term.id);});const dot=node('i',undefined,'wiki-dot');dot.style.background=term.color;b.prepend(dot);box.append(b);}}
- function track(job,token){pending.set(stock,job);watching=job;submitting=true;syncButton();watch(job,token);}
- async function watch(job,token){clearTimeout(timer);if(token!==serial)return;try{const j=await api('job?id='+job);if(token!==serial)return;if(j.status==='completed'){pending.delete(stock);watching=null;await loadRun(j.payload.run_id,true);if(token!==serial)return;submitting=false;syncButton();status('研究完成；已驗證的 L2 觀點已加入共用圖譜。');await saved();}else if(['failed','interrupted','cancelled'].includes(j.status)){pending.delete(stock);watching=null;submitting=false;syncButton();status('研究未完成：'+(j.error||j.status)+'。原有結果已保留。');}else{status(j.status==='queued'?'等待模型工作槽…':'正在整合觀點與反證…');timer=setTimeout(()=>watch(job,token),2000);}}catch(e){if(token===serial){watching=null;submitting=pending.has(stock);syncButton();status(e.message);}}}
+ function track(job,token){pending.set(stock,job);watching=job;submitting=true;syncButton();progress('L2 正在讀取研究進度…');watch(job,token);}
+ async function watch(job,token){
+  clearTimeout(timer);if(token!==serial)return;
+  try{
+   const j=await api('job?id='+job);if(token!==serial)return;
+   if(j.status==='completed'){
+    progress('L2 已完成分析，正在載入觀點圖譜…');
+    // Retain the job until its result is mounted. A failed GET never resubmits the model job.
+    const loaded=await loadRun(j.payload.run_id,true);if(token!==serial)return;
+    if(!loaded){timer=setTimeout(()=>watch(job,token),2000);return;}
+    pending.delete(stock);watching=null;submitting=false;finishProgress();syncButton();
+    status('研究完成；已驗證的 L2 觀點已加入共用圖譜。');
+    try{await saved();}catch(e){if(token===serial)status('研究已完成；保存清單暫時無法讀取：'+e.message);}
+   }else if(['failed','interrupted','cancelled'].includes(j.status)){
+    pending.delete(stock);watching=null;submitting=false;finishProgress();syncButton();
+    const message='研究未完成：'+(j.error||j.status)+'。原有結果已保留。';status(message);layerMessage(message);
+   }else{
+    const since=Date.parse(j.created_at),elapsed=Number.isFinite(since)?' · 已等待 '+Math.max(0,Math.floor((Date.now()-since)/1000))+' 秒':'';
+    progress((j.status==='queued'?'L2 等待模型工作槽':'L2 正在整合觀點與反證')+elapsed+'；完成後加入圖譜。');
+    timer=setTimeout(()=>watch(job,token),2000);
+   }
+  }catch(e){if(token===serial){
+   progress('L2 進度／結果讀取暫時中斷，正在重新連線：'+e.message);
+   // Keep watching even when the research sidebar is closed.
+   timer=setTimeout(()=>watch(job,token),2000);
+  }}
+ }
  async function availabilityOnce(){const token=serial,request=++availabilityRequest;try{const a=await api('availability');if(token!==serial||request!==availabilityRequest)return;lastAvailability=a;busy=a.busy;checking=false;availabilityError='';if(a.active_job&&!pending.has(stock))pending.set(stock,a.active_job.id);syncButton();}catch(e){if(token===serial&&request===availabilityRequest){lastAvailability=null;busy=true;checking=false;availabilityError=e.message;syncButton();}throw e;}}
  async function show(){layerMessage('');const next=$('wikiInstrument').value;if(next!==stock){rememberDraft();runId=null;result.replaceChildren();result.hidden=true;$('researchSaved').replaceChildren();$('researchTaxonomy').replaceChildren();stock=next;const draft=drafts.get(stock);$('researchQuestion').value=draft?.question||'';$('researchWindow').value=draft?.window||'30';}serial++;clearTimeout(timer);watching=null;clearTimeout(availabilityTimer);submitting=pending.has(stock);checking=true;availabilityError='';lastAvailability=null;busy=false;syncButton();panel.hidden=false;$('wikiControls').classList.add('research-mode');$('researchStock').textContent=stock;$('researchModel').textContent=$('wikiModel').selectedOptions[0]?.textContent||'gpt-6.1-sol · high';const token=serial;status('正在載入已保存研究與分類…');$('researchStatus').classList.add('research-working');availability();try{await Promise.all([saved(),terms()]);if(token===serial&&$('researchStatus').textContent==='正在載入已保存研究與分類…')status('');}catch(e){if(token===serial)status(e.message);}finally{if(token===serial)$('researchStatus').classList.remove('research-working');}if(token===serial)$('researchQuestion').focus();}
  $('researchBack').onclick=()=>{panel.hidden=true;$('wikiControls').classList.remove('research-mode');clearTimeout(availabilityTimer);clearTip();};
- $('researchForm').onsubmit=async e=>{e.preventDefault();if(submitting)return;const token=serial;submitting=true;syncButton();status('正在確認研究工作狀態…');try{await availabilityOnce();if(token!==serial)return;if(busy){submitting=false;syncButton();status(busyReason());return;}status('準備研究條件與證據…');const [model,reasoning_effort]=($('wikiModel').value||'gpt-6.1-sol|high').split('|');const j=await api('query',{query:$('researchQuestion').value,lookback_days:Number($('researchWindow').value),model,reasoning_effort});if(token!==serial)return;track(j.job_id,token);}catch(e){if(token===serial){submitting=false;syncButton();status(e.message);}}};
- window.addEventListener('atlas-wiki-stock',()=>{rememberDraft();serial++;layerRequest++;runRequest++;layerMessage('');stock='';runId=null;clearTimeout(timer);clearTimeout(availabilityTimer);watching=null;panel.hidden=true;result.hidden=true;result.replaceChildren();$('wikiControls').classList.remove('research-mode');$('wikiLower').classList.remove('research-visible');});
+ $('researchForm').onsubmit=async e=>{e.preventDefault();if(submitting)return;const token=serial;submitting=true;syncButton();progress('L2 正在確認研究工作狀態…');try{await availabilityOnce();if(token!==serial)return;if(busy){submitting=false;finishProgress();syncButton();status(busyReason());return;}progress('L2 準備研究條件與證據…');const [model,reasoning_effort]=($('wikiModel').value||'gpt-6.1-sol|high').split('|');const j=await api('query',{query:$('researchQuestion').value,lookback_days:Number($('researchWindow').value),model,reasoning_effort});if(token!==serial)return;track(j.job_id,token);}catch(e){if(token===serial){submitting=false;finishProgress();syncButton();status(e.message);}}};
+ window.addEventListener('atlas-wiki-stock',()=>{rememberDraft();serial++;layerRequest++;runRequest++;finishProgress();stock='';runId=null;clearTimeout(timer);clearTimeout(availabilityTimer);watching=null;panel.hidden=true;result.hidden=true;result.replaceChildren();$('wikiControls').classList.remove('research-mode');$('wikiLower').classList.remove('research-visible');});
  window.addEventListener('atlas-wiki-research-clear',()=>{layerRequest++;runRequest++;layerMessage('');runId=null;result.hidden=true;$('wikiLower').classList.remove('research-visible');});
  async function loadLayer(){
   const request=++layerRequest;runRequest++;
+  if(submitting&&progressText){layerMessage(progressText,true);return;}
   if($('wikiLayer').value==='L1'){layerMessage('');result.hidden=true;$('wikiLower').classList.remove('research-visible');return;}
   if(runId){layerMessage('');result.hidden=false;$('wikiLower').classList.add('research-visible');return;}
   stock=$('wikiInstrument').value;const token=serial,valid=()=>token===serial&&request===layerRequest&&$('wikiLayer').value!=='L1';

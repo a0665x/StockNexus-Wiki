@@ -504,7 +504,12 @@ def handle_research(handler,service,path,params,can_write):
                 job=db.execute("SELECT id,status FROM research_jobs WHERE owner=? AND coalesce(json_extract(payload,'$.operation'),'')!='classify_l1' AND status IN ('queued','running') ORDER BY created_at LIMIT 1",(OWNER,)).fetchone()
             handler.json_response(200,{'busy':bool(active),'instruments':active,'active_job':dict(job) if job else None});return
         if active:raise ValueError('請先停止 L1 資料補足，再開始進階觀點分析：'+', '.join(active))
-    research=Research(service.store(stock));research.observe_news(service.news)
+    research=Research(service.store(stock))
+    # Progress/catalog reads use committed Wiki data. Reingesting the full news
+    # corpus on every poll delays both the UI and the model worker. Result and
+    # live-lens reads retain the source observation needed for freshness checks.
+    if handler.command!='GET' or path not in ('job','runs','taxonomy'):
+        research.observe_news(service.news)
     if handler.command=='GET':result=research.read(path,body.get('id'))
     elif path=='query':result=research.query(body);service.wake.set()
     elif path=='save':result=research.save(body)

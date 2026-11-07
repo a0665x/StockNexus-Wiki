@@ -1,138 +1,79 @@
-# StockNexus-Wiki
+# StockNexus Wiki
 
-從真實財經新聞出發，建立 **新聞圖譜 → 共享通用觀點（L1 Wiki）→ 問題導向的客製觀點（L2 Wiki）**，結合 3D 探索、時間軸與持久快取。
-GitHub 儲存庫：[a0665x/StockNexus-Wiki](https://github.com/a0665x/StockNexus-Wiki)。
+**繁體中文** · [English](README.en.md)
 
-## 架構一覽 · Architecture
+把大量新聞整理成可探索、可追溯、持續維護的觀點。
 
-**三層知識結構，兩個觀點層。** 分類器與可擴充分類詞彙協助組織、檢索 L1，不另算一層；L2 重用相關 L1 子圖與證據，保留來源鏈。
+## 解決什麼問題？
 
-[![StockNexus 三層架構：新聞與根節點樹、共享 L1 與分類、依研究問題產生的 L2，以及增量維護](docs/media/stocknexus-architecture-zh-TW.png)](docs/media/stocknexus-architecture-zh-TW.png)
+- **新聞太多、噪音太多**：整合 Google News RSS、Yahoo 新聞與 Massive，去重後在新聞圖譜中探索相關事件。
+- **報導分散，論點互相矛盾**：由 AI 交互比對來源，整理支持、反對與成立條件，建立共享觀點 Wiki。
+- **每次研究都要從頭讀**：L1 保留同股票的通用觀點、分類與引用，新資料進來時增量維護並累積版本。
+- **想深入自己的研究問題**：輸入議題，重用相關 L1 子圖與證據，建立專屬的 L2 研究觀點。
+- **看到新聞關聯，想接著追問**：選取新聞或 Wiki 節點，讓 Chat Agent 根據目前畫面與引用延伸討論。
 
-[繁體中文原圖](docs/media/stocknexus-architecture-zh-TW.png) · [English diagram](docs/media/stocknexus-architecture-en.png)
+## 工作流程
 
-<details>
-<summary>English · Architecture diagram and implementation scope</summary>
+[![新聞圖譜 → 共享 L1 觀點與分類 → 客製 L2 研究及增量維護](docs/media/stocknexus-architecture-zh-TW.png)](docs/media/stocknexus-architecture-zh-TW.png)
 
-![StockNexus architecture: news root trees → shared L1 opinions and taxonomy → query-specific L2 graphs](docs/media/stocknexus-architecture-en.png)
+1. **探索新聞**：選擇股票、日期與來源，在 3D 星系圖或時間軸閱讀新聞、展開關聯。
+2. **建立 L1 Wiki**：進入「LLM Wiki」，選日期與模型，按「開始／繼續整理」。可以先從最近一個月開始。
+3. **理解觀點**：透過分類找出觀點群，點選節點查看陳述、事件、支持／反對證據及原始新聞。
+4. **提出 L2 研究**：開啟「研究問題 · L2」，輸入例如「AI 需求對雲端獲利與資本支出的影響」，選擇觀察期間並建立研究。
+5. **在同一張圖比較**：切換 L1、L2 或 L1+L2，沿著來源鏈理解研究結論；也可在右側 Chat Agent 追問。
+6. **保存與持續追蹤**：將研究保存為「持續追蹤」或「固定快照」，查看更新與版本差異。
 
-Three structural stages, **two opinion layers**: news/evidence graphs → shared L1 opinions with classification → query-specific L2 graphs. The UI already provides a shared L1 / L2 / combined graph, research questions, source tracing, and saved live/pinned research. Classification and text retrieval select a bounded evidence bundle; unchanged effective inputs are reused.
-
-This is a conceptual architecture with a working first vertical flow, not a claim of complete autonomous research. Complex semantic query parsing, qualified historical price features, and quantitative narrative baselines remain incomplete. Candidate terms require review; accumulated revisions do not guarantee correctness. Maintenance arrows represent update orchestration: L2 conclusions never become external news evidence for L1. See the [implementation contract and limitations](spec/RESEARCH_LAYERS.md).
-
-</details>
-
-| 圖中階段 | 目前 UI／實作對應 |
-| --- | --- |
-| ① 新聞與證據 | 新聞圖譜的多 root／相鄰新聞簇、來源與規則關聯；進入 Wiki 後保存文章版本及引用 |
-| ② 共享通用觀點 · L1 Wiki | 同股票通用觀點、陳述／事件／來源鏈、多標籤分類；分組方法共用成果 |
-| ③ 客製化觀點 · L2 Wiki | 「研究問題 · L2」選取相關 L1 與證據，產生研究結果；共用圖切換 L1／L2／L1+L2，保存 live／pinned 與版本歷程 |
-
-圖是**概念架構與已接通的第一條流程**。目前採分類＋文字檢索，複雜語意 Lens、合格歷史價格特徵與敘事量化基線仍有限制。新分類先保留候選，不自動升級；一般使用者不需手寫分類定義。圖中維護回路表示增量更新調度，**不把 L2 結論回灌為 L1 新聞證據**。觀點可跨問題與時間重用，但成立條件、反證與版本時間仍須保留，不能保證使用越久便必然正確。詳見 [雙層研究規格與限制](spec/RESEARCH_LAYERS.md)。
-
-## 影片 C：研究流程示範（Research Desk）
-
-從財報或產品分類縮小範圍，在 3D 圖譜中選取新聞、展開關聯，再用圖內搜尋與 Chat Agent 整理下一個值得查證的問題。
-
-[![研究流程動畫預覽：旋轉選取新聞的關聯圖，從不同角度查看連線](docs/media/research-preview.gif)](docs/media/research-demo.mp4)
-
-[觀看完整研究版影片（約 62 秒，MP4）](docs/media/research-demo.mp4)。上方為 7 秒循環預覽；完整影片涵蓋財報分類、3D 探索、圖內搜尋與示意對話。
-
-影片中的 Chat Agent 對話標示為 **illustrative dialogue**，展示提問流程，不是即時模型輸出或已驗證的市場結論。影片錄製於較早的介面版本；最新版本另加入視圖優先計算、分開進度與 650ms 停留說明。
-
-已完成的視圖可直接重用；切換範圍時，後端會重用配對評分快取並只補算缺少的配對。快照保存既有連線與最多 12 組近期完成視圖。
-
-## 目前實作狀態
-
-| 項目 | 狀態 |
-| --- | --- |
-| News Graph、3D／時間軸、來源與分類篩選 | 已實作 |
-| 視圖優先關聯、閒置補線、650ms 說明 | 已實作；預設 800、最多 2,400 節點 |
-| Contextual Chat Agent | 已實作；需啟動本機橋接並登入 Codex |
-| L1 Wiki 與 Classifier | 獨立股票 DB、增量觀點／引用／版本、多標籤與候選詞；舊資料可逐步補分類 |
-| L2 研究與共用圖 | 分類＋文字檢索、固定證據快照、L2 來源鏈、live／pinned 與增量刷新；複雜語意 Lens／價格特徵／回測尚未完整提供 |
-
-從頂部 **LLM Wiki** 切換：選股票、日期與模型 → 按單一「開始／繼續整理」主動作。可明確開啟持續維護，讓背景檢查指定查詢在新聞 DB 的新內容；不另行抓新聞。每股 Wiki 使用獨立 SQLite 保存節點、連線、引用與版本，重新開頁不用重算。模型選單讀取 Codex 實際目錄，預設 `gpt-6.1-sol`。可先處理最近一個月再擴大，跨模型重用已完成文章；主頁節點預算與 edge 設定不觸發 Wiki 重算。局部校正另行手動啟動並受配額限制。操作、配額與部署見 [Wiki 使用與維護](spec/WIKI_RUNTIME.md)，完整研究範圍見 [設計](spec/TEMPORAL_WIKI.md)。
-
-## 功能
-
-- 整合 Google News RSS、Yahoo 地區新聞與 Massive；支援日期範圍、來源與分類篩選。
-- 每條關聯保留共同實體、主題或標題相似度的證據。
-- 新聞自動存入 SQLite；相同資料與規則可重用持久圖譜快取。
-- 支援圖譜快照、JSON 匯出、繁體中文／英文介面及 REST API。
-- 3D 預設顯示 800 節點，可調至 2,400；先計算目前視圖的嚴格關聯，自適應補線在閒置時啟動，操作期間延後套用結果。
-- 節點、關聯計算、連線渲染與狀態分開顯示；滑鼠在標籤上靜止 650ms 顯示解釋，鍵盤聚焦也可查看。
-- 預算外新聞保留於清單、時間軸與匯出，進入視圖時才補算關聯；匯出及快照明示局部關聯範圍。
+共享 L1 可供不同研究問題重用；分類與別名協助找出相關觀點。L2 融合選中的觀點與反證，新增研究論述。啟用持續維護後，系統檢查新證據與相依變化，重用未變的成果。
 
 ## 快速啟動
 
-下載專案後，在專案根目錄執行。需要 Python 3.10+、Docker Engine 與 Docker Compose（支援 `up --wait`）。
+準備 Python 3.10+、Docker Engine 與 Docker Compose（支援 `up --wait`），在專案根目錄執行：
 
 ```bash
 ./run.sh
 ```
 
-依提示選擇資料位置與連線方式，完成後開啟 [本機網頁](http://127.0.0.1:8765/)。
+依提示選擇資料位置與連線方式，開啟 **[http://127.0.0.1:8765/](http://127.0.0.1:8765/)**。
+
+AI 功能使用本機 Codex 登入。準備 Node.js 20+，首次設定：
+
+```bash
+./run.sh chat setup
+npx --no-install codex login  # 已登入可略過
+./run.sh up
+```
+
+模型選單讀取目前帳戶可用模型。Google／Yahoo 搜尋可直接使用；Massive 在來源設定填入 API key。
+
+常用指令：
 
 ```bash
 ./run.sh up       # 更新程式後重新建置與啟動
-./run.sh status   # 查看服務狀態
+./run.sh status   # 查看服務
 ./run.sh logs     # 查看日誌
-./run.sh down     # 停止服務，保留資料
+./run.sh down     # 停止服務並保留資料
 ```
 
-不使用 Docker：執行 `./run.sh local` 或 `python3 server.py`。後端使用 Python 標準函式庫，前端不需 npm/build；3D 需要瀏覽器支援 WebGL。
+本機 Python 模式可用 `./run.sh local`；完整設定見 [啟動說明](spec/RUNTIME.md)。
 
-## 使用方式
+## 資料與工作延續
 
-1. 輸入關鍵字、來源及日期，按「搜尋新聞」。Massive 另需股票代碼與 API key；Google／Yahoo 不需 key。
-2. 在 3D 或時間軸探索新聞；圖內搜尋只查已載入的文章。
-3. 在「關聯設定」調整規則並按「套用」。成功後，同瀏覽器、同網址會沿用設定。
-4. 用「儲存圖譜快照」保留當時的資料與規則；載入快照不等於重新搜尋最新新聞。
-
-「Already in DB」表示文章已存在；關聯另有快取。命中時可先顯示既有關聯，再補抓來源。瀏覽器的新計算以目前視圖為範圍；「目前視圖完成」不代表全部新聞的關聯都已計算。
-
-## 文件
-
-- [Temporal LLM Wiki 設計](spec/TEMPORAL_WIKI.md)：單股版本圖、結構化證據與研究契約；已實作範圍另見 [Wiki runtime](spec/WIKI_RUNTIME.md)，回測仍為規劃。
-- [專案地圖](spec/PROJECT_MAP.md)：程式架構與文件入口。
-- [標準工作流程](spec/WORKFLOWS.md)：搜尋、設定、快照、更新及驗收。
-- [啟動與資料管理](spec/RUNTIME.md)：Docker、本機模式、Tailscale、搬移與備份。
-- [效能與 WebGL 排錯](spec/references/lesson-20261102-rendering-cache-settings.md)：已驗證原因、修正與注意事項。
-- [API 文件](docs/API.md)／[本機 Swagger](http://127.0.0.1:8765/docs)。
-
-新聞來源不保證完整歷史，程式未抓取新聞全文；關聯分數不是因果、機率或投資建議。服務適用於本機或受信任網路，目前沒有帳號隔離。
-
-### Chat Agent
-
-右側可切換新聞詳情與 Chat Agent，討論目前選取的新聞並操作視圖／滑塊。
-主機需 Node.js 20+、已登入 Codex；執行 `npm ci` 後以 `./run.sh chat start` 啟動。
-僅開放本機 8765 網頁；沿用登入，不需在網頁填 key。新聞內容會送交登入帳戶使用的模型。
-[操作與資料範圍](spec/CHAT_AGENT.md)。
-
-首次使用 Chat Agent：在專案目錄執行 `./run.sh chat setup`，需要登入時執行 `npx --no-install codex login`，再 `./run.sh up`。使用 8765 網頁右側 Chat Agent 分頁；`./run.sh --help` 提供完整指引。`node server.mjs --open` 是另開 3210 的獨立對話範例，沒有新聞畫面上下文。
-
-本機離線搜尋：`./run.sh local --offline`；Docker 可用 `NEWS_ATLAS_CACHE_ONLY=1 ./run.sh up`。此模式即使勾選強制更新也只讀 DB，不自動補抓缺口。已下載的日線股價可用 `python3 scripts/read_prices.py NVDA` 離線匯出 CSV。
-
-### 開著網頁合併另一台電腦／USB 的資料
-
-`./run.sh up` 成功後會印出對應實際資料位置的指令；另開終端執行即可。來源可指定 `data`、`graph`、`llm_wiki` 或單股目錄：
+- 新聞與 Wiki 依股票存入本機 SQLite，保留節點、連線、來源與版本。
+- 新聞圖譜使用持久快取；調整顯示數量、切換來源或重開頁面可重用既有成果。
+- 用「儲存圖譜快照」保存新聞探索畫面，或匯出 JSON／Wiki Markdown。
+- 跨電腦或 USB 搬移資料可使用 `merge_data.sh`；先暫停目標股票的 Wiki 整理，再預覽並合併：
 
 ```bash
 ./merge_data.sh --from /media/usb/data --to ./data --dry-run
 ./merge_data.sh --from /media/usb/data --to ./data
 ```
 
-把來源換成實際 USB 路徑，目標以啟動器印出的路徑為準。Web UI 可保持開啟；先暫停欲合併股票的 Wiki 工作／持續維護。合併後 Wiki 下拉選單約 6 秒內出現新增股票；不自動更換目前選取或啟動模型。
+來源、目標改成實際路徑；詳見 [資料合併與備份](spec/DATA_MERGE.md)。
 
-工具自動備份、去重，保留本地資料與來源衝突副本；不搬金鑰、不呼叫 LLM。衝突、備份、僅新聞匯入與復原詳見 [合併說明](spec/DATA_MERGE.md)。
+## 深入了解
 
-資料布局：新聞圖 `data/graph/<ticker>/`、Wiki `data/llm_wiki/<ticker>/`；無法確認歸屬保留於 `graph/_unassigned/`。舊主 DB 在啟動時備份並遷移，見 [儲存說明](spec/GRAPH_STORAGE.md)。
-
-目前完整功能與計算方法見 [專案現況](spec/CURRENT_STATE.md) 及 [計算定義](spec/CALCULATION_METHODS.md)；AI 協作前先讀 [修改偏好](spec/ai-dev-experience-preferences.md)。
-
-### 研究問題與 Layer 2 Wiki
-
-在 **LLM Wiki → 研究問題 · L2** 選擇股票後輸入研究問題（例如「AI 需求與風險」）。系統重用既有 L1，按分類與全文尋找支持／反證，保存固定來源快照，再透過目前選定的模型產生可追溯 L2。可保存為持續追蹤或固定快照，展開來源圖及比較版本。分組方式共用同一 L1，不會因切換另建不相容資料庫。
-
-L1 正在整理時可閱讀既有 L2，新研究／更新需等模型槽空閒。第一版價格動能在沒有合格歷史行情版本時顯示不可用；分類信心及檢索相關度不是投資機率。部署、API、BDD 邊界、migration 與已知限制見 [雙層研究規格](spec/RESEARCH_LAYERS.md)。
+- [Wiki 使用與維護](spec/WIKI_RUNTIME.md)
+- [L1、分類、L2 研究流程](spec/RESEARCH_LAYERS.md)
+- [Chat Agent 設定與操作](spec/CHAT_AGENT.md)
+- [API 文件](docs/API.md)
+- [專案地圖](spec/PROJECT_MAP.md) · [目前狀態](spec/CURRENT_STATE.md) · [測試紀錄](spec/TESTING.md)

@@ -92,3 +92,6 @@
 @media(max-width:800px){.wiki-panel .wiki-toolbar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}.wiki-panel .wiki-toolbar label{min-width:0}.wiki-panel .wiki-toolbar select{width:100%}}
 
 .wiki-chart-legend{max-height:72px;overflow:auto;flex-shrink:0}
+
+/* During L2 work the graph reports actual progress instead of inviting a duplicate query. */
+.wiki-canvas-area:has(#wikiResearchStatus[aria-busy="true"]) #wikiEmpty{display:none}

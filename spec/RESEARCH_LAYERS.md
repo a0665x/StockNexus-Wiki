@@ -129,3 +129,21 @@ python3 scripts/wiki_taxonomy_upgrade.py --instrument NASDAQ:GOOGL --apply
 研究可用性使用全局 L1／分類工作狀態；主畫面進度僅屬目前股票，不能推斷其他股票也閒置。當 TSM 閒置但 GOOGL 整理中，建立研究旁直接顯示 GOOGL 與共用模型忙碌原因，並可前往該股票；不靠停留 tooltip 才發現。前往後不自動停止工作，返回原股票保留研究草稿與觀察期間。忙碌解除由輪詢恢復按鈕，不建立額外模型工作。
 
 BDD：本股閒置／別股 busy → 顯示 ticker 與可操作導覽；別股 completed → 不重新開頁即解除；availability 503 → 明示無法確認及重試，不假稱 L1 忙碌；恢復 200 → 清除錯誤；晚回覆不覆蓋新股票／較新檢查。正式狀態查詢與隔離瀏覽器驗證分開記於 TESTING。
+
+
+## 2026-11-08 L2 執行與結果交接
+
+- 排隊、分析、結果載入在側欄與中央圖譜同步呈現；中央使用 L2 標示及實際工作建立時間計算的等待秒數，不能沿用「尚未建立」空狀態。L1 覆蓋進度仍獨立保存。
+- 結果必須通過既有提交驗證才加入圖；等待期間不生成假節點、不以時間猜完成百分比。
+- 讀取失敗保留 job ID，45 秒讀取逾時後可恢復，持續輪詢既有 job/run；結果成功掛載才清除 pending。離開研究側欄仍追蹤；切股票使舊回應失效。
+- 後端完成而前端結果未載入是不同狀態；不得藉新建模型工作修復 GET 失敗。
+
+BDD 邊界（`tests/browser_research.py`）：
+
+1. Given 已提交研究且尚在佇列，When 側欄開啟或關閉，Then 中央顯示 L2 工作進度，不能邀請重複建立研究。
+2. Given 後端已完成但結果 GET 回 503，When 使用者已返回 L1 設定，Then 中央顯示重新連線；恢復後載入既有 L2，研究 job 數不變。
+3. Given 切股票或切回 L1，When 舊讀取晚到，Then 不覆蓋新選取；同股票原工作可接續讀取。
+4. Given 已完成正式研究，When 用原生下拉選股票並切 L2，Then 圖中 L2 節點數等於該 run claims 數；唯讀驗收禁止建立模型工作。
+
+
+讀取成本邊界：job、runs、taxonomy GET 只讀已提交 Wiki，不再 observe／ingest 整份新聞；run 與 lenses 仍檢查來源以計算新鮮度，query／refresh 的來源觀察與背景增量維護保持。`test_polling_and_catalog_reads_do_not_reingest_news` 以來源掃描會失敗的情境驗證輕量讀取，並確認 run 仍執行觀察。

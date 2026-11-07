@@ -55,6 +55,26 @@ class ResearchTests(unittest.TestCase):
                 self.assertTrue(n['evidence'][0]['quote']);self.assertTrue(n['revision_id'])
         self.assertEqual(b['outcomes'],[])
 
+    def test_polling_and_catalog_reads_do_not_reingest_news(self):
+        # Given a published run, reading progress/list/classification must work
+        # even when the source store is unavailable; these are committed Wiki data.
+        from unittest.mock import Mock, patch
+        from news_atlas.wiki.research import handle_research
+        run_id=self.complete()
+        with self.store.connection() as db:job_id=db.execute("SELECT id FROM research_jobs WHERE status='completed'").fetchone()[0]
+        for path,ident in [('job',job_id),('runs',None),('taxonomy',None)]:
+            handler=Mock();handler.command='GET'
+            params={'instrument':['NASDAQ:TSLA']}
+            if ident:params['id']=[ident]
+            with patch.object(Research,'observe_news',side_effect=AssertionError('poll reingested entire source corpus')):
+                handle_research(handler,self.service,path,params,True)
+            self.assertEqual(handler.json_response.call_args.args[0],200)
+        # A result's freshness check still observes source changes.
+        handler=Mock();handler.command='GET'
+        with patch.object(Research,'observe_news') as observe:
+            handle_research(handler,self.service,'run',{'instrument':['NASDAQ:TSLA'],'id':[run_id]},True)
+            observe.assert_called_once_with(self.news)
+
     def test_duplicate_query_uses_same_job_and_no_extra_model_call(self):
         a=self.query();b=self.query();self.assertEqual(a['job_id'],b['job_id'])
         self.service.tick();self.query();self.service.tick()
