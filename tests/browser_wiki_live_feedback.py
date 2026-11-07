@@ -36,7 +36,7 @@ with tempfile.TemporaryDirectory(prefix='wiki-feedback-') as tmp:
   wait("typeof AtlasWiki!=='undefined'",45)
   records=[]
   def measure(ident,predicate):
-   js("""(()=>{const id="""+json.dumps(ident)+""";window.measured=null;document.addEventListener('click',function observe(e){if(!document.getElementById(id)?.contains(e.target))return;document.removeEventListener('click',observe,true);const start=performance.now();const frame=()=>{if("""+predicate+"""){measured=performance.now()-start;return;}if(performance.now()-start>2000){measured=-1;return;}requestAnimationFrame(frame)};requestAnimationFrame(frame)},{capture:true})})()""")
+   js("""(()=>{const id="""+json.dumps(ident)+""";window.measured=null;document.addEventListener('click',function observe(e){if(!document.getElementById(id)?.contains(e.target))return;document.removeEventListener('click',observe,true);const start=performance.now();const frame=()=>{if("""+predicate+"""){requestAnimationFrame(()=>{measured=performance.now()-start});return;}if(performance.now()-start>2000){measured=-1;return;}requestAnimationFrame(frame)};requestAnimationFrame(frame)},{capture:true})})()""")
    click(ident);wait('measured!==null',5);ms=js('measured');records.append({'button':ident,'feedback_ms':round(ms,1)});print(json.dumps(records[-1]),flush=True);assert 0<=ms<2000
   measure('modeWiki',"!document.getElementById('wikiPanel').hidden")
   wait("AtlasWiki.graph()&&AtlasWiki.graph().graphData().nodes.length>0",60)

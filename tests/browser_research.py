@@ -44,7 +44,7 @@ def main():
         if 'exceptionDetails' in out.get('result',{}):raise RuntimeError(out)
         return out['result']['result'].get('value')
      def measure(ident):
-      js("""(()=>{const b=document.getElementById("""+json.dumps(ident)+""");b.scrollIntoView({block:'center'});window.feedbackMs=null;b.addEventListener('click',()=>{const start=performance.now();const frame=()=>{if(b.disabled&&b.getAttribute('aria-busy')==='true'){feedbackMs=performance.now()-start;return;}if(performance.now()-start>2000){feedbackMs=-1;return;}requestAnimationFrame(frame)};requestAnimationFrame(frame)},{once:true,capture:true});})()""")
+      js("""(()=>{const b=document.getElementById("""+json.dumps(ident)+""");b.scrollIntoView({block:'center'});window.feedbackMs=null;b.addEventListener('click',()=>{const start=performance.now();const frame=()=>{if(b.disabled&&b.getAttribute('aria-busy')==='true'){requestAnimationFrame(()=>{feedbackMs=performance.now()-start});return;}if(performance.now()-start>2000){feedbackMs=-1;return;}requestAnimationFrame(frame)};requestAnimationFrame(frame)},{once:true,capture:true});})()""")
       point=js("(()=>{const r=document.getElementById("+json.dumps(ident)+").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()")
       for kind in ['mouseMoved','mousePressed','mouseReleased']:
        nonlocal serial

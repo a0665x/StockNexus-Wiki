@@ -1,5 +1,6 @@
 """Wiki panel geometry, resizing and persistent galaxy selection via real browser input.
-Checks bounded work and complete data, not machine-dependent timing thresholds.
+Checks bounded work/data plus the requested <2s painted feedback on the test machine.
+Timing samples are not a completion-time or cross-device SLA.
 Requires Chromium (or CHROME_BIN) and websocket-client. No provider/model calls.
 """
 import json
@@ -57,7 +58,7 @@ def main():
                 call('Input.dispatchMouseEvent',{'type':'mousePressed','button':'left','clickCount':1,**rect})
                 call('Input.dispatchMouseEvent',{'type':'mouseReleased','button':'left','clickCount':1,**rect});time.sleep(.12)
             def measure_feedback(ident):
-                js("""(()=>{const b=document.getElementById("""+json.dumps(ident)+""");window.clickFeedback=null;document.addEventListener('click',function observed(e){if(e.target.closest('button')?.id!==b.id)return;document.removeEventListener('click',observed,true);const start=performance.now();const frame=()=>{const b=document.getElementById("""+json.dumps(ident)+""");if(b?.disabled&&b.getAttribute('aria-busy')==='true'){clickFeedback=performance.now()-start;return;}if(performance.now()-start>2000){clickFeedback=-1;return;}requestAnimationFrame(frame)};requestAnimationFrame(frame)},{capture:true});})()""")
+                js("""(()=>{const b=document.getElementById("""+json.dumps(ident)+""");window.clickFeedback=null;document.addEventListener('click',function observed(e){if(e.target.closest('button')?.id!==b.id)return;document.removeEventListener('click',observed,true);const start=performance.now();const frame=()=>{const b=document.getElementById("""+json.dumps(ident)+""");if(b?.disabled&&b.getAttribute('aria-busy')==='true'){requestAnimationFrame(()=>{clickFeedback=performance.now()-start});return;}if(performance.now()-start>2000){clickFeedback=-1;return;}requestAnimationFrame(frame)};requestAnimationFrame(frame)},{capture:true});})()""")
                 click(ident)
                 end=time.monotonic()+3
                 while js('clickFeedback===null') and time.monotonic()<end:time.sleep(.03)
