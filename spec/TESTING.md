@@ -2,6 +2,28 @@
 
 入口：[PROJECT_MAP.md](PROJECT_MAP.md)。測試使用隔離 fixture／暫存 DB，不應改寫使用者的 data/news-atlas.sqlite3。
 
+## 2026-11-07：跨步驟互動驗收與可見等待狀態
+
+本輪由使用者要求自行操作整段 UI，依「入口 → 等待 → 成功／失敗 → 切換再回來」驗證，並非只量按鈕事件。實際 Chromium 滑鼠／原生 select 鍵盤；慢回覆、錯誤、寫入／模型動作使用隔離 fixture。正式讀取另以 `tests/browser_live_interactions.py --url <網址>` 驗收，攔截工作區偏好 POST 並拒絕非允許寫入，不測試付費模型內容品質。
+
+| Given／When | Then／證據 |
+| --- | --- |
+| L1 頁直接切 L2，研究側欄未開，runs 慢回覆 | 主圖旁即時顯示讀取狀態；先紅後綠 `browser_research.py` |
+| 沒有 L2／runs 503 | 無研究指向研究問題入口；錯誤在主畫面顯示，重試後恢復；不是要求重做 L1 |
+| L2 讀取在途切回 L1／歷史版本／其他股票 | 舊回覆不得改回 L2；研究讀取同時核對序號、股票、層與當前請求 |
+| 點慢快照、連點、失敗再試 | 狀態與按鈕 busy 即時可見，同按鈕一請求；原圖保留、失敗釋放控制，可重試 |
+| 先選慢快照再選快快照，舊回應晚到 | 保留最後所選快照；讀取途中啟動新搜尋也不以舊快照覆蓋新搜尋 |
+| 搜尋／關聯等待時切視圖、來源，停止後晚回覆 | 保留資料且狀態可解釋；不復活取消工作，GPU 預算與全資料量分離 |
+| 浮動工具收合／拖動／展開、時間軸與分類入口 | 實際指標可操作、工具遮蓋時先收合；tooltip／顏色／縮放連動正確 |
+| L2 建立、來源鏈、live 保存／更新、跨股票返回 | 共用圖及原 job，不重複付費；新 owner／歷史範圍隔離 |
+| Chat 與語言／行情／工作區恢復 | 使用目前選取；晚連線、取消／錯誤、重連及雙視窗語系一致，跨乾淨設定檔保存 |
+
+已執行：`browser_user_journeys.py` 33 checks PASS；`browser_native_controls.py` 23 checks PASS；`browser_wiki_layout.py` 48 checks PASS；`browser_research.py` 新增 L2 慢／空／錯誤重試、晚回覆場景與既有流程 PASS。`browser_workspace.py`、`browser_chat_language.py`、`browser_chat.py`（未加 --live）、`browser_detail_language.py` 通過；22 個 Node suites 通過。前兩個 Chat／detail 腳本仍含 runtime API 與程式點擊，因此不把其全部檢查稱為物理滑鼠操作；新增正式 journey 使用真實 CDP input。
+
+測試修正而非產品錯誤：舊新聞測試空 ticker 被目前必填股票契約拒絕；native 腳本硬寫 google-chrome 且缺現行 preview 串流 fixture；Chat 在舊 workspace 已有節點時提早認定新快照完成；CDP DOM object 不能當 Python 真值等待，需回傳布林。現已用有效 ticker、既有 Chromium、正確路由／真正完成狀態、pointer hit test；浮動工具遮住入口時先實際收合。首次失敗未計為通過。最早兩次 Chat 探測未隔離 workspace POST，可能保存 UI 偏好；最終版本已在 reload 前安裝 guard，未送出模型對話。
+
+原始失敗與最終日誌位於 `/tmp/wiki-interaction-audit/`；L2 新回歸為預設流程的一部分，不依賴額外環境變數。沒有後端／schema 修改或資料刪除，未重跑完整 Python backend suite。正式部署及最後頁面驗證另記，不能用 fixture 宣稱正式服務已更新。
+
 ## 2026-11-07：Wiki／L2 按鈕兩秒內回饋
 
 驗收時間定義：由真實滑鼠 click 到處理狀態／目標畫面已成立，再跨一個 animation frame 確認有繪製機會，門檻 2000ms；不把下載、讀圖或模型全部完成視為兩秒 SLA。這是本機 Chromium 樣本，不能保證所有硬體／網路永遠低於門檻。

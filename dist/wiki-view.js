@@ -188,7 +188,7 @@
   if(category&&!kind&&layer!=='L2')$('wikiCounts').append(el('small',t(`符合分類 ${matches.length} · 引用／相依背景 ${context.length}（灰色）`,`Category matches ${matches.length} · Citation/dependency context ${context.length} (gray)`)));
   if(researchRun&&layer!=='L1')$('wikiCounts').append(el('small',t('L2 與引用背景使用建立研究時的固定快照。','L2 and cited context use the fixed research snapshot.')));
   if(clusters>1)$('wikiCounts').append(el('small',t(`${clusters} 個獨立群；群之間尚無通過驗證的模型關係。`,`${clusters} separate groups; no validated model relation between them yet.`)));
-  $('wikiEmpty').hidden=subset.length>0;$('wikiEmpty').textContent=t('此範圍尚無節點。選擇新聞範圍並開始整理。','No nodes in this range. Select evidence and start processing.');
+  $('wikiEmpty').hidden=subset.length>0;$('wikiEmpty').textContent=$('wikiLayer').value==='L2'?t('此範圍尚無 L2 觀點。從「研究問題 · L2」建立或選擇研究。','No L2 opinions in this view. Open Research · L2 to create or select a study.'):t('此範圍尚無節點。選擇新聞範圍並開始整理。','No nodes in this range. Select evidence and start processing.');
   versionInfo();timeline();overview();
   if(!subset.length){graph?.graphData({nodes:[],links:[]});return;}
   try{

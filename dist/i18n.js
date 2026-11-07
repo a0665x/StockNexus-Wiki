@@ -9,6 +9,8 @@
 '單一指定':'Single selection','分群渲染':'Group rendering','3D 無法啟動；請查看錯誤原因後重試。':'3D could not start. Review the error and retry.',
 '新聞與關聯已載入':'News and edges loaded',
 '所有來源已隱藏；請勾選顯示來源。':'All sources are hidden. Enable visible sources.',
+'正在載入圖譜快照…':'Loading graph snapshot…',
+'已略過快照，保留目前搜尋結果。':'Snapshot skipped; keeping the current search results.',
 '正在等待搜尋結果。':'Waiting for search results.',
 '此搜尋目前沒有可顯示結果；請檢查來源狀態。':'This search has no visible results. Check source status.',
 '此頁尚未載入搜尋結果；可搜尋或開啟已儲存圖譜。':'No results loaded on this page. Search or open a saved graph.',

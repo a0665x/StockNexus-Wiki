@@ -5,7 +5,7 @@ const savedColors=AtlasUI.read('sourceColors',{});
 const colors=Object.fromEntries(Object.entries(defaultColors).map(([p,value])=>[p,/^#[0-9a-f]{6}$/i.test(savedColors?.[p])?savedColors[p]:value]));
 const sourceNames = { google: 'Google', yahoo: 'Yahoo', massive: 'Massive' };
 const relationNames = { shared_entity: '共同實體', shared_topic: '共同主題', similar_title: '相似標題' };
-let articles = [], relations = [], hovered = null, selected = null, controller = null, exportMeta = {}, currentSearch = 0;
+let articles = [], relations = [], hovered = null, selected = null, controller = null, exportMeta = {}, currentSearch = 0, snapshotLoadTicket = 0;
 let graph = null, fitTimer = null, sourceArticles = new Map(), lastNetworkRender=null;
 let viewRelationJob=null,viewRelationState={phase:"idle",pairs_checked:0},viewRevision=0,viewRequestedSettings=null,restoredRelationSeed=null,restoredRelationViews=[],restoringRelations=false;
 const completedRelationViews=new Map();
@@ -458,12 +458,14 @@ $('saveDB').onclick = async () => {
   finally{saving=false;$('saveDB').disabled=!focusView.articles.length || !!controller;}
 };
 async function loadSnapshots() {
-  try {const response=await fetch('/api/snapshots');if(!response.ok)return;const data=await response.json();const root=$('snapshots');root.replaceChildren();for(const saved of data.snapshots || []){const button=el('button',`${saved.name} · ${date(saved.created_at)}`,'raw');button.addEventListener('click',()=>restoreSnapshot(saved.id));root.append(button);}if(!data.snapshots?.length)root.append(el('p','尚無已儲存圖譜','muted'));} catch {}
+  try {const response=await fetch('/api/snapshots');if(!response.ok)return;const data=await response.json();const root=$('snapshots');root.replaceChildren();for(const saved of data.snapshots || []){const button=el('button',`${saved.name} · ${date(saved.created_at)}`,'raw');button.addEventListener('click',async()=>{if(button.disabled)return;const label=button.textContent;button.disabled=true;button.setAttribute('aria-busy','true');button.textContent=AtlasI18n.t('正在載入圖譜快照…');try{await restoreSnapshot(saved.id);}finally{button.disabled=false;button.setAttribute('aria-busy','false');button.textContent=label;}});root.append(button);}if(!data.snapshots?.length)root.append(el('p','尚無已儲存圖譜','muted'));} catch {}
 }
 async function restoreSnapshot(id,workspaceSaved=null) {
   if(controller || saving){$('saveStatus').textContent='請等待目前搜尋／儲存完成。';return;}
+  const ticket=++snapshotLoadTicket,searchAt=currentSearch,progress=$('saveStatus');progress.setAttribute('role','status');progress.setAttribute('aria-busy','true');progress.replaceChildren(el('span',null,'search-spinner'),el('span',AtlasI18n.t('正在載入圖譜快照…')));
   try {
     const response=workspaceSaved?null:await fetch('/api/snapshots/'+encodeURIComponent(id));const saved=workspaceSaved||await response.json();if(response&&!response.ok)throw new Error(saved.error);
+    if(ticket!==snapshotLoadTicket)return;if(searchAt!==currentSearch){progress.textContent=AtlasI18n.t('已略過快照，保留目前搜尋結果。');return;}
     restoringRelations=true;viewRelationJob?.cancel();
     networkPositions.clear();internalLengths.clear();
     for(const p of providers)$('view-'+p).checked=saved.view.sources.includes(p);
@@ -485,8 +487,8 @@ async function restoreSnapshot(id,workspaceSaved=null) {
     for(const [s,g] of Object.entries(saved.source_graphs))sourceStates[s]={cached:g.articles.length,new:0,total:g.articles.length,done:true,phase:'已存圖譜'};
     paintProgress();$('elapsed').textContent='歷史圖譜快照 · 未重新搜尋';
     if(!saved.view.channel_definitions?.length)await reclassifyCurrent();
-  }catch(error){$('saveStatus').textContent='載入失敗：'+error.message;}
-  finally{restoringRelations=false;}
+  }catch(error){if(ticket===snapshotLoadTicket)$('saveStatus').textContent='載入失敗：'+error.message;}
+  finally{if(ticket===snapshotLoadTicket){restoringRelations=false;progress.setAttribute('aria-busy','false');}}
 }
 $('modeNetwork').onclick=()=>switchMode('network');$('modeTimeline').onclick=()=>switchMode('timeline');
 $('channelFilter').onchange=()=>{channelFilter=$('channelFilter').value;timelineFocusRequested=true;rebuild();};

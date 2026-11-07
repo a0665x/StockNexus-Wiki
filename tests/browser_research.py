@@ -43,6 +43,18 @@ def main():
        if out.get('id')==serial:
         if 'exceptionDetails' in out.get('result',{}):raise RuntimeError(out)
         return out['result']['result'].get('value')
+     def input_event(method,params):
+      nonlocal serial
+      serial+=1;ws.send(json.dumps({'id':serial,'method':method,'params':params}))
+      while json.loads(ws.recv()).get('id')!=serial:pass
+     def click(ident):
+      js("document.getElementById("+json.dumps(ident)+").scrollIntoView({block:'center'})")
+      point=js("(()=>{const r=document.getElementById("+json.dumps(ident)+").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()")
+      for event in ['mouseMoved','mousePressed','mouseReleased']:input_event('Input.dispatchMouseEvent',{'type':event,**point,'button':'left','clickCount':1})
+     def choose(ident,index):
+      click(ident)
+      for key in ['Home']+['ArrowDown']*index+['Enter']:
+       for event in ['keyDown','keyUp']:input_event('Input.dispatchKeyEvent',{'type':event,'key':key})
      def measure(ident):
       js("""(()=>{const b=document.getElementById("""+json.dumps(ident)+""");b.scrollIntoView({block:'center'});window.feedbackMs=null;b.addEventListener('click',()=>{const start=performance.now();const frame=()=>{if(b.disabled&&b.getAttribute('aria-busy')==='true'){requestAnimationFrame(()=>{feedbackMs=performance.now()-start});return;}if(performance.now()-start>2000){feedbackMs=-1;return;}requestAnimationFrame(frame)};requestAnimationFrame(frame)},{once:true,capture:true});})()""")
       point=js("(()=>{const r=document.getElementById("+json.dumps(ident)+").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()")
@@ -69,6 +81,21 @@ def main():
      time.sleep(.2)
      assert js("$('wikiLive').getBoundingClientRect().height")>before_height+35
      assert js("AtlasWiki.graph()===sharedWikiGraph&&sharedWikiGraph.graphData().nodes[0]===originalWikiNodes[0]")
+     # Delay the real runs route; assert visible state even while research sidebar is closed.
+     js("window.layerFetch=fetch;window.holdRuns=true;window.failRuns=false;window.releaseRuns=null;window.fetch=async(u,o)=>{if(String(u).includes('/research/runs?')){if(holdRuns)await new Promise(r=>releaseRuns=r);if(failRuns)return new Response(JSON.stringify({error:'Controlled runs outage'}),{status:503});}return layerFetch(u,o)}")
+     choose('wikiLayer',1)
+     wait('releaseRuns!==null')
+     assert js("!$('wikiResearchStatus')?.hidden&&$('wikiResearchStatus')?.getAttribute('aria-busy')==='true'"), 'L2 lookup needs visible loading outside hidden research panel'
+     js('holdRuns=false;releaseRuns()')
+     wait("$('wikiResearchStatus').textContent.includes('尚未建立')")
+     assert js("$('wikiEmpty').textContent.includes('研究問題')&&!$('wikiEmpty').textContent.includes('開始整理')"), 'empty L2 must lead to research, not L1 processing'
+     choose('wikiLayer',0);js('failRuns=true');choose('wikiLayer',1)
+     wait("$('wikiResearchStatus').textContent.includes('Controlled runs outage')")
+     assert js("!$('wikiResearchRetry').hidden&&!$('wikiResearchStatus').hidden"), 'failed L2 lookup needs visible retry'
+     js('failRuns=false');click('wikiResearchRetry')
+     wait("$('wikiResearchStatus').textContent.includes('尚未建立')")
+     choose('wikiLayer',0)
+     print('PASS L2 slow, empty, error and retry states through real dropdown input',flush=True)
      js("$('researchOpen').click()")
      wait("!$('researchPanel').hidden&&$('researchTaxonomy').children.length>0")
      assert js("!$('researchInclude')&&!$('researchExclude')&&!$('researchTaxonomy').querySelector('input')")
@@ -110,6 +137,13 @@ def main():
      assert js("sharedWikiGraph.graphData().nodes.some(n=>n.layer==='L1')&&sharedWikiGraph.graphData().nodes.some(n=>n.layer==='L2')")
      js("$('wikiLayer').value='L1';$('wikiLayer').dispatchEvent(new Event('change'))")
      assert js("AtlasWiki.runtime.state().selected_node===null&&AtlasWiki.runtime.state().scope_ids.every(id=>sharedWikiGraph.graphData().nodes.some(n=>n.id===id&&n.layer!=='L2'))")
+     js("$('wikiVersion').value='1';$('wikiVersion').dispatchEvent(new Event('change'))")
+     wait("AtlasWiki.runtime.state().research_run===null")
+     js('holdRuns=true;releaseRuns=null')
+     choose('wikiLayer',1);wait('releaseRuns!==null');choose('wikiLayer',0)
+     js('holdRuns=false;releaseRuns()');time.sleep(.6)
+     assert js("$('wikiLayer').value==='L1'&&AtlasWiki.runtime.state().research_run===null&&$('researchResult').hidden"), 'late L2 lookup must not replace newer L1 selection'
+     print('PASS late L2 lookup preserves newer L1 selection',flush=True)
      old_ids={n['id'] for n in paused.graph(version=1)['nodes']}
      p=wiki.plan({'instrument':'NASDAQ:TSLA','model':'fixture','articles':rows[1:2]});wiki.start({'plan_id':p['plan_id']});wiki.tick()
      paused.configure({**paused.config(),'enabled':False,'catch_up':False})

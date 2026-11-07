@@ -96,3 +96,7 @@ python3 scripts/wiki_taxonomy_upgrade.py --instrument NASDAQ:GOOGL --apply
 ```
 
 腳本經公開 taxonomy API 以 expected_revision CAS 附加缺少的兩個詞；可多次傳 `--instrument`，重跑為 unchanged，不覆蓋同 ID 自訂詞彙。舊庫須執行此步，新庫 seed 已包含。回退程式優先保留現有 DB；新增 taxonomy revision 不刪舊版，但回退到只接受完全相同 taxonomy revision 的程式會將舊分類視為待補，應保留此相容 lookup 或暫停補分類，避免重算。
+
+## 2026-11-07：研究層的等待與切換
+
+由工具列切 L2 時，讀取／空結果／錯誤重試必須在主畫面可見，不依賴研究側欄是否開啟。無 L2 引導到「研究問題 · L2」，不要求重新整理 L1。讀取回覆同時核對股票、頁面 generation、層選擇與 run 請求序號；切回 L1／切歷史／換股票後的舊回應不能搶回畫面。來源和模型資料不因 UI 狀態改寫。實際操作與回歸見 TESTING。

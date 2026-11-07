@@ -13,6 +13,9 @@
  <p id="researchStatus" role="status" aria-live="polite"></p><h3>已保存的研究</h3><div id="researchSaved"></div><details><summary>觀點分類</summary><div id="researchTaxonomy"></div></details>`;
  $('wikiControls').prepend(panel);
  const result=node('section',undefined,'research-result');result.id='researchResult';result.hidden=true;$('wikiLower').prepend(result);
+ const layerStatus=node('div',undefined,'wiki-counts');layerStatus.id='wikiResearchStatus';layerStatus.hidden=true;layerStatus.setAttribute('role','status');layerStatus.setAttribute('aria-live','polite');const layerText=node('span');const layerRetry=button('重試讀取',()=>loadLayer());layerRetry.id='wikiResearchRetry';layerStatus.append(layerText,layerRetry);$('wikiCounts').after(layerStatus);
+ const layerMessage=(text,working=false,retry=false)=>{layerText.textContent=text;layerStatus.hidden=!text;layerStatus.setAttribute('aria-busy',String(working));layerText.classList.toggle('research-working',working);layerRetry.hidden=!retry;};
+ let layerRequest=0,runRequest=0;
  let stock='',serial=0,runId=null,timer=null,availabilityTimer=null,tipTimer=null,busy=false,submitting=false,lastAvailability=null;
  const pending=new Map();let watching=null;
  const status=text=>{$('researchStatus').textContent=text;};
@@ -24,7 +27,7 @@
  $('researchSubmitWrap').addEventListener('keydown',e=>{if(e.key==='Escape')clearTip();});
  function syncButton(){ $('researchSubmit').setAttribute('aria-busy',String(submitting));$('researchSubmit').disabled=busy||submitting;$('researchSubmit').textContent=submitting?'分析中…':'建立研究';$('researchSubmit').classList.toggle('research-working',submitting);$('researchSubmitWrap').setAttribute('aria-describedby','researchBusyTip');if(!busy)clearTip();}
  async function availability(){const token=serial;try{const a=await api('availability');if(token!==serial)return;lastAvailability=a;busy=a.busy;if(a.active_job&&!pending.has(stock))pending.set(stock,a.active_job.id);if(pending.has(stock)&&watching!==pending.get(stock))track(pending.get(stock),token);syncButton();}catch(e){if(token!==serial)return;busy=true;syncButton();status(e.message);}finally{if(token===serial&&!panel.hidden)availabilityTimer=setTimeout(availability,2000);}}
- async function loadRun(id,animate=false){const token=serial,r=await api('run?id='+encodeURIComponent(id));if(token!==serial||r.bundle.lens.instrument!==stock)return;runId=id;wiki.setResearch(r,id,animate);render(r);}
+ async function loadRun(id,animate=false,valid=()=>true){const token=serial,request=++runRequest,r=await api('run?id='+encodeURIComponent(id));if(token!==serial||request!==runRequest||!valid()||r.bundle.lens.instrument!==stock)return;runId=id;layerMessage('');wiki.setResearch(r,id,animate);render(r);}
  function render(r){
   result.hidden=false;result.replaceChildren();$('wikiLower').classList.add('research-visible');
   result.append(node('h3',r.bundle.lens.normalized_question));
@@ -56,7 +59,16 @@
  async function show(){const next=$('wikiInstrument').value;if(next!==stock){runId=null;result.replaceChildren();result.hidden=true;$('researchSaved').replaceChildren();$('researchTaxonomy').replaceChildren();$('researchQuestion').value='';stock=next;}serial++;clearTimeout(timer);watching=null;clearTimeout(availabilityTimer);submitting=pending.has(stock);syncButton();panel.hidden=false;$('wikiControls').classList.add('research-mode');$('researchStock').textContent=stock;$('researchModel').textContent=$('wikiModel').selectedOptions[0]?.textContent||'gpt-6.1-sol · high';const token=serial;status('正在載入已保存研究與分類…');$('researchStatus').classList.add('research-working');availability();try{await Promise.all([saved(),terms()]);if(token===serial&&$('researchStatus').textContent==='正在載入已保存研究與分類…')status('');}catch(e){if(token===serial)status(e.message);}finally{if(token===serial)$('researchStatus').classList.remove('research-working');}if(token===serial)$('researchQuestion').focus();}
  $('researchBack').onclick=()=>{panel.hidden=true;$('wikiControls').classList.remove('research-mode');clearTimeout(availabilityTimer);clearTip();};
  $('researchForm').onsubmit=async e=>{e.preventDefault();if(submitting)return;const token=serial;submitting=true;syncButton();status('正在確認研究工作狀態…');try{await availabilityOnce();if(token!==serial)return;if(busy){submitting=false;syncButton();status('請先停止 L1 資料補足，再開始進階分析。');return;}status('準備研究條件與證據…');const [model,reasoning_effort]=($('wikiModel').value||'gpt-6.1-sol|high').split('|');const j=await api('query',{query:$('researchQuestion').value,lookback_days:Number($('researchWindow').value),model,reasoning_effort});if(token!==serial)return;track(j.job_id,token);}catch(e){if(token===serial){submitting=false;syncButton();status(e.message);}}};
- window.addEventListener('atlas-wiki-stock',()=>{serial++;stock='';runId=null;clearTimeout(timer);clearTimeout(availabilityTimer);watching=null;panel.hidden=true;result.hidden=true;result.replaceChildren();$('wikiControls').classList.remove('research-mode');$('wikiLower').classList.remove('research-visible');});
- window.addEventListener('atlas-wiki-research-clear',()=>{runId=null;result.hidden=true;$('wikiLower').classList.remove('research-visible');});
- window.addEventListener('atlas-wiki-layer',async e=>{if(e.detail==='L1'){result.hidden=true;$('wikiLower').classList.remove('research-visible');return;}if(runId){result.hidden=false;$('wikiLower').classList.add('research-visible');return;}stock=$('wikiInstrument').value;const token=serial;try{const r=await api('runs');if(token!==serial)return;if(r.runs.length)await loadRun(r.runs[0].id);else status('尚未建立 L2；請輸入研究問題。');}catch(e){status(e.message);}});
+ window.addEventListener('atlas-wiki-stock',()=>{serial++;layerRequest++;runRequest++;layerMessage('');stock='';runId=null;clearTimeout(timer);clearTimeout(availabilityTimer);watching=null;panel.hidden=true;result.hidden=true;result.replaceChildren();$('wikiControls').classList.remove('research-mode');$('wikiLower').classList.remove('research-visible');});
+ window.addEventListener('atlas-wiki-research-clear',()=>{layerRequest++;runRequest++;layerMessage('');runId=null;result.hidden=true;$('wikiLower').classList.remove('research-visible');});
+ async function loadLayer(){
+  const request=++layerRequest;runRequest++;
+  if($('wikiLayer').value==='L1'){layerMessage('');result.hidden=true;$('wikiLower').classList.remove('research-visible');return;}
+  if(runId){layerMessage('');result.hidden=false;$('wikiLower').classList.add('research-visible');return;}
+  stock=$('wikiInstrument').value;const token=serial,valid=()=>token===serial&&request===layerRequest&&$('wikiLayer').value!=='L1';
+  layerMessage('正在讀取 L2 研究…',true);
+  try{const r=await api('runs');if(!valid())return;if(r.runs.length)await loadRun(r.runs[0].id,false,valid);else layerMessage('尚未建立 L2；請由「研究問題 · L2」輸入問題。');}
+  catch(e){if(valid())layerMessage('無法讀取 L2：'+e.message,false,true);}
+ }
+ window.addEventListener('atlas-wiki-layer',loadLayer);
 })();
