@@ -7,3 +7,11 @@
 - 影片的Chat對話是示意；不能用來宣稱Temporal LLM Wiki runtime、研究結論或真實模型回答已完成。
 
 本地README使用儲存庫相對路徑，提交時需一併包含兩個媒體檔。若要GitHub原生影片播放器，可將MP4附加到GitHub的Markdown編輯器，再以回傳的附件URL取代目前的預覽連結；不要填入虛構附件URL。GitHub支援影片附件並建議H.264；詳見 [官方附件說明](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/attaching-files) 及 [README影片支援公告](https://github.blog/changelog/2021-05-13-video-uploads-now-generally-available/)。目前未取得GitHub託管附件URL，因此README使用動畫預覽與影片連結，並未宣稱有原生影片播放器。
+
+## 中英文三層架構圖（2026-11-07）
+
+- `stocknexus-architecture-zh-TW.png`：繁體中文；README 首屏架構介紹。
+- `stocknexus-architecture-en.png`：英文；README 可展開及直接開啟。
+- 兩圖由內建 imagegen 依使用者確認的構圖製作，屬向量插畫風格的 PNG，不是可編輯 SVG。生成指令見 [architecture-prompts.md](architecture-prompts.md)。
+- 三層指 News → L1 → L2；Classifier／Taxonomy 是 L1 支援元件。圖示與連線為概念示意，不代表逐欄 DB schema、每個 root 都符合抽取條件，或已驗證的市場結論。
+- 維護箭頭是更新調度，不是 L2 回灌成新聞。候選詞需審核；價格與語意解析等實作限制與 README／RESEARCH_LAYERS 同步。

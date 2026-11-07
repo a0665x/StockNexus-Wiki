@@ -1,7 +1,34 @@
 # StockNexus-Wiki
 
-以真實財經新聞建立可解釋的關聯圖譜，結合 **3D 探索、時間軸與持久快取**。
+從真實財經新聞出發，建立 **新聞圖譜 → 共享通用觀點（L1 Wiki）→ 問題導向的客製觀點（L2 Wiki）**，結合 3D 探索、時間軸與持久快取。
 GitHub 儲存庫：[a0665x/StockNexus-Wiki](https://github.com/a0665x/StockNexus-Wiki)。
+
+## 架構一覽 · Architecture
+
+**三層知識結構，兩個觀點層。** 分類器與可擴充分類詞彙協助組織、檢索 L1，不另算一層；L2 重用相關 L1 子圖與證據，保留來源鏈。
+
+[![StockNexus 三層架構：新聞與根節點樹、共享 L1 與分類、依研究問題產生的 L2，以及增量維護](docs/media/stocknexus-architecture-zh-TW.png)](docs/media/stocknexus-architecture-zh-TW.png)
+
+[繁體中文原圖](docs/media/stocknexus-architecture-zh-TW.png) · [English diagram](docs/media/stocknexus-architecture-en.png)
+
+<details>
+<summary>English · Architecture diagram and implementation scope</summary>
+
+![StockNexus architecture: news root trees → shared L1 opinions and taxonomy → query-specific L2 graphs](docs/media/stocknexus-architecture-en.png)
+
+Three structural stages, **two opinion layers**: news/evidence graphs → shared L1 opinions with classification → query-specific L2 graphs. The UI already provides a shared L1 / L2 / combined graph, research questions, source tracing, and saved live/pinned research. Classification and text retrieval select a bounded evidence bundle; unchanged effective inputs are reused.
+
+This is a conceptual architecture with a working first vertical flow, not a claim of complete autonomous research. Complex semantic query parsing, qualified historical price features, and quantitative narrative baselines remain incomplete. Candidate terms require review; accumulated revisions do not guarantee correctness. Maintenance arrows represent update orchestration: L2 conclusions never become external news evidence for L1. See the [implementation contract and limitations](spec/RESEARCH_LAYERS.md).
+
+</details>
+
+| 圖中階段 | 目前 UI／實作對應 |
+| --- | --- |
+| ① 新聞與證據 | 新聞圖譜的多 root／相鄰新聞簇、來源與規則關聯；進入 Wiki 後保存文章版本及引用 |
+| ② 共享通用觀點 · L1 Wiki | 同股票通用觀點、陳述／事件／來源鏈、多標籤分類；分組方法共用成果 |
+| ③ 客製化觀點 · L2 Wiki | 「研究問題 · L2」選取相關 L1 與證據，產生研究結果；共用圖切換 L1／L2／L1+L2，保存 live／pinned 與版本歷程 |
+
+圖是**概念架構與已接通的第一條流程**。目前採分類＋文字檢索，複雜語意 Lens、合格歷史價格特徵與敘事量化基線仍有限制。新分類先保留候選，不自動升級；一般使用者不需手寫分類定義。圖中維護回路表示增量更新調度，**不把 L2 結論回灌為 L1 新聞證據**。觀點可跨問題與時間重用，但成立條件、反證與版本時間仍須保留，不能保證使用越久便必然正確。詳見 [雙層研究規格與限制](spec/RESEARCH_LAYERS.md)。
 
 ## 影片 C：研究流程示範（Research Desk）
 
@@ -22,9 +49,10 @@ GitHub 儲存庫：[a0665x/StockNexus-Wiki](https://github.com/a0665x/StockNexus
 | News Graph、3D／時間軸、來源與分類篩選 | 已實作 |
 | 視圖優先關聯、閒置補線、650ms 說明 | 已實作；預設 800、最多 2,400 節點 |
 | Contextual Chat Agent | 已實作；需啟動本機橋接並登入 Codex |
-| Temporal LLM Wiki | 已實作獨立股票 DB、LLM 增量抽取／關聯提案、版本與 Wiki Graph；依賴重評／回測尚未實作 |
+| L1 Wiki 與 Classifier | 獨立股票 DB、增量觀點／引用／版本、多標籤與候選詞；舊資料可逐步補分類 |
+| L2 研究與共用圖 | 分類＋文字檢索、固定證據快照、L2 來源鏈、live／pinned 與增量刷新；複雜語意 Lens／價格特徵／回測尚未完整提供 |
 
-從頂部 **LLM Wiki** 切換：選股票與全局查詢／日期範圍 → 預覽 → 確認整理。可明確開啟持續維護，讓背景檢查指定查詢在新聞 DB 的新內容；不另行抓新聞。每股 Wiki 使用獨立 SQLite 保存節點、連線、引用與版本，重新開頁不用重算。模型選單讀取 Codex 實際目錄，預設 `gpt-6.1-sol`。可先處理最近一個月再擴大，跨模型重用已完成文章；主頁節點預算與 edge 設定不觸發 Wiki 重算。局部校正另行手動啟動並受配額限制。操作、配額與部署見 [Wiki 使用與維護](spec/WIKI_RUNTIME.md)，完整研究範圍見 [設計](spec/TEMPORAL_WIKI.md)。
+從頂部 **LLM Wiki** 切換：選股票、日期與模型 → 按單一「開始／繼續整理」主動作。可明確開啟持續維護，讓背景檢查指定查詢在新聞 DB 的新內容；不另行抓新聞。每股 Wiki 使用獨立 SQLite 保存節點、連線、引用與版本，重新開頁不用重算。模型選單讀取 Codex 實際目錄，預設 `gpt-6.1-sol`。可先處理最近一個月再擴大，跨模型重用已完成文章；主頁節點預算與 edge 設定不觸發 Wiki 重算。局部校正另行手動啟動並受配額限制。操作、配額與部署見 [Wiki 使用與維護](spec/WIKI_RUNTIME.md)，完整研究範圍見 [設計](spec/TEMPORAL_WIKI.md)。
 
 ## 功能
 
@@ -105,6 +133,6 @@ GitHub 儲存庫：[a0665x/StockNexus-Wiki](https://github.com/a0665x/StockNexus
 
 ### 研究問題與 Layer 2 Wiki
 
-在 **LLM Wiki → 我的研究 · L2** 選擇股票後輸入研究問題（例如「動能」）。系統重用既有 L1，按分類與全文尋找支持／反證，保存固定來源快照，再透過目前選定的模型產生可追溯 L2。可保存為持續追蹤或固定快照，展開來源圖及比較版本。分組方式共用同一 L1，不會因切換另建不相容資料庫。
+在 **LLM Wiki → 研究問題 · L2** 選擇股票後輸入研究問題（例如「AI 需求與風險」）。系統重用既有 L1，按分類與全文尋找支持／反證，保存固定來源快照，再透過目前選定的模型產生可追溯 L2。可保存為持續追蹤或固定快照，展開來源圖及比較版本。分組方式共用同一 L1，不會因切換另建不相容資料庫。
 
-第一版價格動能在沒有合格歷史行情版本時顯示不可用；分類信心及檢索相關度不是投資機率。部署、API、BDD 邊界、migration 與已知限制見 [雙層研究規格](spec/RESEARCH_LAYERS.md)。
+L1 正在整理時可閱讀既有 L2，新研究／更新需等模型槽空閒。第一版價格動能在沒有合格歷史行情版本時顯示不可用；分類信心及檢索相關度不是投資機率。部署、API、BDD 邊界、migration 與已知限制見 [雙層研究規格](spec/RESEARCH_LAYERS.md)。

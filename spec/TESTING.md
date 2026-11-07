@@ -399,3 +399,12 @@ PYTHONPATH=.:tests python tests/browser_chat_language.py
 本輪沿 `project-spec-onboarding` 的入口順序核對 PROJECT_MAP → 偏好／CURRENT_STATE → RESEARCH_LAYERS。人工閱讀可找到六項答案：L1／L2 與 Classifier 分工、顯示切換不重做模型、目前 GOOGL 月範圍及七股舊範圍取代、資料保留與必要時救援、歷史測試／Git／部署的區別、未完成能力與下次查核入口。過時 AMD 交接已改為歷史，舊四分類已明示只是詳情屬性。這是文件可發現性核對，不是另開 agent 的盲測，也不保證未讀檔的新聊天自動記得內容。
 
 執行 `python3 spec/scripts/verify_docs.py`：37 份 Markdown 的本地連結與必要入口 PASS；`git diff --check` 通過。人工核對目前 skill 及其 preferences／spec-authoring references，已涵蓋明確偏好來源、作用範圍、取代關係、BDD 與持續更新，不必改全域 skill。沒有變更執行程式、DB 或 runtime，未重跑 UI／模型／後端測試；本頁其他測試結果保持其原執行時間與限制。
+
+## 2026-11-07 — README 中英文概念圖驗收（文件／媒體）
+
+- 情境：新讀者從 README 理解三層資料結構與兩個觀點層，能開啟繁體中文／英文原圖，且不把願景誤認成完整實作。
+- 核對：`dist/wiki-view.js` 的共用 wikiCanvas／L1/L2/both、`dist/research-view.js` 的研究入口／結果讀取；`news_atlas/wiki/classifier.py` 的 exact revision 標籤／候選詞；`research.py` 的確定性 Lens、classification/full_text bundle、price/baseline unavailable、live 更新與 input_hash。不是新一輪正式 UI 操作或模型品質測試。
+- 內建 imagegen 製作兩圖並逐張目視檢查層級／中文與英文標示；PNG signature／尺寸檢查通過，均 1536×1024。英文約 1.96 MB，中文約 2.01 MB；向量風格的點陣圖，不是 SVG。
+- `python3 spec/scripts/verify_docs.py`：PASS，37 份 spec Markdown 本地連結；額外檢查 README.md 與 docs/media/README.md 的本地連結全部存在。
+- `git diff --check`：PASS。README 使用 repo 相對路徑，圖檔一起提交；中文預設展示，英文 details 展開及直接連結。
+- 未驗證：GitHub 網頁實際展開渲染；無 UI／backend 行為變更，未重跑行為測試、重啟服務、修改 DB 或呼叫 Wiki 模型。

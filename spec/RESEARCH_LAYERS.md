@@ -19,6 +19,12 @@
 
 延續此方向時，先讀 [目前交接](CURRENT_STATE.md) 與 [協作偏好](ai-dev-experience-preferences.md)，核對現有實作再改。新的觀點設計修正更新本節及相關 BDD，舊決策註明被何項要求取代，不堆成互相矛盾的待辦。
 
+## README 三層視覺模型（2026-11-07 使用者確認）
+
+使用者確認白底、柔和配色、圓角框、AI 插畫、節點簇與清晰箭頭的構圖符合產品概念。三層金字塔是 **News／Evidence → 共享通用 L1 → 客製 L2**；不改程式的兩個觀點層命名，Classifier／Taxonomy 仍是支援元件。圖上 Root Trees 是新聞分組示意，不能把 News 規則邊當成已驗證的支持／因果關係。
+
+[README](../README.md) 提供 [中文圖](../docs/media/stocknexus-architecture-zh-TW.png)／[英文圖](../docs/media/stocknexus-architecture-en.png)。圖必須與第一版限制並列：確定性 Lens、分類＋文字檢索、候選詞受控審核、價格／敘事基線缺口；持續累積不等於保證正確。維護回路是新增證據、檢查反證、修訂受影響觀點與刷新研究，不許把 L2 推論當 L1 外部證據。這次只更新介紹與圖，不宣稱新增 runtime 能力。
+
 ## 現況與整合
 
 - 新聞：`news_atlas/storage.py`、`graph_storage.py`，provider/id 去重、每股票 SQLite；上游新聞覆寫需由 Wiki capture 保留不可變內容版本。

@@ -1,5 +1,11 @@
 # 變更與驗證 log
 
+## 2026-11-07 — README 中英文架構圖
+
+- 加入三層概念圖：News／Evidence → 共享 L1／分類 → 研究導向 L2，兩語言 PNG 隨 repo 保存。
+- 核對 classifier.py、research.py、Wiki／研究 UI 與現行 spec，README 明列已有流程及語意／行情／正確性限制；更新舊多按鈕啟動描述。
+- 保存使用者確認的介紹圖風格與層級命名，不變更 UI、schema、資料或執行中的工作。文件／媒體驗證見 TESTING。
+
 ## 2026-11-07 — Session 延續與需求取代關係
 
 - PROJECT_MAP 直接路由 L1／Classifier／L2；CURRENT_STATE 以有效交接區分歷史進度、Git 與部署證據，修正過時 AMD／七股描述。
