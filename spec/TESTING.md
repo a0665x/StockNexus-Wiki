@@ -289,3 +289,13 @@ PYTHONPATH=.:tests python tests/browser_chat_language.py
 獨立審查最後 verdict 為 ship，範圍是已列出的版本、選取、研究接續與分類取消問題；不表示正式模型品質已驗收。最終 Chrome 回歸 PASS，結束後的 BrokenPipe 是已關閉瀏覽器的輪詢連線。開啟保存研究會保留真正選取的 L1 底圖版本，L2 來源另外明示固定快照，不把歷史底圖誤標最新版本。Documenter 確認普通工作區延伸沿用原設計，沒有新增 DESIGN.md 或另一套樣式規範。
 
 回退：停止工作並保留最新 DB 備份後，可用 `ATLAS_IMAGE_TAG=pre-shared-wiki-20261107 docker compose up -d --no-build` 回到本輪前映像；Chat 主機程式需同步回到前次 commit `c6d3f66`。本輪分類資料為新增研究物件，沒有刪表或重寫既有 L1。不要直接覆寫目前 SQLite；需要還原舊備份時先保留本輪新增成果。
+
+
+## 2026-11-07：GOOGL 正式發布衝突回歸
+
+- 在資料預檢／備份後，首個正式月工作因舊 context revision 被 CAS 拒絕，version 保持 421；舊程式未保存此次 publish 拒絕的模型輸出／usage，不補造缺失紀錄。
+- 停止邊界撞上 failed 與停用 catch_up 分開提交，重啟誤建工作；已用公開 cancel API 停止。這次誤啟動可能消耗模型用量，不能宣稱沒有成本。
+- `python3 -m unittest discover -s tests -p test_wiki_revision_recovery.py -v`：4 個 BDD 修正前均 FAIL、修正後 OK。覆蓋當前 revision／歷史保留、相依 Thesis 不帶回舊版、每次 commit 可見性與重啟不重試、CAS 拒絕保留 usage／receipt 且無半套圖或 coverage。
+- `python3 -m unittest discover -s tests -q`：299 tests / 68.400s / OK；隔離 fixture，不使用正式模型。既有 ResourceWarning 仍可出現，不算通過的行為證據。
+- 真實 GOOGL 備份與首棵月 root 重播：12 context nodes 中 superseded 從 1 降至 0；未改歷史 payload，沒有 schema migration 或清庫。
+- 正式修正後續跑以 private report 的同原因一次額度為準；未發布前不得宣稱整月或模型驗收完成。

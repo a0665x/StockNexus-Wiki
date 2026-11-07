@@ -1,5 +1,7 @@
 # 目前狀態
 
+2026-11-07 GOOGL 正式月驗收發現舊 context revision 導致 CAS 衝突，及失敗／停用旗標分次提交導致重啟誤續跑。已保留 421 個原版本並取消誤建工作；修正當前 context 篩選、原子終止與拒絕用量紀錄。驗證和正式續跑結果以 TESTING 最新記錄為準，不能把執行中視為整月完成。
+
 2026-11-07 最新資料前置：GOOGL 正式庫唯讀預檢通過（13943 article revisions、421 versions、2164 nodes、1373 edges），保留歷史、不清空。維護測試改為 UTC 2026-10-07→2026-11-07，2760 篇中 921 可重用、1839 待整理，694 舊觀點群可補分類。已修正補分類未遵守日期的問題；來源與實際部署／執行證據見 WIKI_RUNTIME／TESTING。預檢是結構與引用核對，不等於事實審查。
 
 2026-11-07 最新修正：Wiki 狀態 GET 重跑初始化造成 SQLite 寫鎖／503，已改為已初始化 schema 純讀；coverage 有界快取、輪詢單飛、重進重用圖。整理入口合併為單一開始／繼續，明確點擊才 plan/jobs，含缺漏分類。首次錯誤重試、保存篩選同步圖形均有瀏覽器回歸。來源：`news_atlas/wiki/store.py`、`compiler.py`、`dist/wiki-view.js`；測試與部署以 [TESTING](TESTING.md) 本次紀錄為準。無資料刪除或破壞性 migration。 已部署 8765 且原 TSM 佇列接續；程式修正 commit `1457de8` 已推送 llm_wiki，實際延遲與保留設定核對見 TESTING。

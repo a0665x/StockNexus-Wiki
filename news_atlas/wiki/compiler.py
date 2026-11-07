@@ -409,7 +409,13 @@ class WikiService:
                         if not store.reserve_call(job,revision):return
                         continue
                     store.stage(job,'publishing',revision)
-                    if not store.publish(job,article,output.get('proposal'),context,output.get('usage',{})): return
+                    try:
+                        if not store.publish(job,article,output.get('proposal'),context,output.get('usage',{})): return
+                    except ValueError as error:
+                        # A concurrent revision can invalidate an otherwise valid
+                        # proposal. Preserve paid output; never retry stale context.
+                        store.reject(job,article,output.get('proposal'),error,output.get('usage',{}))
+                        raise
                     job.pop('repair',None)
                     break
                 # Yield only after an entire tree has committed its coverage. Splitting
@@ -426,9 +432,16 @@ class WikiService:
             log.info('wiki_job completed instrument=%s job=%s',store.instrument,job['id'])
         except Exception as error:
             with self.lock:
-                with store.connection() as db: failed=db.execute("UPDATE jobs SET status='failed',error=?,updated_at=? WHERE id=? AND status='running'",(str(error)[:600],now(),job['id'])).rowcount
-                if failed:
-                    cfg=store.config();cfg['enabled']=False;cfg['catch_up']=False;store.configure(cfg)
+                with store.connection() as db:
+                    # A restart must never observe terminal failure with catch-up
+                    # still enabled: both changes belong to one durable commit.
+                    db.execute('BEGIN IMMEDIATE')
+                    failed=db.execute("UPDATE jobs SET status='failed',error=?,updated_at=? WHERE id=? AND status='running'",(str(error)[:600],now(),job['id'])).rowcount
+                    if failed:
+                        saved=db.execute("SELECT value FROM metadata WHERE key='config'").fetchone()
+                        cfg=json.loads(saved[0]) if saved else {}
+                        cfg['enabled']=False;cfg['catch_up']=False
+                        db.execute('INSERT OR REPLACE INTO metadata VALUES (?,?)',('config',json.dumps(cfg)))
             log.warning('wiki_job failed instrument=%s job=%s error_type=%s',store.instrument,job['id'],type(error).__name__)
         finally: self.active=None
 

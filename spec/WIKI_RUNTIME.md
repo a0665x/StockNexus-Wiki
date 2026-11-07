@@ -123,3 +123,9 @@ Wiki 使用與深色圖譜一致的細線文件、掃描光條與知識連線，
 `classify_missing` 將 plan.date_range 傳給 classifier。只對依賴鏈含區間內來源的舊觀點群補分類，日期以來源發布 UTC 日為準；未知日期不符合有限窗口。區間外節點可保留為該群的既有脈絡，但不因此全庫重新分類。分類仍是 exact opinion/taxonomy revision 的共享成果，不依方法另開 DB；相同 revision 已分類即重用。活動分類工作若日期不同必須停止舊工作，不能靜默沿用。僅剩分類時也保存新維護範圍，避免畫面仍顯示年度分母。
 
 月範圍實測也暴露 root 準備成本：同一圖的每個 root 都重建／排序全部鄰接資料。`exploration.adjacency_index` 現在由 `forest.prepare` 每次只建立一次，傳給各次 trace；索引只屬於此準備請求，不跨股票或設定共用。排序、barrier、depth、branch／node budget 及覆蓋記帳不變。正式月圖的 793 棵樹與原計畫完全相同；實測邊界與數字見 TESTING。
+
+## 舊 revision 與終止交易（2026-11-07）
+
+GOOGL 月維護的正式模型結果揭露：相似上下文包含已有 UPDATES 後繼的舊節點，導致正確的發布 CAS 拒絕。現在候選排序與相依 Thesis 展開均排除被取代版本；歷史 ID／revision／引用不刪改，時間快照照常保留。這是「目前更新基底」的讀取規則，不是把歷史快照偷偷改成最新。模型在途仍可能遇到並行修訂，publish CAS 不放寬；拒絕時保存 proposal、usage 與 rejected receipt，保留最後完整圖且停止工作，不以舊 context 自動重試。
+
+終止失敗與 config.enabled/catch_up=false 必須在同一 BEGIN IMMEDIATE 交易提交。原來兩次提交在停止／重啟邊界會留下 failed＋catch_up=true，讓啟動誤排第二次付費工作。本輪已取消誤建工作，沒有自動復活其他股票；後續只允許修正驗證後以原月範圍有界續跑一次，次數持久記在 private 批次紀錄。早期未記錄的模型回應／用量不能追溯補造。

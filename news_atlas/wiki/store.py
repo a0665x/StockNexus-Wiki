@@ -180,9 +180,13 @@ class WikiStore:
         words=terms(article['title']+' '+article['summary'][:2000])
         with self.connection() as db:
             prior={r[0] for r in db.execute("SELECT e.target FROM edges e JOIN articles a ON a.id=e.source WHERE a.source_id=?",(article['provider']+':'+article['id'],))}
+            # Historical revisions stay addressable, but only current opinions may
+            # be offered as update bases. Publication still checks CAS for races.
+            superseded={r[0] for r in db.execute("SELECT target FROM edges WHERE json_extract(payload,'$.relation_type')='UPDATES'")}
             def candidates():
                 for row in db.execute("SELECT payload FROM nodes WHERE kind!='ArticleRevision'"):
                     n=json.loads(row[0])
+                    if n['id'] in superseded:continue
                     if article.get('_context_revisions') is not None and not any(c['article_revision_id'] in article['_context_revisions'] for c in n.get('citations',[])):continue
                     score=len(words & terms(n['title']+' '+n.get('scope','')))
                     if score or n['id'] in prior: yield (n['id'] in prior,score,n['id'],n)
@@ -191,7 +195,7 @@ class WikiStore:
         # Include direct dependents so a changed premise can revise an existing thesis.
         with self.connection() as db:
             ids=[n['id'] for n in selected]
-            dependent=[json.loads(r[0]) for r in db.execute("SELECT DISTINCT n.payload FROM nodes n JOIN edges e ON e.source=n.id WHERE e.target IN (SELECT value FROM json_each(?)) AND n.kind='Thesis' ORDER BY n.created_version DESC LIMIT 4",(encode(ids),))]
+            dependent=[json.loads(r[0]) for r in db.execute("SELECT DISTINCT n.payload FROM nodes n JOIN edges e ON e.source=n.id WHERE e.target IN (SELECT value FROM json_each(?)) AND n.kind='Thesis' AND n.id NOT IN (SELECT target FROM edges WHERE json_extract(payload,'$.relation_type')='UPDATES') ORDER BY n.created_version DESC LIMIT 4",(encode(ids),))]
         if article.get('_context_revisions') is not None:dependent=[n for n in dependent if any(c['article_revision_id'] in article['_context_revisions'] for c in n.get('citations',[]))]
         selected=list({n['id']:n for n in [*dependent,*selected]}.values())[:12]
         with self.connection() as db:

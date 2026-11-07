@@ -1,5 +1,11 @@
 # 變更與驗證 log
 
+## 2026-11-07 — GOOGL 正式驗收的版本衝突與誤續跑
+
+- 當前更新 context 排除已被取代的節點（含相依 Thesis），保留歷史及發布 CAS。
+- 發布衝突保存拒絕提案與用量；failed 與停用自動補足同交易提交，避免重啟誤續跑。
+- 四個 SQLite BDD 先紅後綠；真實資料副本中 superseded context 從 1 降至 0。完整測試與實際續跑證據見 TESTING。
+
 ## 2026-11-07 — GOOGL 資料預檢與月範圍分類補足
 
 - 新增唯讀 `scripts/wiki_data_audit.py`，區分文章／引用／關聯損壞、未來 schema 與可相容的 legacy 缺欄位。GOOGL 正式預檢完成且備份後才跑本輪 BDD，保留全部歷史。
