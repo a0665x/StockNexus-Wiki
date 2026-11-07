@@ -79,7 +79,7 @@ def groups(pending,context,forest):
         # Keep the entire tree, including already processed/older context. For large
         # trees retain a pending anchor in each segment and credit coverage only when
         # every segment of that tree has published successfully.
-        chunks=list(bounded_groups([[anchor,*[a for a in members if a['revision_id']!=anchor['revision_id']]]]))
+        chunks=list(bounded_groups([members],max_articles=12,anchor=anchor))
         for part,(chunk,meta) in enumerate(chunks):
             evidence=[anchor,*[a for a in chunk if a['revision_id']!=anchor['revision_id']]]
             covered=targets if part==len(chunks)-1 else []

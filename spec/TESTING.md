@@ -299,3 +299,10 @@ PYTHONPATH=.:tests python tests/browser_chat_language.py
 - `python3 -m unittest discover -s tests -q`：299 tests / 68.400s / OK；隔離 fixture，不使用正式模型。既有 ResourceWarning 仍可出現，不算通過的行為證據。
 - 真實 GOOGL 備份與首棵月 root 重播：12 context nodes 中 superseded 從 1 降至 0；未改歷史 payload，沒有 schema migration 或清庫。
 - 正式修正後續跑以 private report 的同原因一次額度為準；未發布前不得宣稱整月或模型驗收完成。
+
+
+第二次正式推論在 2026-11-07T07:18:47Z（約 600 秒）以 The operation was aborted 結束，原 CAS 錯誤沒有重現，但此次也沒有發布結果，不能宣稱正式 L1 已通過。失敗後 enabled/catch_up 都為 false、沒有誤建下一份 L1；原圖 v421 保留。月分類另有 12/694 組成功保存，這與新聞 coverage 分開記帳。
+
+容量修正 BDD `test_wiki_root_budget.py`：1／12 不拆、13 拆兩段、44 拆四段；重用證據仍出現在 context，但不被再次算新 coverage。兩個測試修正前 FAIL、修正後 OK。既有 forest 的部分失敗／全樹記帳／排程公平 8 tests OK。GOOGL 首樹離線重播 44 成員→12／12／12／11，每段共用 anchor，全部來源保留，coverage 記帳為 0／0／0／21。此項離線檢查不使用模型，也不能冒充正式推論通過。
+
+容量修正完整回歸：`python3 -m unittest discover -s tests -q`，301 tests / 64.576s / OK。沒有在完整 suite 同時跑啟動器 build/up。

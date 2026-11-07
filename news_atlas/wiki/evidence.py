@@ -52,14 +52,19 @@ def root_groups(rows,config):
         return
     raise ValueError('請重新選取新聞圖譜的 root 星河；不再自動建立其他樹')
 
-def bounded_groups(groups):
-    # A whole root is the unit of selection. Split only for the model input budget,
-    # not the fixed count dropdown. Preserve all articles; never silently truncate.
+def bounded_groups(groups,*,max_articles=None,anchor=None):
+    # Root segments bound output work as well as input bytes. A shared anchor
+    # consumes capacity in every segment; no evidence is silently truncated.
     for tree_index,group in enumerate(groups):
-        chunks=[];part=[];size=0
+        seed=[anchor] if anchor else []
+        seed_size=sum(len(json.dumps(a,ensure_ascii=False)) for a in seed)
+        chunks=[];part=list(seed);size=seed_size
         for a in group:
+            if anchor and a['revision_id']==anchor['revision_id']:continue
             length=len(json.dumps(a,ensure_ascii=False))
-            if part and size+length>65000:chunks.append(part);part=[];size=0
+            full=max_articles is not None and len(part)>=max_articles
+            if len(part)>len(seed) and (size+length>65000 or full):
+                chunks.append(part);part=list(seed);size=seed_size
             part.append(a);size+=length
         if part:chunks.append(part)
         for i,chunk in enumerate(chunks):yield chunk,{'group':tree_index+1,'articles':len(group),'part':i+1,'parts':len(chunks)}
