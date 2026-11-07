@@ -1,6 +1,6 @@
 # StockNexus-Wiki — 專案入口
 
-最後原始碼查核：2026-11-06。這是目前工作目錄的實作地圖，不代表 GitHub main 或正在執行的 server 已同步。
+全圖原始碼查核：2026-11-06；Wiki 延續性入口與文件路由更新：2026-11-07（不是全庫重新查核）。這是目前工作目錄的實作地圖，不代表 GitHub main 或正在執行的 server 已同步。
 
 真實新聞搜尋與可解釋關聯圖：Google RSS、Yahoo 地區新聞（經 Google RSS）、Massive → 標準化／規則關聯 → SQLite 快取 → 3D 星系及時間軸。Python 標準函式庫後端、原生 JavaScript 前端，支援 Docker／Compose、無前端建置程序。
 
@@ -9,7 +9,7 @@
 ## 新 session 的最短閱讀路徑
 
 1. 先讀本頁、[開發協作偏好](ai-dev-experience-preferences.md) 與 [目前功能狀態](CURRENT_STATE.md)，再讀相關領域。需要操作／啟動時讀 [標準流程](WORKFLOWS.md) 與 [RUNTIME.md](RUNTIME.md)。不要先掃描資料庫或大型 vendor bundle。
-2. 依下表只讀相關 Level 2 文件；再按需要深入 references。
+2. 依下表只讀相關 Level 2 文件；再按需要深入 references。延續本次 Wiki 討論時，先讀 CURRENT_STATE 的「有效交接」，再讀 RESEARCH_LAYERS 的「已確認產品意圖與取代關係」；舊工作數字與歷史需求不能覆蓋這兩處。
 3. 編輯前回到文件列出的原始碼核對；文件不取代當下程式、測試或使用者指示。
 4. 修改前查看 [變更紀錄](CHANGELOG.md) 及相關事故／避坑紀錄；依 [TESTING.md](TESTING.md) 選擇回歸檢查；有新行為時更新對應 spec。
 
@@ -26,6 +26,7 @@
 | Swagger、REST、未來 MCP | [API.md](API.md) | server.py、api.py、openapi.py、exploration.py |
 | 本機啟動、手機、重啟、版本不一致 | [RUNTIME.md](RUNTIME.md) | run.sh、scripts/docker_launch.py、scripts/launch.py、server.py、start-tailscale.sh |
 | 驗證與修改風險 | [TESTING.md](TESTING.md) | tests/ |
+| L1／Classifier／Lens／L2 的延續性需求、共用圖與研究邊界 | [RESEARCH_LAYERS.md](RESEARCH_LAYERS.md)／[CURRENT_STATE.md](CURRENT_STATE.md) | news_atlas/wiki/research.py、classifier.py、dist/research-view.js、dist/wiki-view.js |
 | 單股 LLM Wiki、新圖、背景維護與研究設計 | [WIKI_RUNTIME.md](WIKI_RUNTIME.md)／[TEMPORAL_WIKI.md](TEMPORAL_WIKI.md) | news_atlas/wiki/、chat/wiki.mjs、dist/wiki-view.js、dist/wiki-layout.js |
 
 股票分庫與路徑：[GRAPH_STORAGE.md](GRAPH_STORAGE.md)。
@@ -37,7 +38,7 @@
 - 正式資料只來自真實來源。測試可隔離 mock；不能把測試資料帶入正式 DB。
 - 圖內 Search 在瀏覽器對當下全部已取得節點排名，不發 HTTP、不搜尋全部 DB、不重新抓新聞。
 - 搜尋涵蓋標題／來源摘要及結構欄位，**沒有抓取新聞全文**。Yahoo 可選台灣等地區；不要把版區當成出版者國籍。
-- Edge、分類及 root 分數是規則證據，不是因果、機率或向量語意推論。
+- News 的 edge、分類及 root 分數是規則證據；Wiki Classifier 另有模型 assignment。兩者都不是已證實因果或投資機率；不可混為同一分類來源。
 - API 回應／SQLite／匯出不得含 Massive key；明確記住時保存於瀏覽器及主機獨立私有檔。
 - 左側搜尋草稿不能被圖譜操作、還原快照覆寫；快照不是日期覆蓋憑證。
 - REST/OpenAPI 已存在；Chat Agent 另有工作階段專用 MCP 工具，見 [CHAT_AGENT](CHAT_AGENT.md)。

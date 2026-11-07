@@ -393,3 +393,9 @@ PYTHONPATH=.:tests python tests/browser_chat_language.py
 修正後正式部署／續跑：容器 compiler.py、store.py、classifier.py、forest.py 與主機一致，8765 healthy；其他取消的股票沒有復活。公開 plan/jobs 使用同一 2026-10-07→2026-11-07／2760 篇 universe／gpt-6.1-sol high，首次修正後計畫與啟動合計 4.533 秒（有快取）；其後超時修正為 12 篇容量分段。版本衝突與超時分別有獨立原因紀錄，各在修正後續跑一次，沒有重設同原因次數。模型在途 status/jobs 三次 HTTP 200：324.4／903.2／945.5ms，小樣本不是 SLA。
 
 正式發布證據（2026-11-07T07:28:59.047145+00:00）：版本 421→422，本次 done=0，receipts=1；月覆蓋 921/2760、pending=1839。原備份文章／節點／邊／版本逐列保留，新增後 audit ready／quick_check ok，無引用或端點錯誤。每段是獨立完整提交，整棵尚未完成時 done 可以維持 0。這表示首段真實模型結果已成功發布，並不代表整月／全部分類完成或觀點事實被證實。其餘授權月份資料繼續背景處理，失敗按既有停用／有界重試規則保留成果。
+
+## 2026-11-07：延續性文件核對（僅文件）
+
+本輪沿 `project-spec-onboarding` 的入口順序核對 PROJECT_MAP → 偏好／CURRENT_STATE → RESEARCH_LAYERS。人工閱讀可找到六項答案：L1／L2 與 Classifier 分工、顯示切換不重做模型、目前 GOOGL 月範圍及七股舊範圍取代、資料保留與必要時救援、歷史測試／Git／部署的區別、未完成能力與下次查核入口。過時 AMD 交接已改為歷史，舊四分類已明示只是詳情屬性。這是文件可發現性核對，不是另開 agent 的盲測，也不保證未讀檔的新聊天自動記得內容。
+
+執行 `python3 spec/scripts/verify_docs.py`：37 份 Markdown 的本地連結與必要入口 PASS；`git diff --check` 通過。人工核對目前 skill 及其 preferences／spec-authoring references，已涵蓋明確偏好來源、作用範圍、取代關係、BDD 與持續更新，不必改全域 skill。沒有變更執行程式、DB 或 runtime，未重跑 UI／模型／後端測試；本頁其他測試結果保持其原執行時間與限制。
