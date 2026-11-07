@@ -21,6 +21,13 @@
 
 `tests/browser_wiki_live_feedback.py --url <服務網址>` 提供正式頁面的唯讀重複點擊驗收：隔離工作區偏好寫入、保留模型工作，只讀 Markdown，沒有開始／停止正式模型。以 `/usr/bin/python3` 使用既有 websocket-client／Chromium；導覽、設定開關、研究開關及匯出三輪；結果 `/tmp/wiki-live-feedback.json`。正式部署後的結果另記於本節，不能用隔離 fixture 宣稱正式全部操作通過。
 
+
+正式部署與驗收（08:03–08:06 UTC）：程式 `066d10b`、量測修正 `8b11ec3` 已推送；於所有 Wiki／Research 工作無 running 的提交空檔停止舊容器，08:03:14 UTC 啟動新版且 healthy。三份正式 HTTP JS/CSS 與本地逐位元組相同；GOOGL 原工作 ID 保留，v429→v433、done35→43，部署後 running；model／reasoning_effort／graph_universe／graph_settings／graph_selection／strategy 與私有部署前紀錄相同，未新增測試模型工作。沒有資料遷移或刪除。舊 image `news-atlas:pre-feedback-20261107` 可回退；不需還原 DB、不得覆蓋新成果。曾嘗試直接替換靜態檔案，被容器 read-only rootfs 拒絕，沒有變更檔案；故改用上述安全 image 部署。
+
+正式 Chromium 於 `https://ubuntu.tail9e662c.ts.net:8765/` 完整三輪 PASS：22 次導覽／設定／研究／匯出點擊回饋 84–1314ms（含繪製機會），最大 1314ms；三次 Markdown 人為延遲 3500ms，2.1 秒後仍 busy，重複點擊未重複請求，完成無錯誤。15 次工作區偏好 POST 由測試隔離，模型 action=0；結果 `/tmp/wiki-live-feedback.json`、畫面 `/tmp/wiki-button-live.png`、log `/tmp/wiki-live-feedback-guarded.log`。開始／停止／保存等寫入動作由上列隔離瀏覽器驗證，沒有在正式服務中停掉使用者工作；此結果不等於所有按鈕在所有裝置／負載永遠達標。
+
+第一次正式三輪雖完成時間量測，報告因 preload 未安裝而 ReferenceError，不能列為完整通過或聲稱偏好寫入被隔離。測試補 `Page.enable` 及操作前 guard，重新完整執行後才取得上述 PASS；第一次只有導航／下載，可能保存 UI 偏好，沒有模型開始／停止／設定提交。既有 48 項 Wiki、L2 流程及 22 Node suites 不因純測試 preload 修正重報為再次執行。37 份 spec 連結與必備入口檢查通過。
+
 ## 2026-11-07：同一分類來源與穩定下拉選單
 
 | Given／When 邊界 | Then／驗證 |

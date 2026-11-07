@@ -1,5 +1,7 @@
 # 目前狀態
 
+2026-11-07 按鈕回饋：Wiki／L2 非同步操作加即時 busy、防連點與失敗復原；停止成功拒絕舊 poll，導航保持可用。程式 `066d10b` 已推送 llm_wiki 並於 08:03 UTC 安全部署，正式資產一致、容器 healthy。真實正式頁面三輪 22 次回饋 84–1314ms；Wiki 隔離 48 checks、L2 流程與 22 Node suites 通過。2 秒指可見回饋，不是模型完成時間；寫入按鈕在隔離資料驗證。實作 `dist/wiki-view.js`／`research-view.js`，重跑 `tests/browser_wiki_live_feedback.py --url <服務網址>`，完整證據及測試 driver 修正見 [TESTING](TESTING.md)。原 GOOGL 月工作 v433／done43 持續 running，設定與成果保留；整月仍未完成，沒有新付費測試工作。
+
 2026-11-07 分類一致性：選單、柱狀圖與群列表共用模型分類群索引，原財務影響只留詳細屬性。新增噪聲／查核更正詞彙與相容舊 assignment 的增量升級；尚未分類明示，不以舊分類猜補。實作／升級見 RESEARCH_LAYERS，測試及部署見 TESTING。程式 `0b5915c` 已部署並推送；七個有效 Wiki 的兩術語已增量加入，重跑 unchanged，舊 assignment 保留。GOOGL 原月工作仍在原設定下推進至 v425／done 21，不代表整月完成。
 
 2026-11-07 GOOGL 正式月驗收發現舊 context revision 導致 CAS 衝突，及失敗／停用旗標分次提交導致重啟誤續跑。已保留 421 個原版本並取消誤建工作；修正當前 context 篩選、原子終止與拒絕用量紀錄。修正後正式續跑已發布至 v422、月覆蓋 921/2760；其餘仍在背景整理。驗證以 TESTING 最新記錄為準，首批成功不是整月完成。

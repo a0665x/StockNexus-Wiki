@@ -31,9 +31,12 @@ with tempfile.TemporaryDirectory(prefix='wiki-feedback-') as tmp:
   def click(ident):
    xy=js("(()=>{const e=document.getElementById("+json.dumps(ident)+");e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()")
    for kind in ['mouseMoved','mousePressed','mouseReleased']:call('Input.dispatchMouseEvent',{'type':kind,**xy,'button':'left','clickCount':1})
+  call('Page.enable')
   call('Page.addScriptToEvaluateOnNewDocument',{'source':"""window.probeWrites=[];const realFetch=window.fetch;window.fetch=(u,o)=>{if(o?.method==='POST'&&String(u)==='/api/workspace'){probeWrites.push(String(u));return Promise.resolve(new Response('{}',{status:200}));}return realFetch(u,o)};"""})
   call('Page.navigate',{'url':args.url})
   wait("typeof AtlasWiki!=='undefined'",45)
+  # Fail before interacting if the preference-write guard did not initialize.
+  assert js('Array.isArray(window.probeWrites)'), 'workspace write isolation not installed'
   records=[]
   def measure(ident,predicate):
    js("""(()=>{const id="""+json.dumps(ident)+""";window.measured=null;document.addEventListener('click',function observe(e){if(!document.getElementById(id)?.contains(e.target))return;document.removeEventListener('click',observe,true);const start=performance.now();const frame=()=>{if("""+predicate+"""){requestAnimationFrame(()=>{measured=performance.now()-start});return;}if(performance.now()-start>2000){measured=-1;return;}requestAnimationFrame(frame)};requestAnimationFrame(frame)},{capture:true})})()""")
