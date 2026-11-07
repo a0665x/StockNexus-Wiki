@@ -71,6 +71,12 @@ with tempfile.TemporaryDirectory(prefix='wiki-feedback-') as tmp:
   if ids:
    choose('wikiAssessment',ids[0]);check('Classification selection remains selected',"document.getElementById('wikiAssessment').value==="+json.dumps(ids[0]))
    choose('wikiAssessment',js('originalClass'))
+  js("window.auditRunFetch=fetch;window.auditHoldRuns=true;window.auditReleaseRuns=null;window.fetch=async(u,o)=>{if(auditHoldRuns&&String(u).includes('/research/runs?'))await new Promise(r=>auditReleaseRuns=r);return auditRunFetch(u,o)}")
+  choose('wikiLayer','L2');wait('auditReleaseRuns!==null',20)
+  check('Slow L2 lookup has visible loading',"!document.getElementById('wikiResearchStatus').hidden&&document.getElementById('wikiResearchStatus').getAttribute('aria-busy')==='true'")
+  click('researchOpen');wait("!document.getElementById('researchPanel').hidden")
+  check('Opening research clears superseded loading',"document.getElementById('wikiResearchStatus').hidden")
+  js('auditHoldRuns=false;auditReleaseRuns()');click('researchBack');choose('wikiLayer','L1')
   # Historical view -> latest should restore only the requested version.
   versions=js("[...document.getElementById('wikiVersion').options].map(o=>o.value).filter(Boolean)")
   if versions:

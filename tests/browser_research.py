@@ -97,6 +97,10 @@ def main():
      js('failRuns=false');click('wikiResearchRetry')
      wait("$('wikiResearchStatus').textContent.includes('尚未建立')")
      choose('wikiLayer',0)
+     js('holdRuns=true;releaseRuns=null');choose('wikiLayer',1);wait('releaseRuns!==null')
+     click('researchOpen');wait("!$('researchStatus').classList.contains('research-working')")
+     assert js("$('wikiResearchStatus').hidden"), 'entering research must clear superseded layer loading state'
+     js('holdRuns=false;releaseRuns()');choose('wikiLayer',0);click('researchBack')
      print('PASS L2 slow, empty, error and retry states through real dropdown input',flush=True)
      js("$('researchOpen').click()")
      wait("!$('researchPanel').hidden&&$('researchTaxonomy').children.length>0")

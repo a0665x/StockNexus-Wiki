@@ -11,6 +11,7 @@
 | Given／When | Then／證據 |
 | --- | --- |
 | L1 頁直接切 L2，研究側欄未開，runs 慢回覆 | 主圖旁即時顯示讀取狀態；先紅後綠 `browser_research.py` |
+| L2 尚在讀取就打開研究表單 | 清除已被新導覽取代的主圖 loading，不留下永久轉圈；隔離及正式慢回覆操作驗證 |
 | 沒有 L2／runs 503 | 無研究指向研究問題入口；錯誤在主畫面顯示，重試後恢復；不是要求重做 L1 |
 | Wiki 開啟後背景新聞設定重繪 | 右上角仍稱 Wiki 設定、點開 Wiki dialog；`browser_research.py` 先紅後綠 |
 | L2 讀取在途切回 L1／歷史版本／其他股票 | 舊回覆不得改回 L2；研究讀取同時核對序號、股票、層與當前請求 |
@@ -27,7 +28,7 @@
 
 原始失敗與最終日誌位於 `/tmp/wiki-interaction-audit/`；L2 新回歸為預設流程的一部分，不依賴額外環境變數。沒有後端／schema 修改或資料刪除，未重跑完整 Python backend suite。正式部署及最後頁面驗證另記，不能用 fixture 宣稱正式服務已更新。
 
-正式交付：程式 `8480627`／`609f404` 已推送 llm_wiki。於所有 Wiki／Research 工作無 running 的提交空檔停止舊容器，2026-11-07 08:19:46 UTC 啟動新版且 healthy；`app.js`、`i18n.js`、`wiki-view.js`、`research-view.js`、`relation-settings.js` 的實際 HTTP 資產逐位元組符合本地。GOOGL 原工作 `cb7b2bbc72bf4b68b243532033e4ef54` 接續 running，v439／done61；模型、high、凍結 universe／settings／selection／strategy 與原私有紀錄一致，沒有為驗收新增模型工作。原映像 `news-atlas:pre-interaction-20261107` 可回退，沿用現有 DB，不覆蓋新增成果。等待程序曾為納入新發現的修正而撤回，實際服務只在最後提交空檔更新一次。
+正式交付：程式 `8480627`／`609f404` 已推送 llm_wiki。於所有 Wiki／Research 工作無 running 的提交空檔停止舊容器，2026-11-07 08:19:46 UTC 啟動新版且 healthy；`app.js`、`i18n.js`、`wiki-view.js`、`research-view.js`、`relation-settings.js` 的實際 HTTP 資產逐位元組符合本地。GOOGL 原工作 `cb7b2bbc72bf4b68b243532033e4ef54` 接續 running，v439／done61；模型、high、凍結 universe／settings／selection／strategy 與原私有紀錄一致，沒有為驗收新增模型工作。原映像 `news-atlas:pre-interaction-20261107` 可回退，沿用現有 DB，不覆蓋新增成果。等待程序曾為納入新發現的修正而撤回；上述一批只在提交空檔更新服務，後續導覽狀態補驗另記。
 
 正式 Chromium `browser_live_interactions.py --url https://ubuntu.tail9e662c.ts.net:8765/` 於 08:19–08:21 UTC PASS：13 項流程核對，包含 News／Timeline、縮放、預算與完整資料量、設定、Wiki 節點／分類、歷史／最新、L1/L2、L1 忙碌提示、返回 News、1681px／390px 無橫向溢出。5 次主入口量測 142.9–1034.1ms；17 次偏好寫入被隔離，model actions=0，無未處理 JS 錯誤／非允許寫入。結果 `/tmp/wiki-interaction-live.json`，正式桌面／窄版截圖 `/tmp/wiki-interaction-1681.png`／`wiki-interaction-390.png` 已目視核對。窄版是 Chromium viewport 模擬，未測實體手機、其他瀏覽器及無限制負載；這些樣本不是永久兩秒 SLA。沒有以正式帳戶重做付費研究或聊天語意品質驗證。
 
