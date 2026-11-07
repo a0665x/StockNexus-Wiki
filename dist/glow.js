@@ -48,7 +48,7 @@
         if(!['x','y','z'].every(k=>Number.isFinite(node[k])))continue;
         const v=camera.position.clone().set(node.x,node.y,node.z).project(camera);if(v.z< -1||v.z>1)continue;
         const x=(v.x+1)*rect.width/2,y=(1-v.y)*rect.height/2;if(x< -140||y< -140||x>rect.width+140||y>rect.height+140)continue;
-        projected.set(node.id,{x,y,radius,color:colors[node.display_provider||node.source.provider]||'#b9d8df',light});
+        projected.set(node.id,{x,y,radius,color:(typeof colors==='function'?colors(node):colors[node.display_provider||node.source?.provider])||'#b9d8df',light});
       }
       for(const [id,edge] of wantedLinks)if(!links.has(id))links.set(id,{...edge,light:0});
       ctx.globalCompositeOperation='lighter';

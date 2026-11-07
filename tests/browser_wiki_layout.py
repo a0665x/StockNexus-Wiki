@@ -1,5 +1,6 @@
 """Wiki panel geometry, resizing and persistent galaxy selection via real browser input.
-Checks bounded work and complete data, not machine-dependent timing thresholds.
+Checks bounded work/data plus the requested <2s painted feedback on the test machine.
+Timing samples are not a completion-time or cross-device SLA.
 Requires Chromium (or CHROME_BIN) and websocket-client. No provider/model calls.
 """
 import json
@@ -47,9 +48,34 @@ def main():
                 return result.get('result',{}).get('value')
             def click(id):
                 rect=js(f"(()=>{{const e=document.getElementById({json.dumps(id)});e.scrollIntoView({{block:'nearest'}});const r=e.getBoundingClientRect();return {{x:r.x+r.width/2,y:r.y+r.height/2}};}})()")
+                for _ in range(40):
+                    target=js("(()=>{const e=document.getElementById("+json.dumps(id)+");const r=e.getBoundingClientRect(),x=r.x+r.width/2,y=r.y+r.height/2;return {x,y,ready:e.contains(document.elementFromPoint(x,y))}})()")
+                    if target['ready']:break
+                    time.sleep(.05)
+                assert target['ready'],(id,'not pointer-accessible',target)
+                rect={'x':target['x'],'y':target['y']}
                 call('Input.dispatchMouseEvent',{'type':'mouseMoved',**rect})
                 call('Input.dispatchMouseEvent',{'type':'mousePressed','button':'left','clickCount':1,**rect})
                 call('Input.dispatchMouseEvent',{'type':'mouseReleased','button':'left','clickCount':1,**rect});time.sleep(.12)
+            def measure_feedback(ident):
+                js("""(()=>{const b=document.getElementById("""+json.dumps(ident)+""");window.clickFeedback=null;document.addEventListener('click',function observed(e){if(e.target.closest('button')?.id!==b.id)return;document.removeEventListener('click',observed,true);const start=performance.now();const frame=()=>{const b=document.getElementById("""+json.dumps(ident)+""");if(b?.disabled&&b.getAttribute('aria-busy')==='true'){requestAnimationFrame(()=>{clickFeedback=performance.now()-start});return;}if(performance.now()-start>2000){clickFeedback=-1;return;}requestAnimationFrame(frame)};requestAnimationFrame(frame)},{capture:true});})()""")
+                click(ident)
+                end=time.monotonic()+3
+                while js('clickFeedback===null') and time.monotonic()<end:time.sleep(.03)
+                elapsed=js('clickFeedback');print(json.dumps({'button':ident,'feedback_ms':elapsed}),flush=True)
+                if elapsed is None:
+                    print(js("(()=>{const e=document.getElementById("+json.dumps(ident)+");const r=e?.getBoundingClientRect();return JSON.stringify({slowCount,rect:r,element:e?.outerHTML,hit:r?document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.outerHTML:null})})()"),flush=True)
+                    import base64
+                    Path('/tmp/wiki-feedback-failure.png').write_bytes(base64.b64decode(call('Page.captureScreenshot',{'format':'png'})['data']))
+                assert elapsed is not None and 0<=elapsed<2000,(ident,elapsed)
+            def slow_action(ident,path,fail=False):
+                js("window.slowMatch="+json.dumps(path)+";window.slowCount=0;window.slowFail="+json.dumps(fail)+";window.slowRelease=null")
+                measure_feedback(ident);click(ident);time.sleep(2.05)
+                if ident=='wikiExport' and not fail:
+                    import base64
+                    Path('/tmp/wiki-feedback-busy.png').write_bytes(base64.b64decode(call('Page.captureScreenshot',{'format':'png'})['data']))
+                check(ident+' stays busy beyond 2s and blocks repeat click',"slowCount===1&&document.getElementById("+json.dumps(ident)+").getAttribute('aria-busy')==='true'")
+                js('slowMatch=null;slowRelease()');time.sleep(.5)
             for _ in range(100):
                 if js("typeof relationUI!=='undefined'&&relationUI!==null"):break
                 time.sleep(.05)
@@ -61,7 +87,7 @@ def main():
                 assert checks[name],name
             js("""(()=>{
               rebuild(initialGraph);window.newsBefore={nodes:graph.graphData().nodes.slice(),edges:JSON.stringify(relations),camera:JSON.stringify(graph.cameraPosition())};
-              const factory=ForceGraph3D;window.ForceGraph3D=(...args)=>{window.fixtureWikiRenderer=factory(...args);return fixtureWikiRenderer;};window.wikiCalls=[];window.planRelease=null;window.deferPlan=false;
+              const factory=ForceGraph3D;window.ForceGraph3D=(...args)=>{window.fixtureWikiRenderer=factory(...args);return fixtureWikiRenderer;};window.wikiCalls=[];window.planRelease=null;window.deferPlan=false;window.failGraph=false;window.deferPoll=false;window.pollRelease=null;
               window.fixtureWiki={instrument:'NASDAQ:TSLA',version:1,versions:[{version:1,created_at:'2026-11-04T00:00:00Z'}],nodes:[{id:'a',kind:'ArticleRevision',title:'Fixture evidence',summary:'Evidence only',url:'https://example.test',status:'source'},{id:'b',kind:'Claim',title:'<img src=x onerror=alert(1)> Claim',scope:'fixture',summary:'待判讀',status:'proposed',citations:[{article_revision_id:'a',field:'title',start:0,end:7,quote:'Fixture'}]}],edges:[{source:{stable_id:'a',kind:'ArticleRevision'},target:{stable_id:'b',kind:'Claim'},relation_type:'SUPPORTS',status:'proposed',rationale:'Fixture',evidence_refs:[]}],total_nodes:2,config:{enabled:false},jobs:[],truncated:false};
               fixtureWiki.coverage={instrument:'NASDAQ:TSLA',scope_total:10,scope_done:2,scope_pending:8,review_done:0,review_total:2,daily_calls:2,daily_limit:20,captured_revisions:10,extracted_revisions:2,storage:'llm_wiki/TSLA/wiki.sqlite3',subscriptions:[],rejected_responses:0,note:'分母為已確認範圍'};
               fixtureWiki.perspectives={categories:{direct:1},theses:[],total_theses:0,note:'模型局部觀點彙整，未以股價驗證'};fixtureWiki.nodes[1].assessment={category:'direct',rationale:'營運線索，未測試股價',status:'unverified'};
@@ -75,20 +101,50 @@ def main():
                   if(deferPlan)await new Promise(r=>{planRelease=r});
                   const body=JSON.parse(options.body);value={plan_id:'plan',instrument:body.instrument,selected:body.articles.length,pending:1,next_batch:1,reused:0,model:body.model,daily_limit:body.daily_limit,watch_sources:[],note:'Fixture'};
                 }
-                else if(url.includes('/graph?'))value=fixtureWiki;
+                else if(url.includes('/graph?')){if(failGraph){failGraph=false;throw Error('Temporary graph 503');}value=fixtureWiki;}
+                else if(url.endsWith('/cancel')){fixtureWiki.jobs=[];value={status:'cancelled'};}
+                else if(url.endsWith('/configure')){fixtureWiki.config.enabled=false;value=fixtureWiki.config;}
                 else if(url.endsWith('/apply'))value={status:'saved',resumed:false};
                 else if(url.includes('/node?'))value={...fixtureWiki.nodes[1],kind:'Thesis'};
                 else if(url.endsWith('/resume'))value={config:fixtureWiki.config,coverage:fixtureWiki.coverage};
                 else if(url.endsWith('/jobs'))value={job_id:'job',instrument:'NASDAQ:TSLA'};
-                else if(url.includes('/jobs?'))value={jobs:fixtureWiki.jobs,config:fixtureWiki.config,version:1,coverage:fixtureWiki.coverage};
+                else if(url.includes('/jobs?')){if(deferPoll)await new Promise(r=>{pollRelease=r});value={jobs:fixtureWiki.jobs,config:fixtureWiki.config,version:1,coverage:fixtureWiki.coverage};}
                 else if(url.includes('/article?'))value={title:'Fixture source',url:'https://example.test'};
                 else if(url.includes('/markdown?'))value={markdown:'# fixture'};
                 else throw Error('Unhandled Wiki test URL: '+url);
                 return {ok:true,json:async()=>value};
               };
             })()""")
+            scenario=os.environ.get('WIKI_RESPONSIVE_SCENARIO','')
+            if scenario=='retry':js("failGraph=true")
+            if scenario=='restore':
+                js("AtlasWorkspace.state.wiki={instrument:'NASDAQ:TSLA',controls:{wikiKind:'Claim',wikiBudget:'1600',wikiLayer:'L1'}}")
             js("AtlasWiki.show()")
             time.sleep(.5)
+            if scenario=='retry':
+                check('initial graph failure stays explicit',"!AtlasWiki.graph()&&$('wikiStatus').textContent==='Temporary graph 503'")
+                js("$('wikiBack').click();AtlasWiki.show()")
+                check('re-entering retries failed graph without starting work',"!!AtlasWiki.graph()&&wikiCalls.filter(c=>c.url.includes('/graph?')).length===2&&wikiCalls.every(c=>!c.url.endsWith('/plan'))")
+            if scenario=='restore':
+                check('restored filters render cached data without second graph fetch',"$('wikiKind').value==='Claim'&&$('wikiBudget').value==='1600'&&fixtureWikiRenderer.graphData().nodes.length===1&&fixtureWikiRenderer.graphData().nodes[0].kind==='Claim'&&wikiCalls.filter(c=>c.url.includes('/graph?')).length===1")
+                js("$('wikiKind').value='';$('wikiKind').dispatchEvent(new Event('change'))")
+            time.sleep(.6)
+            check('one maintenance button and no automatic planning on entry',"!$('wikiResume')&&!$('wikiStart').disabled&&wikiCalls.every(c=>!c.url.endsWith('/plan'))")
+            js("window.deferPoll=true;window.pollBefore=wikiCalls.filter(c=>c.url.includes('/jobs?')).length")
+            time.sleep(4.4)
+            check('slow status request never overlaps a later poll',"wikiCalls.filter(c=>c.url.includes('/jobs?')).length-pollBefore===1")
+            js("deferPoll=false;pollRelease?.();window.deferPlan=true")
+            measure_feedback('wikiStart')
+            check('click immediately shows preparation and blocks double submit',"$('wikiStart').disabled&&$('wikiStart').getAttribute('aria-busy')==='true'&&$('wikiStatus').getAttribute('aria-busy')==='true'")
+            click('wikiStart')
+            check('one explicit plan and no model job before it resolves',"wikiCalls.filter(c=>c.url.endsWith('/plan')).length===1&&!wikiCalls.some(c=>c.url.endsWith('/jobs'))")
+            js("deferPlan=false;planRelease()")
+            time.sleep(.35)
+            check('one click queues missing evidence and classifications',"wikiCalls.filter(c=>c.url.endsWith('/jobs')).length===1&&wikiCalls.find(c=>c.url.endsWith('/jobs')).body.classify_missing===true")
+            js("window.beforeReturn=wikiCalls.filter(c=>c.url.includes('/graph?')).length;window.returnGraph=AtlasWiki.graph();$('wikiBack').click();AtlasWiki.show()")
+            time.sleep(.35)
+            check('returning reuses mounted graph without recomputing plan',"AtlasWiki.graph()===returnGraph&&wikiCalls.filter(c=>c.url.includes('/graph?')).length===beforeReturn&&wikiCalls.filter(c=>c.url.endsWith('/plan')).length===1")
+            check('idle action never pretends to be processing',"!$('wikiStart').classList.contains('wiki-working')&&$('wikiStart').getAttribute('aria-busy')==='false'")
             # Collect the precise UI symptoms before changing implementation.
             results={}
             results['header_clear']=js("$('wikiPanel').getBoundingClientRect().top>=document.querySelector('body>header').getBoundingClientRect().bottom")
@@ -140,10 +196,64 @@ def main():
             check('language preserves icon and accessible label',"!!$('fixtureSend').querySelector('svg')&&$('fixtureSend').getAttribute('aria-label')==='Send'")
             call('Emulation.setDeviceMetricsOverride',{'width':1238,'height':1005,'deviceScaleFactor':1,'mobile':False});time.sleep(.3)
             check('desktop bounds preserve global controls and center pane',"$('wikiPanel').getBoundingClientRect().top>=document.querySelector('body>header').getBoundingClientRect().bottom&&$('wikiSide').getBoundingClientRect().right<=innerWidth+1&&$('wikiCanvas').getBoundingClientRect().width>=259")
+            # BDD: the dropdown, chart and group list share model classifications.
+            js("""AtlasI18n.setLanguage('zh-TW');
+              fixtureWiki.taxonomy={terms:[{id:'topic.cloud',label:'雲端',color:'#7de3bd'},{id:'analysis.fact_check',label:'查核／更正',color:'#7db6f2'},{id:'analysis.noise',label:'低相關／噪聲',color:'#d3a5ef'}]};
+              fixtureWiki.nodes[1].classification_terms=['topic.cloud','analysis.fact_check'];fixtureWiki.nodes[1].classification_status='classified';
+              fixtureWiki.nodes[2].classification_terms=[];fixtureWiki.nodes[2].classification_status='pending';
+              fixtureWiki.nodes.push({id:'d',kind:'Claim',title:'Unclassified opinion',classification_terms:[],classification_status:'unclassified'});
+              fixtureWiki.opinion_groups={b:['a','b'],c:['c'],d:['d']};
+              const selectedDate=new Date(Number($('wikiRangeEnd').value)*86400000).toISOString().slice(0,10);
+              fixtureWiki.opinion_index=fixtureWiki.nodes.slice(1).map(n=>({...n,dates:[selectedDate]}));fixtureWiki.total_nodes=4;
+              window.writesBefore=wikiCalls.filter(c=>c.body).length;await AtlasWiki.refresh();
+            """)
+            check('taxonomy counts opinion groups once per label',"['topic.cloud','analysis.fact_check','__pending','__unclassified'].every(id=>Array.from($('wikiAssessment').options).some(o=>o.value===id&&o.textContent.endsWith(' · 1')))&&Array.from($('wikiAssessment').options).some(o=>o.value==='analysis.noise'&&o.textContent.endsWith(' · 0'))")
+            check('chart uses model tags and explicit missing states, never legacy assessment',"Array.from($('wikiTimeline').querySelectorAll('rect[data-count]')).reduce((sum,r)=>sum+Number(r.dataset.count),0)===4&&!$('wikiTimeline').textContent.includes('直接營運')&&!$('wikiInsights').textContent.includes('間接影響')&&!!Array.from($('wikiTimeline').querySelectorAll('rect')).find(r=>r.dataset.category==='analysis.fact_check')")
+            js("Array.from($('wikiTimeline').querySelectorAll('rect')).find(r=>r.dataset.category==='analysis.fact_check').id='fixtureTaxBar'")
+            click('fixtureTaxBar')
+            check('bar selection synchronizes dropdown graph and opinion detail',"$('wikiAssessment').value==='analysis.fact_check'&&fixtureWikiRenderer.graphData().nodes.map(n=>n.id).sort().join(',')==='a,b'&&$('wikiDetail').querySelectorAll('.wiki-viewpoint').length===1&&wikiCalls.filter(c=>c.body).length===writesBefore")
+            js("$('wikiAssessment').value='';$('wikiAssessment').dispatchEvent(new Event('change'));window.toolbarBefore=document.querySelector('.wiki-toolbar').getBoundingClientRect().toJSON();window.canvasBefore=$('wikiCanvas').getBoundingClientRect().toJSON()")
+            click('wikiAssessment')
+            check('native dropdown opens without a second menu or layout shift',"document.activeElement===$('wikiAssessment')&&!$('wikiClassLegend')&&$('wikiAssessment').size<=1&&JSON.stringify(document.querySelector('.wiki-toolbar').getBoundingClientRect().toJSON())===JSON.stringify(toolbarBefore)&&JSON.stringify($('wikiCanvas').getBoundingClientRect().toJSON())===JSON.stringify(canvasBefore)")
+            call('Input.dispatchKeyEvent',{'type':'keyDown','key':'Escape','code':'Escape','windowsVirtualKeyCode':27})
+            call('Input.dispatchKeyEvent',{'type':'keyUp','key':'Escape','code':'Escape','windowsVirtualKeyCode':27})
+            js("$('wikiAssessment').blur()")
+            js("""window.slowMatch=null;window.slowCount=0;const fastFetch=fetch;window.fetch=async(u,o)=>{if(slowMatch&&String(u).includes(slowMatch)){slowCount++;await new Promise(r=>slowRelease=r);if(slowFail)throw Error('Controlled slow failure');}return fastFetch(u,o)};""")
+            for _ in range(3):slow_action('wikiExport','/markdown?')
+            slow_action('wikiExport','/markdown?',True)
+            check('failed export is retryable and has explicit error',"!$('wikiExport').disabled&&$('wikiExport').getAttribute('aria-busy')==='false'&&$('wikiStatus').textContent==='Controlled slow failure'")
+            js("fixtureWiki.config.enabled=true;await AtlasWiki.refresh()")
+            slow_action('wikiPause','/configure')
+            check('pause settles with visible completion',"!$('wikiPause').disabled&&$('wikiStatus').textContent.includes('已停止')")
+            js("fixtureWiki.jobs=[{id:'active',status:'running',done:0,payload:{revisions:['a'],model:'fixture',stage:'compiling'}}];await AtlasWiki.refresh()")
+            slow_action('wikiStop','/cancel',True)
+            check('failed stop remains retryable with existing graph',"!$('wikiStop').disabled&&$('wikiStatus').textContent==='Controlled slow failure'&&fixtureWikiRenderer.graphData().nodes.length>0")
+            js("window.staleRelease=null;window.captureStale=true;const priorPollFetch=fetch;window.fetch=async(u,o)=>{const r=await priorPollFetch(u,o);if(captureStale&&String(u).includes('/jobs?')){captureStale=false;await new Promise(resolve=>staleRelease=resolve);}return r}")
+            for _ in range(100):
+                if js('staleRelease!==null'):break
+                time.sleep(.05)
+            check('a pre-cancel status response is held in flight',"staleRelease!==null")
+            slow_action('wikiStop','/cancel')
+            js('staleRelease()');time.sleep(.25)
+            check('stop retains graph and reports completion',"!$('wikiStop')&&fixtureWikiRenderer.graphData().nodes.length>0&&$('wikiStatus').textContent.includes('已停止')")
+            click('relationOpen')
+            js("$('wikiStrategy').value='chronological';$('wikiStrategy').dispatchEvent(new Event('input'))")
+            slow_action('wikiApply','/apply',True)
+            check('settings error stays visible in its dialog and can retry',"$('wikiSettings').open&&!$('wikiApply').disabled&&$('wikiApplyStatus').textContent==='Controlled slow failure'")
+            slow_action('wikiApply','/apply')
+            check('settings settle with visible completion',"$('wikiApply').getAttribute('aria-busy')==='false'&&$('wikiStatus').textContent.includes('已套用')")
+            js("const bar=Array.from($('wikiTimeline').querySelectorAll('rect')).find(r=>r.dataset.category==='analysis.fact_check');bar.dispatchEvent(new MouseEvent('click',{bubbles:true}));$('wikiDetail').querySelector('.wiki-viewpoint').id='fixtureOpinion';$('wikinewsTab').click()")
+            slow_action('fixtureOpinion','/node?')
+            js("Array.from($('wikiDetail').querySelectorAll('button')).find(b=>b.textContent==='查看引用來源').id='fixtureSource'")
+            slow_action('fixtureSource','/article?')
+            check('source finishes as a usable external link',"!!Array.from($('wikiDetail').querySelectorAll('a')).find(a=>a.href==='https://example.test/')")
             import base64
             Path('/tmp/wiki-split-desktop.png').write_bytes(base64.b64decode(call('Page.captureScreenshot',{'format':'png'})['data']))
             call('Emulation.setDeviceMetricsOverride',{'width':390,'height':844,'deviceScaleFactor':1,'mobile':True});time.sleep(.2)
             check('mobile layout fits without resize handles',"$('wikiPanel').scrollWidth<=$('wikiPanel').clientWidth+1&&$('wikiResizeRight').getBoundingClientRect().width===0")
+            js("$('wikiAssessment').scrollIntoView({block:'center'})")
+            Path('/tmp/wiki-split-mobile.png').write_bytes(base64.b64decode(call('Page.captureScreenshot',{'format':'png'})['data']))
+            check('mobile classification selector stays within viewport',"$('wikiAssessment').getBoundingClientRect().right<=innerWidth+1&&!$('wikiClassLegend')")
             check('no browser errors',"errors.length===0")
             print('PASS',len(checks)+len(results),'layout and physical interaction checks',flush=True)
             return 0

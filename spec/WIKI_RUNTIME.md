@@ -6,7 +6,7 @@
 
 新聞圖與 Wiki 為獨立視圖，返回連結保留新聞節點／鏡頭。品牌圖片使用 `dist/stocknexus-wiki.png`，來源為根目錄使用者提供的同名 PNG。
 
-選股票、來源、日期、維護方式、模型／思考深度後，500ms debounce 自動呼叫 `POST plan` 核對範圍，不呼叫模型。按「確認並開始整理」或「補足到今天」啟動工作；正在整理時按設定 Apply 會中斷舊工作並以新設定接續。閒置時 Apply 只保存，不啟動模型。沒有預覽按鈕、歷史工作列表或每日用量配額。開始按鈕 hover/focus 550ms 顯示說明，離開或 Escape 關閉。
+覆蓋進度下只有一個「開始整理／繼續整理」主要入口，依目前顯示的日期與設定執行，不暗中延伸日期。進頁、切換設定或輪詢不建立 plan；按下後立即顯示準備狀態，依序 `POST plan` 核對快取範圍、`POST jobs` 排入未完成新聞與缺漏分類。重複點擊不重複排入。正在整理時按設定 Apply 會中斷舊工作並以新設定接續；閒置 Apply 只保存，不啟動模型。開始按鈕 hover/focus 550ms 顯示說明，離開或 Escape 關閉。
 
 整理日期上方輸入是滑桿的固定全局邊界；兩個 thumb 共用一條軌道，在邊界內選取包含起訖日的 UTC 日期。下方顯示所選新聞的抽取覆蓋與待辦。全局來源是目前查詢 memberships＋已載入文章；重新開啟時可用已存查詢與文章，不是所有股票的全 DB。日期先過濾再套 10000 篇單次選取安全上限；不是每日限制。
 
@@ -40,7 +40,7 @@ Graph 每組大小由自動採樣樹決定；內容超過約 65000 個 JSON 字�
 
 ## 模型、語系與用量
 
-模型及 reasoning 選項來自 Codex `model/list` 的 supportedReasoningEfforts；同一下拉列出 model＋effort，主機再驗證支援度，SDK `modelReasoningEffort` 實際接收選值。無工具、唯讀 thread；不得執行新聞中的指令。一般 120 秒，高思考深度 600 秒，取消可中斷。驗證失敗最多修正一次；失敗停用該股補足。重啟中斷不自動重試已開始的付費呼叫。
+模型及 reasoning 選項來自 Codex `model/list` 的 supportedReasoningEfforts；同一下拉列出 model＋effort，主機再驗證支援度，SDK `modelReasoningEffort` 實際接收選值。無工具、唯讀 thread；不得執行新聞中的指令。一般 120 秒，高思考深度 600 秒，取消可中斷。背景只有一個模型槽；2026-11-07 起每支股票完成一棵 root 樹（含其全部分段）或一般一組證據後，即保存進度、排回 queued 並輪到下一支。queued 是等待輪替，不是停滯；running 才表示目前正在推論。重用已完成 revision／本工作 review 記錄，已凍結工作的每次輪替不重建圖譜。驗證失敗最多修正一次；缺失關聯端點會明確指出關聯序號、source／target 與原始 ID，要求只使用已提供端點或刪除該無依據關聯，保留其他有效內容。不能把缺失 target 誤報為 source 方向錯誤，也不自動猜測／補造節點。修正仍失敗則停用該股補足。重啟中斷不自動重試已開始的付費呼叫。
 
 預設在同一次結構輸出保存 zh-Hant＋en 的 title/summary/assessment rationale、關係 rationale；設定可只保存其中一種。它們是同一命題的語言版本，不是重複節點。引用原文永不翻譯。介面語言只切換顯示，不觸發推論或翻譯。舊節點沒有翻譯時顯示原內容並註明，不能虛構已完成翻譯。`data-own-i18n` 避開主頁片段替換，避免混合「News／新增／articles」。Wiki Chat 因此必須自行完整翻譯其控制、情境與連線／回覆狀態，不能依賴主頁掃描。News／Wiki runtime 共用 `AtlasI18n.language()` 作介面語言，但 session、圖譜狀態及生成保存語系仍獨立；重連、晚回應和多視窗同步見 [CHAT_AGENT](CHAT_AGENT.md)。
 
@@ -58,7 +58,7 @@ UPDATES 由新節點指向舊節點，原文與既有節點不可覆寫。詳情
 
 觀點樹依「影響管道大分類 → 主題 → 個別觀點」逐層展開。新模型輸出增加 topic（營收、營運、成本、市場、交易、其他）與 evidence（引用支持、分歧、不足）。舊節點主題暫用標題／摘要詞彙規則歸類，畫面明示，待使用者重審更新；不冒充既有模型曾做此標記。
 
-分類、證據程度及市場反應是不同維度。主機只讀對應 ticker 的已存 Massive 股價快取，沿用 News Graph 的 1／3／5／7 交易日平均報酬（新聞後第一個完整交易日收盤作基準），在模型輸入附上 `_market`。缺少、未成熟或不可確認 ticker 的快取回傳 null，不當作零或不可信。模型可以用觀察結果修訂論點，但報酬本身不證明可信度、因果或預測成功。新節點保存引用對應的 market_evidence、基準日、N、資料日與方法；所有陳述／事件／觀點點選後另讀 current_market，依新聞圖譜當下的 1／3／5／7 天設定與最新快取計算，不覆寫原始論證。market_evidence 保留在「生成時使用的股價資料」折疊區。不自動對舊節點開付費翻修。
+分類、證據程度及市場反應是不同維度。2026-11-07 起，L1／L2 模型輸入不再包含未來交易日報酬，避免 outcome 洩漏；`current_market` 仍為獨立事後檢視，舊 `market_evidence` 保留供追溯，不重寫歷史。研究用價格動能需要帶可知時間的行情版本；既有快取不符合時為 unavailable。雙層研究契約見 [RESEARCH_LAYERS.md](RESEARCH_LAYERS.md)。
 
 ## 儲存、搬移與 API
 
@@ -66,7 +66,7 @@ UPDATES 由新節點指向舊節點，原文與既有節點不可覆寫。詳情
 
 本次延伸使用既有 nodes/edges/jobs JSON payload，沒有改 SQLite 表格或版本號；雙語、batch_id、receipts 均隨原合併機制保存。版本號在匯入時映射，批次識別保持不變。不得直接覆蓋同名 DB；一致性備份使用 SQLite backup，或停服後正確複製 WAL。data/private 金鑰/socket/log 不搬進別台知識庫。
 
-`GET status/models/graph/jobs/article/node/markdown`；graph 接 instrument、version/as_of、start/end。`POST plan` 接 instrument/model/reasoning_effort、languages、evidence_size、strategy、graph_edges、graph_settings、graph_selection、price_horizon、scope、date_range、operation 與 articles/search/sources；回傳範圍覆蓋、有效 10 分鐘 plan_id、區間 usage。`POST apply` 接與 plan 相同的範圍與設定及 continuous，閒置儲存、活動工作中斷續跑；`POST jobs {plan_id,continuous}` 明確開始；`resume {instrument}` 沿用設定延伸到 UTC 今天；`cancel {instrument,job_id}` 同時停止工作及後續維護。所有寫入維持同源 Origin/Host/local-peer 防護。
+`GET status/models/graph/jobs/article/node/markdown`；graph 接 instrument、version/as_of、start/end。`POST plan` 接 instrument/model/reasoning_effort、languages、evidence_size、strategy、graph_edges、graph_settings、graph_selection、price_horizon、scope、date_range、operation 與 articles/search/sources；回傳範圍覆蓋、有效 10 分鐘 plan_id、區間 usage。`POST apply` 接與 plan 相同的範圍與設定及 continuous，閒置儲存、活動工作中斷續跑；`POST jobs {plan_id,continuous,classify_missing?}` 明確開始；`resume {instrument}` 沿用設定延伸到 UTC 今天；`cancel {instrument,job_id}` 同時停止工作及後續維護。所有寫入維持同源 Origin/Host/local-peer 防護。
 
 原始碼：`store.py` 原子版本與引用驗證；`compiler.py` 工作與授權範圍；`workbench.py` 分組／版本摘要／歷史／用量；`forest.py` 完整圖譜自動取樹與目標／脈絡分離；`evidence.py` 舊星河相容、輸入分段、股價快取觀察；`chat/wiki.mjs` 結構化推論；`chat/service.mjs` SDK；`dist/wiki-view.js/css` 工作介面。
 
@@ -105,3 +105,30 @@ Wiki 使用與深色圖譜一致的細線文件、掃描光條與知識連線，
 ## 外部合併與目錄刷新
 
 顯示 Wiki 時約每 6 秒（2 秒 poll、5 秒間隔門檻）讀 status/instruments；視窗或選單 focus 立即刷新。只更新已建立 Wiki 選項，不重套模型／日期／工作設定；保留空白「建立新的股票」選項。最新版本由既有 jobs/version 輪詢載入，歷史版本維持固定。API 直接發現股票目錄，新庫不需重啟 Python。完整在線合併契約見 [DATA_MERGE](DATA_MERGE.md)。
+
+## 2026-11-07 狀態讀取與頁面響應
+
+- 已初始化的 WikiStore 只驗證 schema 與股票，不執行 DDL、user_version 或 metadata 寫入。新庫／不完整 schema 仍遷移，較新版 schema 仍拒絕；沒有本次破壞性 migration。
+- coverage 以股票、Wiki／新聞主檔與 WAL 的檔案簽章及 UTC 日期識別快取，最長 5 秒、最多 64 股票；提交變動後失效。回傳深複本避免呼叫者污染快取；狀態不得重跑未使用的完整 review pending 查詢。
+- 輪詢至多一筆在途；同條件 graph 請求合併。重進保留既有圖譜，僅版本／分類變更重讀；首載先取保存日期再讀 graph。首次 503 後重進可重試，恢復篩選值必須同步 render，晚回應仍核對股票與 request。
+- 進頁及明確啟動均立即提供 aria-busy／spinner／階段文字。閒置不轉圈；poll 恢復只清掉自身的錯誤，不覆蓋其他操作錯誤。
+- `classify_missing:true` 是使用者明確開始時的選項：增量 L1 沒有新新聞但舊觀點缺分類時仍可排分類；重啟、唯讀 API 或舊呼叫者不隱含啟動補分類。
+
+## 資料先行與一個月維護驗收（2026-11-07）
+
+使用者允許必要時重建 LLM Wiki，但先核對可救回的資料，不把舊格式缺欄位視為損壞或先清空。`python3 scripts/wiki_data_audit.py --instrument NASDAQ:GOOGL` 以唯讀交易檢查 SQLite/schema/股票識別、文章 hash、引用 span/hash、關聯端點、版本與 extraction。結果 `ready` 只代表結構／引用預檢，不代表新聞或觀點事實已確認。未來 schema、缺庫、壞引用應阻擋；舊 opinion_metadata／翻譯未記錄列 legacy，不補造、不改歷史 ID。先備份與完成正式資料預檢，才執行本輪 BDD 與模型維護。
+
+正式驗收目標固定為 GOOGL，最近一個日曆月（本輪 UTC 2026-10-07 至 2026-11-07，含起訖日）。本輪從既有 News DB 選 2760 篇，root universe 也僅含這個月，不擴成全年、不重新抓新聞。舊成果重用；其他使用者已取消的股票工作不復活。後續換日期需明記 cutoff，不能把一次固定日期寫成永久「最近」。
+
+`classify_missing` 將 plan.date_range 傳給 classifier。只對依賴鏈含區間內來源的舊觀點群補分類，日期以來源發布 UTC 日為準；未知日期不符合有限窗口。區間外節點可保留為該群的既有脈絡，但不因此全庫重新分類。分類仍是 exact opinion/taxonomy revision 的共享成果，不依方法另開 DB；相同 revision 已分類即重用。活動分類工作若日期不同必須停止舊工作，不能靜默沿用。僅剩分類時也保存新維護範圍，避免畫面仍顯示年度分母。
+
+月範圍實測也暴露 root 準備成本：同一圖的每個 root 都重建／排序全部鄰接資料。`exploration.adjacency_index` 現在由 `forest.prepare` 每次只建立一次，傳給各次 trace；索引只屬於此準備請求，不跨股票或設定共用。排序、barrier、depth、branch／node budget 及覆蓋記帳不變。正式月圖的 793 棵樹與原計畫完全相同；實測邊界與數字見 TESTING。
+
+## 舊 revision 與終止交易（2026-11-07）
+
+GOOGL 月維護的正式模型結果揭露：相似上下文包含已有 UPDATES 後繼的舊節點，導致正確的發布 CAS 拒絕。現在候選排序與相依 Thesis 展開均排除被取代版本；歷史 ID／revision／引用不刪改，時間快照照常保留。這是「目前更新基底」的讀取規則，不是把歷史快照偷偷改成最新。模型在途仍可能遇到並行修訂，publish CAS 不放寬；拒絕時保存 proposal、usage 與 rejected receipt，保留最後完整圖且停止工作，不以舊 context 自動重試。
+
+終止失敗與 config.enabled/catch_up=false 必須在同一 BEGIN IMMEDIATE 交易提交。原來兩次提交在停止／重啟邊界會留下 failed＋catch_up=true，讓啟動誤排第二次付費工作。本輪已取消誤建工作，沒有自動復活其他股票；後續只允許修正驗證後以原月範圍有界續跑一次，次數持久記在 private 批次紀錄。早期未記錄的模型回應／用量不能追溯補造。
+
+
+Root 的輸入字數上限不足以限制模型輸出工作量：44 篇短新聞可以低於 65000 字元，卻允許最多 60 個雙語／分類節點。正式 high 工作於 600 秒橋接上限中止；不能把 abort 當作資料損壞或重試相同大批。現在 root coverage 每段最多 12 篇（含共用 anchor），同時保留原字數限制。小樹不拆；大樹全部成員仍依序送入、每段可發布完整版本，只有最後一段成功才記整樹目標 coverage。這是容量分段，不改 Graph 選取、模型、日期、DB 格式或方法身分；不能保證所有推論都在時限內完成。非 root 的使用者固定篇數設定不受此上限改寫。

@@ -28,6 +28,16 @@ class MergeDataTests(unittest.TestCase):
     def count(self,p,t):
         with sqlite3.connect(p) as d:return d.execute('SELECT count(*) FROM '+t).fetchone()[0]
 
+    def test_model_classifications_survive_compatible_taxonomy_import(self):
+        source=self.wiki(self.sa,[row(title='Data center demand',suffix='classified')])
+        target=self.wiki(self.sb,[row(title='Other news',suffix='local')])
+        run(self.a,self.b)
+        graph=target.graph();node=next(n for n in graph['nodes'] if n['kind']=='Claim' and n['title']=='Data center demand')
+        self.assertIn('driver.demand',node['classification_terms'])
+        self.assertEqual(node['classification_status'],'classified')
+        before=self.count(target.path,'research_objects');run(self.a,self.b)
+        self.assertEqual(self.count(target.path,'research_objects'),before)
+
     def test_news_union_conflicts_and_idempotency(self):
         shared=row(suffix='same');changed={**shared,'title':'Incoming conflicting title'}
         self.sa.save('massive','query',[changed,row(suffix='source')],[])
@@ -129,6 +139,30 @@ class MergeDataTests(unittest.TestCase):
         self.assertEqual(self.count(self.sb.path,'articles'),2)
         saved=json.loads((Path(report['backup'])/'report.json').read_text())
         self.assertEqual(saved['committed'],['graph/_unassigned/news-atlas.sqlite3'])
+
+    def test_bad_citation_rejects_import_before_writes(self):
+        a=self.wiki(self.sa,[row()])
+        with a.connection() as db:
+            r=db.execute("SELECT id,payload FROM nodes WHERE kind='Claim'").fetchone()
+            n=json.loads(r['payload']);n['citations'][0]['quote']='fabricated'
+            db.execute('UPDATE nodes SET payload=? WHERE id=?',(json.dumps(n),r['id']))
+        with self.assertRaisesRegex(ValueError,'citation span'):run(self.a,self.b)
+        self.assertFalse((self.b/'llm_wiki/TSLA/wiki.sqlite3').exists())
+
+    def test_newer_wiki_not_silently_downgraded_by_open(self):
+        a=self.wiki(self.sa,[row()])
+        with a.connection() as db:db.execute('PRAGMA user_version=999')
+        with self.assertRaisesRegex(ValueError,'Newer database'):WikiStore(self.a/'llm_wiki','NASDAQ:TSLA')
+        with sqlite3.connect(a.path) as db:self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0],999)
+
+    def test_imported_source_not_known_before_import(self):
+        a=self.wiki(self.sa,[row()])
+        with a.connection() as db:
+            db.execute("UPDATE articles SET captured_at='2000-01-01T00:00:00+00:00'")
+        run(self.a,self.b)
+        b=WikiStore(self.b/'llm_wiki','NASDAQ:TSLA')
+        with b.connection() as db:
+            self.assertGreater(db.execute('SELECT captured_at FROM articles').fetchone()[0], '2026-01-01')
 
     def test_newer_schema_rejected(self):
         with sqlite3.connect(self.sa.path) as d:d.execute('PRAGMA user_version=999')

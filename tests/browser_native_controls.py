@@ -1,6 +1,7 @@
 """Real Chromium pointer/keyboard events: catch bugs hidden by element.click().
 Requires google-chrome and Python websocket-client. Uses isolated HTTP fixtures.
 """
+import shutil
 import json
 import os
 import signal
@@ -21,7 +22,7 @@ def main():
         assert start>0
         page.write_text((html[:start]+'</body></html>').replace('<script>',"<script>localStorage.setItem('graphnews.searchDraft',JSON.stringify({forceRefresh:true}));</script><script>",1))
         log=(folder/'chrome.log').open('w')
-        chrome=subprocess.Popen(['google-chrome','--headless=new','--no-sandbox','--disable-dev-shm-usage','--window-size=1440,1000','--remote-debugging-port=0','--remote-allow-origins=*','--allow-file-access-from-files','--user-data-dir='+str(folder/'profile'),page.as_uri()],stdout=log,stderr=log,start_new_session=True)
+        chrome=subprocess.Popen([os.environ.get('CHROME_BIN') or shutil.which('google-chrome') or shutil.which('chromium'),'--headless=new','--no-sandbox','--disable-dev-shm-usage','--window-size=1440,1000','--remote-debugging-port=0','--remote-allow-origins=*','--allow-file-access-from-files','--user-data-dir='+str(folder/'profile'),page.as_uri()],stdout=log,stderr=log,start_new_session=True)
         try:
             portfile=folder/'profile/DevToolsActivePort'
             for _ in range(100):
@@ -44,16 +45,33 @@ def main():
                 return result.get('result',{}).get('value')
             def click(id):
                 rect=js(f"(()=>{{const e=document.getElementById({json.dumps(id)});e.scrollIntoView({{block:'nearest'}});const r=e.getBoundingClientRect();return {{x:r.x+r.width/2,y:r.y+r.height/2}};}})()")
+                for _ in range(60):
+                    point=js("(()=>{const e=document.getElementById("+json.dumps(id)+");const r=e.getBoundingClientRect(),x=r.x+r.width/2,y=r.y+r.height/2;return {x,y,hit:e.contains(document.elementFromPoint(x,y))}})()")
+                    if point['hit']:break
+                    time.sleep(.05)
+                assert point['hit'],(id,point)
+                rect={'x':point['x'],'y':point['y']}
                 call('Input.dispatchMouseEvent',{'type':'mouseMoved',**rect})
                 call('Input.dispatchMouseEvent',{'type':'mousePressed','button':'left','clickCount':1,**rect})
                 call('Input.dispatchMouseEvent',{'type':'mouseReleased','button':'left','clickCount':1,**rect});time.sleep(.12)
             for _ in range(100):
                 if js("typeof relationUI!=='undefined'&&relationUI!==null"):break
                 time.sleep(.05)
-            js('rebuild(initialGraph)');checks={}
+            js('''const oldFetch=fetch;window.fetch=async(url,options)=>{
+              if(url!=='/api/graph/preview')return oldFetch(url,options);
+              const body=JSON.parse(options.body),cfg=body.relation_settings,value=variants[!cfg.entity&&!cfg.topic&&!cfg.title?'off':cfg.adaptive?'unified':'original'];
+              return new Response(JSON.stringify({...value,type:'result',stage:body.stage,pairs_checked:0})+'\\n'+JSON.stringify({type:'done'})+'\\n');
+            };rebuild(initialGraph)''');checks={}
+            def ready():
+                for _ in range(150):
+                    if js("viewRelationState.phase==='ready'"):return
+                    time.sleep(.05)
+                raise AssertionError('Relation preview did not complete')
+
+            ready()
             for prefix,body in [('sourcePanel','sourcePanelBody'),('timePanel','timeFocusBody')]:
                 if not js(f"document.getElementById('{body}').hidden"):click(prefix+'Toggle')
-                click(prefix+'Drag');checks[prefix+'NativeRestore']=not js(f"document.getElementById('{body}').hidden")
+                click(prefix+'Drag');time.sleep(.3);checks[prefix+'NativeRestore']=not js(f"document.getElementById('{body}').hidden")
                 # Dragging must not open the icon; the following real click must.
                 click(prefix+'Toggle')
                 rect=js(f"(()=>{{const r=document.getElementById('{prefix}Drag').getBoundingClientRect();return {{x:r.x+18,y:r.y+18}};}})()")
@@ -64,11 +82,11 @@ def main():
                 click(prefix+'Drag');checks[prefix+'RestoreAfterDrag']=not js(f"document.getElementById('{body}').hidden")
             click('relationOpen')
             for key in ['entity','topic','title']:click('relation-'+key)
-            click('relationApply');time.sleep(.4)
+            click('relationApply');ready()
             checks['SingleApplyRetainsNodes']=js("relations.length===0&&articles.length===3")
             checks['NoVerboseSummary']=js("document.getElementById('relationStatus').hidden")
             for key in ['entity','topic','title']:click('relation-'+key)
-            click('relationApply');time.sleep(.4)
+            click('relationApply');ready()
             checks['AdaptiveRestored']=js("relations.length>0&&basePayload.relation_settings.adaptive===true")
             point=js("(()=>{const e=document.querySelector('[data-rule-help=adaptive]');e.scrollIntoView();const r=e.getBoundingClientRect();return {x:r.x+90,y:r.y+r.height/2};})()")
             call('Input.dispatchMouseEvent',{'type':'mouseMoved',**point});time.sleep(.6)
@@ -85,6 +103,8 @@ def main():
             click('timelineZoomIn');checks['ZoomIn']=js("document.getElementById('timelineZoom').value==='1.5'&&document.getElementById('timelineZoomValue').textContent==='1.5×'")
             click('timelineZoomOut');checks['ZoomOut']=js("document.getElementById('timelineZoom').value==='1'")
             checks['CrossYearRuler']=js("document.getElementById('timeline').textContent.includes('2025')&&document.getElementById('timeline').textContent.includes('2026')")
+            for panel,body in [('sourcePanel','sourcePanelBody'),('timePanel','timeFocusBody')]:
+                if not js(f"document.getElementById('{body}').hidden"):click(panel+'Toggle')
             click('manageChannels');time.sleep(.6);checks['CustomChannelEntry']=js("document.getElementById('channelManager').open&&document.getElementById('channelName')!==null&&document.getElementById('channelKeywords')!==null&&document.activeElement===document.getElementById('channelName')")
             checks['RefreshDefaultsOff']=js("document.getElementById('forceRefresh').checked===false")
             js("document.getElementById('color-google').value='#ffff00';document.getElementById('color-google').dispatchEvent(new Event('input'))")

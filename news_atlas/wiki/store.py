@@ -9,7 +9,7 @@ import re
 import sqlite3
 import uuid
 
-PROMPT_VERSION = 'wiki-extract-v6'
+PROMPT_VERSION = 'wiki-extract-v8'
 KINDS = ('Claim', 'Event', 'Thesis')
 RELATIONS = ('SUPPORTS', 'CONTRADICTS', 'UPDATES', 'DEPENDS_ON', 'RELATED_TO', 'TEMPORALLY_PRECEDES')
 
@@ -73,6 +73,16 @@ class WikiStore:
         self.path=self.folder/'wiki.sqlite3'
         self.fixture=fixture
         with self.connection() as db:
+            if db.execute('PRAGMA user_version').fetchone()[0]>1:raise ValueError('Newer database format; update application before opening')
+            # A normal read must not acquire SQLite's writer lock. Migrate only
+            # incomplete schemas; never cache row data or skip stock validation.
+            tables={r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            required={'metadata','articles','versions','nodes','edges','extractions','jobs','review_coverage','reviews','calls','rejected_proposals','research_objects','research_lenses','research_jobs'}
+            if required<=tables:
+                row=db.execute("SELECT value FROM metadata WHERE key='instrument'").fetchone()
+                if row:
+                    if json.loads(row[0])!=self.instrument:raise ValueError('Wiki資料庫股票識別不符')
+                    return
             db.execute('PRAGMA journal_mode=WAL')
             db.executescript('''
             CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY,value TEXT NOT NULL);
@@ -90,6 +100,10 @@ class WikiStore:
             CREATE INDEX IF NOT EXISTS nodes_version ON nodes(created_version DESC,id);
             PRAGMA user_version=1;
             ''')
+            from .research import migrate
+            migrate(db)
+            from .research import taxonomy
+            taxonomy(db)
             db.execute('INSERT OR IGNORE INTO metadata VALUES (?,?)',('instrument',encode(ident)))
             actual=json.loads(db.execute("SELECT value FROM metadata WHERE key='instrument'").fetchone()[0])
             if actual!=ident: raise ValueError('Wiki資料庫股票識別不符')
@@ -166,9 +180,13 @@ class WikiStore:
         words=terms(article['title']+' '+article['summary'][:2000])
         with self.connection() as db:
             prior={r[0] for r in db.execute("SELECT e.target FROM edges e JOIN articles a ON a.id=e.source WHERE a.source_id=?",(article['provider']+':'+article['id'],))}
+            # Historical revisions stay addressable, but only current opinions may
+            # be offered as update bases. Publication still checks CAS for races.
+            superseded={r[0] for r in db.execute("SELECT target FROM edges WHERE json_extract(payload,'$.relation_type')='UPDATES'")}
             def candidates():
                 for row in db.execute("SELECT payload FROM nodes WHERE kind!='ArticleRevision'"):
                     n=json.loads(row[0])
+                    if n['id'] in superseded:continue
                     if article.get('_context_revisions') is not None and not any(c['article_revision_id'] in article['_context_revisions'] for c in n.get('citations',[])):continue
                     score=len(words & terms(n['title']+' '+n.get('scope','')))
                     if score or n['id'] in prior: yield (n['id'] in prior,score,n['id'],n)
@@ -177,7 +195,7 @@ class WikiStore:
         # Include direct dependents so a changed premise can revise an existing thesis.
         with self.connection() as db:
             ids=[n['id'] for n in selected]
-            dependent=[json.loads(r[0]) for r in db.execute("SELECT DISTINCT n.payload FROM nodes n JOIN edges e ON e.source=n.id WHERE e.target IN (SELECT value FROM json_each(?)) AND n.kind='Thesis' ORDER BY n.created_version DESC LIMIT 4",(encode(ids),))]
+            dependent=[json.loads(r[0]) for r in db.execute("SELECT DISTINCT n.payload FROM nodes n JOIN edges e ON e.source=n.id WHERE e.target IN (SELECT value FROM json_each(?)) AND n.kind='Thesis' AND n.id NOT IN (SELECT target FROM edges WHERE json_extract(payload,'$.relation_type')='UPDATES') ORDER BY n.created_version DESC LIMIT 4",(encode(ids),))]
         if article.get('_context_revisions') is not None:dependent=[n for n in dependent if any(c['article_revision_id'] in article['_context_revisions'] for c in n.get('citations',[]))]
         selected=list({n['id']:n for n in [*dependent,*selected]}.values())[:12]
         with self.connection() as db:
@@ -201,12 +219,19 @@ class WikiStore:
             review=job['payload'].get('operation')=='review'
             if not review and db.execute('SELECT 1 FROM extractions WHERE revision=?',(article['revision_id'],)).fetchone(): return True
             if review and db.execute('SELECT 1 FROM reviews WHERE job_id=? AND revision=?',(job['id'],article['revision_id'])).fetchone(): return True
+            for edge in edges:
+                if edge['type']=='UPDATES' and db.execute("SELECT 1 FROM edges WHERE target=? AND json_extract(payload,'$.relation_type')='UPDATES'",(edge['target'],)).fetchone():
+                    raise ValueError('L1 revision conflict: the base opinion already has a newer revision')
             stamp=now();version=db.execute('INSERT INTO versions(created_at,job_id,model) VALUES (?,?,?)',(stamp,job['id'],job['payload']['model'])).lastrowid
             article_node={'id':article['revision_id'],'kind':'ArticleRevision','title':article['title'],'summary':article['summary'],'scope':self.instrument,'url':article['url'],'provider':article['provider'],'published_at':article['published_at'],'content_hash':article['content_hash'],'status':'source','citations':[]}
             article_nodes=[dict(article_node,id=a['revision_id'],title=a['title'],summary=a['summary'],url=a['url'],provider=a['provider'],published_at=a['published_at'],content_hash=a['content_hash']) for a in evidence]
             all_nodes={n['id']:n for n in [*article_nodes,*nodes]}
             all_nodes.update({n['id']:n for n in context})
             for n in [*article_nodes,*nodes]:
+                classification=n.pop('_classification',None)
+                if classification:
+                    from .classifier import save
+                    save(db,classification)
                 n={**n,'available_at':stamp,'version':version,'is_fixture':self.fixture,'batch_id':job['id']+':'+article['revision_id']}
                 db.execute('INSERT OR IGNORE INTO nodes VALUES (?,?,?,?)',(n['id'],n['kind'],version,encode(n)))
             for edge in edges:
@@ -288,10 +313,14 @@ class WikiStore:
                 JOIN visible t ON e.target=t.id WHERE e.created_version<=?''',(chosen,allowed,allowed,limit,chosen))]
             total=db.execute('SELECT count(*) FROM nodes WHERE created_version<=? AND (? IS NULL OR id IN (SELECT value FROM json_each(?)))',(chosen,allowed,allowed)).fetchone()[0]
             count=db.execute('SELECT count(*) FROM articles').fetchone()[0]
+            from .classifier import enrich
+            cutoff=dt.datetime.fromisoformat(stamp) if as_of else (dt.datetime.fromisoformat(next(v['created_at'] for v in versions if v['version']==chosen)) if version and chosen else None)
+            classification=enrich(db,{'nodes':nodes,'edges':edges},cutoff)
+            classification_jobs=[{**dict(r),'payload':json.loads(r['payload'])} for r in db.execute("SELECT * FROM research_jobs WHERE json_extract(payload,'$.operation')='classify_l1' ORDER BY created_at DESC LIMIT 1")]
         perspectives=extra.pop('filtered_perspectives')
         visible_ids={n['id'] for n in nodes}|{n['id'] for n in perspectives['theses']}
         extra['histories']={k:v for k,v in extra['histories'].items() if k in visible_ids}
-        return {**extra,'instrument':self.instrument,'mode':'live_recorded','version':chosen,'versions':versions,'nodes':nodes,'edges':edges,'total_nodes':total,'captured_articles':count,'truncated':total>len(nodes),'config':self.config(),'jobs':self.jobs(),'perspectives':perspectives}
+        return {**extra,'classification_jobs':classification_jobs,'taxonomy':classification['taxonomy'],'opinion_groups':classification['opinion_groups'],'opinion_index':classification['opinion_index'],'instrument':self.instrument,'mode':'live_recorded','version':chosen,'versions':versions,'nodes':nodes,'edges':edges,'total_nodes':total,'captured_articles':count,'truncated':total>len(nodes),'config':self.config(),'jobs':self.jobs(),'perspectives':perspectives}
 
     def markdown(self,version=None):
         graph=self.graph(version=version)
@@ -356,12 +385,23 @@ def validate_proposal(article,proposal,context):
                 if not isinstance(fields,dict) or set(fields)!= {'title','summary','rationale'} or any(not isinstance(fields[k],str) or not 1<=len(fields[k])<=cap for k,cap in [('title',250),('summary',2000),('rationale',1500)]):raise ValueError('無效翻譯內容')
             node['translations']=localized
             node['id']='node-'+digest([node['id'],localized]);ident=node['id']
+        if 'opinion_metadata' in n:
+            meta=n['opinion_metadata']
+            if not isinstance(meta,dict) or set(meta)!={'claim_type','conditions','horizon','change_reason'} or meta['claim_type'] not in ('reported_claim','fact_excerpt','inference','hypothesis') or not isinstance(meta['conditions'],list) or len(meta['conditions'])>8 or any(not isinstance(x,str) or len(x)>500 for x in meta['conditions']) or not isinstance(meta['horizon'],str) or len(meta['horizon'])>300 or not isinstance(meta['change_reason'],str) or len(meta['change_reason'])>500:raise ValueError('Invalid opinion metadata')
+            node['opinion_metadata']=meta;node['id']='node-'+digest([node['id'],meta]);ident=node['id']
+        if 'classification' in n:
+            from .classifier import validate
+            if not article.get('_taxonomy'):raise ValueError('Classification requires frozen taxonomy')
+            node['_classification']=validate(n['classification'],node,article['_taxonomy'])
         mapped[n['key']]=node;nodes.append(node)
         for source_id in dict.fromkeys(c['article_revision_id'] for c in refs):
             edges.append({'source':source_id,'target':ident,'type':'SUPPORTS','rationale':'原文支持此LLM提案；只核對引用，不代表陳述已證實。','citations':[c for c in refs if c['article_revision_id']==source_id]})
-    for r in rs:
+    for index,r in enumerate(rs,1):
         if not isinstance(r,dict) or not isinstance(r.get('source'),str) or not isinstance(r.get('target'),str): raise ValueError('無效Wiki關聯')
         a=mapped.get(r['source']);b=mapped.get(r['target']);kind=r.get('type')
+        missing=[f"{end}={r[end][:160]!r}" for end in ('source','target') if r[end] not in mapped]
+        if missing:
+            raise ValueError(f"關聯[{index}] {'; '.join(missing)} 不在本次可用端點內。僅使用本提案的新節點 key、提供的 existing_pages.id 或本批新聞 revision_id；不可猜測 ID。請刪除此無依據關聯，或依原始證據改用確實提供的端點；保留其他有效節點與關聯。")
         article_link=bool(a and b and a['kind']==b['kind']=='ArticleRevision' and kind=='RELATED_TO' and r['source'] in batch)
         if not a or not b or a['id']==b['id'] or kind not in RELATIONS or (r['source'] not in {n['key'] for n in ns} and not article_link):raise ValueError('關聯需由新節點發出；新聞之間僅允許本批新聞發出的 RELATED_TO')
         if ('ArticleRevision' in (a['kind'],b['kind'])) and not article_link:raise ValueError('新聞端點只允許兩篇新聞之間的 RELATED_TO')

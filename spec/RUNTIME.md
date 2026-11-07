@@ -6,7 +6,7 @@
 
 `./run.sh up` 先互動確認、再建置及背景啟動，`status`／`logs`／`restart`／`down` 管理容器；`down` 保留資料。設定見根目錄 `.env.example` 和 `compose.yaml`。預設只發布 127.0.0.1:8765，`ATLAS_BIND=0.0.0.0` 開放區網；Docker 的主機與容器 port 都固定 8765；PORT 僅影響本機 Python。data bind mount 沿用既有資料，切換前停止本機 Python。容器非 root，UID/GID 預設由 run.sh 取得，直接 Compose 預設 1000:1000；選單可建立新的可寫資料目錄。不要以正式 DB 做容器測試。
 
-單一 SQLite 服務尚不支援多副本；擴容需先分離共享 DB、抓取佇列、限流及憑證。映像使用 Python 3.12 slim，僅複製 runtime 程式／schema／前端，健康檢查 `/api/status`，server.py 處理 SIGTERM 關閉服務。Python 直接接收停止訊號，不依賴 Docker init。此主機的 Snap Docker 在設定 no-new-privileges 時連 python --version 都回 operation not permitted，因此 Compose 不預設此選項；保留非 root、唯讀 root filesystem 與 cap_drop ALL。標準操作見 [WORKFLOWS.md](WORKFLOWS.md)。
+單一 SQLite 服務尚不支援多副本；擴容需先分離共享 DB、抓取佇列、限流及憑證。映像使用 Python 3.12 slim，僅複製 runtime 程式／schema／前端，健康檢查 `/api/capabilities`（只確認 HTTP 服務已啟動，不掃描全新聞庫；資料統計另查 `/api/status`），server.py 處理 SIGTERM 關閉服務。Python 直接接收停止訊號，不依賴 Docker init。此主機的 Snap Docker 在設定 no-new-privileges 時連 python --version 都回 operation not permitted，因此 Compose 不預設此選項；保留非 root、唯讀 root filesystem 與 cap_drop ALL。標準操作見 [WORKFLOWS.md](WORKFLOWS.md)。
 
 ## 啟動
 

@@ -18,6 +18,8 @@ from news_atlas.wiki.store import WikiStore, digest, instrument, folder_name
 
 NEWS = {'articles','memberships','membership_origins','coverage','attempts','snapshots','snapshot_articles','snapshot_relations','channels','daily_prices','price_downloads','graph_metadata'}
 WIKI = {'metadata','articles','versions','nodes','edges','extractions','jobs','review_coverage','reviews','calls','rejected_proposals'}
+from news_atlas.wiki.research import TABLES as RESEARCH_TABLES
+WIKI |= RESEARCH_TABLES
 AUX = {'merge_conflicts','merge_versions','merge_records'}
 
 def encoded(x):
@@ -109,6 +111,8 @@ def busy(db):
     if 'jobs' not in tables(db):return
     if db.execute("SELECT 1 FROM jobs WHERE status IN ('running','queued')").fetchone():
         raise ValueError('Target Wiki has running/queued work; stop the work before merging')
+    if 'research_jobs' in tables(db) and db.execute("SELECT 1 FROM research_jobs WHERE status IN ('running','queued')").fetchone():
+        raise ValueError('Target research has running/queued work; stop before merging')
     row=db.execute("SELECT value FROM metadata WHERE key='config'").fetchone()
     cfg=json.loads(row[0]) if row else {}
     if cfg.get('enabled') or cfg.get('catch_up'):
@@ -120,7 +124,9 @@ def wiki_merge(src,dst,stats,stamp):
     target_ident=json.loads(dst.execute("SELECT value FROM metadata WHERE key='instrument'").fetchone()[0])
     if source_ident!=target_ident:raise ValueError('Instrument mismatch')
     for t in ('articles',):
-        for r in src.execute('SELECT * FROM '+t):union_row(dst,t,dict(r),stats,ignore=('captured_at',))
+        for r in src.execute('SELECT * FROM '+t):
+            incoming=dict(r);incoming['captured_at']=stamp
+            union_row(dst,t,incoming,stats,ignore=('captured_at',))
     # Keep local settings. New stocks inherit a paused configuration; never import work to run.
     cfgrow=dst.execute("SELECT value FROM metadata WHERE key='config'").fetchone()
     incoming=src.execute("SELECT value FROM metadata WHERE key='config'").fetchone()
@@ -180,15 +186,54 @@ def wiki_merge(src,dst,stats,stamp):
                 r['status']='interrupted';r['error']='Imported snapshot; explicitly resume to continue'
             if t=='rejected_proposals':auto_row(dst,t,r,stats)
             else:union_row(dst,t,r,stats)
+    # Research snapshots are self-contained immutable artifacts. Local owner is not portable.
+    # Archive foreign personal results under an import owner, never expose as local results.
+    from news_atlas.wiki.research import taxonomy as active_taxonomy
+    local_tax=active_taxonomy(dst)
+    incoming_tax={json.loads(r['payload'])['revision_id']:json.loads(r['payload']) for r in src.execute("SELECT payload FROM research_objects WHERE kind IN ('taxonomy','taxonomy_archive')")} if 'research_objects' in st else {}
+    for t in sorted(RESEARCH_TABLES & st):
+        for raw in src.execute('SELECT * FROM '+t):
+            r=dict(raw)
+            if t=='research_objects' and r['kind'] in ('taxonomy','classification'):
+                value=json.loads(r['payload'])
+                if r['kind']=='classification' and value.get('classifier_version')=='llm-v1':
+                    source_tax=incoming_tax.get(value['taxonomy_revision'])
+                    if source_tax and encoded(source_tax['terms'])==encoded(local_tax['terms']):
+                        mapped={**value,'available_at':stamp,'taxonomy_revision':local_tax['revision_id'],'original_taxonomy_revision':value['taxonomy_revision'],'taxonomy_mapping':'identical_definitions_and_aliases','assignments':[{**a,'taxonomy_revision':local_tax['revision_id']} for a in value['assignments']]}
+                        ident='classification-'+digest([value['opinion_revision'],local_tax['revision_id'],'llm-v1'])
+                        if not dst.execute('SELECT 1 FROM research_objects WHERE id=?',(ident,)).fetchone():
+                            union_row(dst,'research_objects',{'id':ident,'kind':'classification','owner':'','created_at':stamp,'payload':encoded(mapped)},stats)
+                if r['kind']=='taxonomy':
+                    if dst.execute('SELECT 1 FROM research_objects WHERE id=?',(r['id'],)).fetchone():continue
+                    r['kind']='taxonomy_archive'
+                else:r['kind']='classification_archive';r['id']='archive-'+r['id']
+                r['owner']='';union_row(dst,t,r,stats);continue
+            if t=='research_objects' and r['kind']=='source_status':
+                if dst.execute('SELECT 1 FROM research_objects WHERE id=?',(r['id'],)).fetchone():continue
+                event=json.loads(r['payload']);event['original_known_at']=event['known_at'];event['known_at']=stamp;event['committed_at']=stamp
+                r.update(owner='',created_at=stamp,payload=encoded(event))
+            else:r['owner']='imported:'+digest(source_ident)[:16]
+            if t=='research_jobs' and r['status'] in ('queued','running'):
+                r['status']='interrupted';r['error']='Imported research; explicit local query required'
+            union_row(dst,t,r,stats)
     # An evidence-count epoch is machine-local; never mark imported evidence as already reviewed.
     if 'review_coverage' in st:
         for r in src.execute('SELECT * FROM review_coverage'):
             union_row(dst,'review_coverage',{'revision':r['revision'],'evidence_epoch':0},stats)
     if dst.execute('SELECT 1 FROM edges e LEFT JOIN nodes a ON a.id=e.source LEFT JOIN nodes b ON b.id=e.target WHERE a.id IS NULL OR b.id IS NULL').fetchone():raise ValueError('Wiki has dangling edges')
     if dst.execute('SELECT 1 FROM extractions e LEFT JOIN articles a ON a.id=e.revision WHERE a.id IS NULL').fetchone():raise ValueError('Wiki has missing article revisions')
-    for r in dst.execute('SELECT payload FROM nodes'):
-        for cite in json.loads(r[0]).get('citations',[]):
-            if not dst.execute('SELECT 1 FROM articles WHERE id=?',(cite['article_revision_id'],)).fetchone():raise ValueError('Missing citation revision')
+    for table,column in [('nodes','created_version'),('edges','created_version'),('extractions','version')]:
+        if dst.execute('SELECT 1 FROM '+table+' x LEFT JOIN versions v ON v.version=x.'+column+' WHERE v.version IS NULL').fetchone():raise ValueError('Missing Wiki version')
+    for r in dst.execute('SELECT id,payload FROM nodes'):
+        node=json.loads(r['payload'])
+        if node.get('id')!=r['id']:raise ValueError('Wiki node ID mismatch')
+        for cite in node.get('citations',[]):
+            source=dst.execute('SELECT payload FROM articles WHERE id=?',(cite['article_revision_id'],)).fetchone()
+            if not source:raise ValueError('Missing citation revision')
+            article=json.loads(source[0]);field=cite.get('field');start=cite.get('start');end=cite.get('end')
+            if field not in ('title','summary') or type(start)!=int or type(end)!=int or not 0<=start<end<=len(article.get(field,'')) or article[field][start:end]!=cite.get('quote') or article.get('content_hash')!=cite.get('content_hash'):
+                raise ValueError('Invalid citation span/content hash; source snapshot retained')
+
 
 def merge(src,dst,kind,stamp):
     ceiling={'news':4,'wiki':1,'prices':0}[kind]

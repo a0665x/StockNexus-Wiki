@@ -33,6 +33,7 @@ class Store:
         self.path = Path(path or os.environ.get('NEWS_ATLAS_DB', DEFAULT_DB))
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connection() as db:
+            if db.execute('PRAGMA user_version').fetchone()[0]>4:raise ValueError('Newer database format; update application before opening')
             db.execute('PRAGMA journal_mode=WAL')
             db.executescript('''
                 CREATE TABLE IF NOT EXISTS articles (

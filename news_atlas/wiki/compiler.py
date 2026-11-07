@@ -1,5 +1,6 @@
 """Bounded incremental compiler; the LLM can propose JSON, never write the DB."""
 import json
+import copy
 import datetime as dt
 import threading
 import time
@@ -19,12 +20,19 @@ class WikiService:
     def __init__(self,news,runner=None,start_worker=True):
         self.news=news;self.data_root=getattr(news,'data_root',news.path.parent);migrate_legacy(self.data_root);self.root=self.data_root/'llm_wiki'
         self.runner=runner or self.bridge
+        self._coverage_cache={};self._coverage_lock=threading.RLock()
         self.plans={};self.lock=threading.RLock();self.stop=threading.Event();self.wake=threading.Event()
         self.thread=None;self.active=None
         # A crashed model call is not silently retried (it may have consumed quota).
         for store in self.stores():
             with store.connection() as db:
                 interrupted=db.execute("UPDATE jobs SET status='interrupted',error='服務重啟；可預覽後續跑',updated_at=? WHERE status='running'",(now(),)).rowcount
+            with store.connection() as db:
+                for r in db.execute("SELECT payload FROM research_jobs WHERE status='running'").fetchall():
+                    payload=json.loads(r[0])
+                    if payload.get('lens_id'):
+                        db.execute("UPDATE research_lenses SET payload=json_set(payload,'$.last_error',?) WHERE id=?",('服務重啟；保留舊結果，請手動重試',payload['lens_id']))
+                db.execute("UPDATE research_jobs SET status='failed',error='服務重啟；保留舊結果，請手動重試',updated_at=? WHERE status='running'",(now(),))
             if interrupted:
                 cfg=store.config();cfg["enabled"]=False;cfg['catch_up']=False;store.configure(cfg)
         if start_worker:
@@ -162,7 +170,7 @@ class WikiService:
         return {'date_bounds':{'start':dated[0],'end':dated[-1]} if dated else None,'graph_selection':options.get('graph_selection'),'grouping_edges':len(options['graph_edges']),'usage':usage_summary(store,(dates or {}).get('start'),(dates or {}).get('end')),**{k:options[k] for k in ('reasoning_effort','languages','evidence_size','strategy')},'daily_used':used,'plan_id':plan['id'],'instrument':store.instrument,'base_version':base,'selected':len(rows),'pending':pending,'next_batch':pending,'reused':len(rows)-len(unseen),'model':model,'date_range':dates,'operation':operation,'watch_sources':subscriptions,'expires_in':600,'note':'只處理本次日期範圍；增量模式跨模型重用既有成果，不受新聞edge設定與渲染數影響。局部校正需另行明確選擇，仍會消耗token。'}
 
     def start(self,body):
-        if not isinstance(body.get('continuous',False),bool): raise ValueError('無效持續維護設定')
+        if not isinstance(body.get('continuous',False),bool) or not isinstance(body.get('classify_missing',False),bool): raise ValueError('無效持續維護設定')
         with self.lock:
             plan=self.plans.get(body.get('plan_id'))
             if not plan or plan['expires']<time.time(): raise ValueError('預覽已失效，請重新預覽')
@@ -173,8 +181,16 @@ class WikiService:
             if base!=plan['base_version']: raise ValueError('Wiki版本已改變，請重新預覽')
             if plan['operation']=='review' and body.get('continuous'):raise ValueError('局部校正僅能手動執行，不可持續重跑')
             pending=store.pending(limit=1,revision_ids=[a['revision_id'] for a in plan['rows']],review=True) if plan['operation']=='review' else store.known(plan['rows'])
+            classification=None
+            if body.get('classify_missing') and plan['operation']=='update':
+                from .classifier import enqueue
+                classification=enqueue(store,plan['model'],plan.get('reasoning_effort','high'),date_range=plan['date_range'])
             if not pending:
                 self.plans.pop(plan['id'],None)
+                if classification and classification.get('job_id'):
+                    store.configure({**store.config(),**{k:plan[k] for k in OPTION_KEYS if k in plan},'enabled':False,'catch_up':False,'model':plan['model'],'subscriptions':plan['subscriptions'],'date_range':plan['date_range'],'revision_ids':[a['revision_id'] for a in plan['rows']]})
+                    self.wake.set()
+                    return {**classification,'instrument':store.instrument}
                 return {'job_id':None,'instrument':store.instrument,'status':'noop','message':'此範圍沒有待辦；未啟動模型，原設定保留。'}
             store.ingest([*plan.get('context_rows',[]),*plan['rows']])
             cfg={**{k:plan[k] for k in OPTION_KEYS if k in plan},'enabled':body.get('continuous',False),'catch_up':plan['operation']=='update','model':plan['model'],'subscriptions':plan['subscriptions'],'date_range':plan['date_range'],'revision_ids':[a['revision_id'] for a in plan['rows']]}
@@ -225,6 +241,27 @@ class WikiService:
         return list(rows.values())
 
     def coverage(self,store):
+        # Key both main files and WAL: publishes, imports and newly acquired news
+        # invalidate immediately; TTL bounds changes on unusual filesystems.
+        def signature():
+            news_path=(self.data_root/'graph'/store.instrument.split(':')[1]/'news-atlas.sqlite3') if hasattr(self.news,'for_ticker') else self.news.path
+            files=[store.path,news_path]
+            out=[]
+            for path in files:
+                for suffix in ('','-wal'):
+                    try:
+                        st=type(path)(str(path)+suffix).stat();out.append((st.st_dev,st.st_ino,st.st_size,st.st_mtime_ns))
+                    except FileNotFoundError:out.append(None)
+            return tuple(out)+(now()[:10],)
+        with self._coverage_lock:
+            key=signature();cached=self._coverage_cache.get(store.instrument)
+            if cached and cached[0]==key and time.monotonic()-cached[1]<5:return copy.deepcopy(cached[2])
+            value=self._coverage(store)
+            if len(self._coverage_cache)>=64:self._coverage_cache.pop(next(iter(self._coverage_cache)))
+            self._coverage_cache[store.instrument]=(signature(),time.monotonic(),value)
+            return copy.deepcopy(value)
+
+    def _coverage(self,store):
         cfg=store.config()
         try:rows=self.scope_rows(store)
         except ValueError as error:return {'unavailable':True,'instrument':store.instrument,'error':str(error)+'；舊 Wiki 仍可閱讀，請縮小日期後重新預覽。'}
@@ -234,7 +271,7 @@ class WikiService:
             extracted=db.execute('SELECT count(DISTINCT revision) FROM extractions').fetchone()[0]
             used=db.execute('SELECT count(*) FROM calls WHERE day=?',(now()[:10],)).fetchone()[0]
             rejected=db.execute('SELECT count(*) FROM rejected_proposals').fetchone()[0]
-        review_pending=len(store.pending(limit=10000,revision_ids=ids,review=True));done=len(rows)-len(missing)
+        done=len(rows)-len(missing)
         with store.connection() as db:
             reviewed=db.execute('SELECT count(*) FROM review_coverage WHERE revision IN (SELECT value FROM json_each(?))',(json.dumps(ids),)).fetchone()[0]
         return {'scope_total':len(rows),'scope_done':done,'scope_pending':len(missing),'scope_percent':round(100*done/len(rows),2) if rows else 0,
@@ -252,8 +289,11 @@ class WikiService:
             rows=self.scope_rows(store,dates)
             if len(rows)>10000:raise ValueError('範圍超過10000篇，請重新預覽較小範圍')
             store.ingest(rows);cfg.update(date_range=dates,revision_ids=[a['revision_id'] for a in rows],catch_up=True)
-            store.configure(cfg);self._refresh(store);self.wake.set()
-            return {'instrument':store.instrument,'coverage':self.coverage(store),'config':store.config()}
+            store.configure(cfg);self._refresh(store)
+            from .classifier import enqueue
+            classification=enqueue(store,cfg['model'],cfg.get('reasoning_effort','high'))
+            self.wake.set()
+            return {'instrument':store.instrument,'coverage':self.coverage(store),'config':store.config(),'classification':classification}
 
     def configure(self,body):
         with self.lock:return self._configure(body)
@@ -270,7 +310,12 @@ class WikiService:
         with self.lock:return self._cancel(body)
 
     def _cancel(self,body):
-        store=self.store(body.get('instrument'));store.cancel(body.get('job_id'))
+        store=self.store(body.get('instrument'));ident=body.get('job_id')
+        with store.connection() as db:
+            classification=db.execute("SELECT 1 FROM research_jobs WHERE id=? AND json_extract(payload,'$.operation')='classify_l1'",(ident,)).fetchone()
+        if not classification:store.cancel(ident)
+        with store.connection() as db:
+            db.execute("UPDATE research_jobs SET status='cancelled',updated_at=? WHERE json_extract(payload,'$.operation')='classify_l1' AND status IN ('queued','running')",(now(),))
         try: self.bridge_request('/wiki/cancel',{'job_id':body.get('job_id')},timeout=2)
         except RuntimeError: pass
         cfg=store.config();cfg['enabled']=False;cfg['catch_up']=False;store.configure(cfg)
@@ -282,6 +327,9 @@ class WikiService:
     def _refresh(self,store):
         cfg=store.config()
         if not (cfg['enabled'] or cfg.get('catch_up')): return
+        # Active jobs already own a frozen universe; rebuild only after they drain.
+        with store.connection() as db:
+            if db.execute("SELECT 1 FROM jobs WHERE status IN ('queued','running')").fetchone():return
         # Only memberships explicitly authorized in preview; no provider calls here.
         if cfg.get('strategy')=='root' and cfg.get('graph_universe'):
             from .forest import prepare
@@ -301,7 +349,7 @@ class WikiService:
         elif cfg.get('catch_up'):
             cfg['catch_up']=False;store.configure(cfg)
 
-    def process(self,store):
+    def process(self,store,max_groups=None):
         with store.connection() as db:
             db.execute('BEGIN IMMEDIATE')
             raw=db.execute("SELECT * FROM jobs WHERE status='queued' ORDER BY created_at LIMIT 1").fetchone()
@@ -313,6 +361,9 @@ class WikiService:
             with store.connection() as db:
                 rows=[json.loads(r[0]) for r in db.execute('SELECT payload FROM articles WHERE id IN (SELECT value FROM json_each(?))',(json.dumps(job['payload']['revisions']),))]
             if job['payload'].get('operation')!='review':rows=store.known(rows)
+            else:
+                with store.connection() as db:reviewed={r[0] for r in db.execute('SELECT revision FROM reviews WHERE job_id=?',(job['id'],))}
+                rows=[a for a in rows if a['revision_id'] not in reviewed]
             forest=job['payload'].get('graph_selection',{})
             if forest.get('mode')=='coverage':
                 from .forest import groups
@@ -320,9 +371,11 @@ class WikiService:
                 work=groups(rows,context_rows,forest);market_rows=context_rows
             else:
                 work=((g,meta,g) for g,meta in bounded_groups(batches(rows,job['payload'])));market_rows=rows
-            market=cached_market(self.news,store.instrument,market_rows,job['payload'].get('price_horizon',3))
+            # Forward outcomes are evaluation-only, never contemporaneous model evidence.
+            market={a['revision_id']:None for a in market_rows}
+            completed_groups=0
             for group,group_info,covered in work:
-                article={**group[0],'_evidence':group,'_market':{a['revision_id']:market[a['revision_id']] for a in group},'_group':group_info,'_context_revisions':job['payload'].get('context_revisions')};article['_covered_articles']=covered
+                article={**group[0],'_evidence':group,'_market':{},'_group':group_info,'_context_revisions':job['payload'].get('context_revisions')};article['_covered_articles']=covered
                 if forest.get('mode')=='coverage':article['_context_revisions']=[a['revision_id'] for a in group]
                 revision=article['revision_id']
                 if self.stop.is_set(): return
@@ -332,7 +385,10 @@ class WikiService:
                 if not store.reserve_call(job,revision): return
                 context=store.context({**article,'summary':' '.join(a['title']+' '+a['summary'][:1500] for a in group)})
                 refs=[n['id'] for n in context if n['kind']=='ArticleRevision']
-                with store.connection() as db:article['_related_articles']=[json.loads(r[0]) for r in db.execute('SELECT payload FROM articles WHERE id IN (SELECT value FROM json_each(?))',(json.dumps(refs),))]
+                with store.connection() as db:
+                    from .research import taxonomy
+                    article['_taxonomy']=taxonomy(db)
+                    article['_related_articles']=[json.loads(r[0]) for r in db.execute('SELECT payload FROM articles WHERE id IN (SELECT value FROM json_each(?))',(json.dumps(refs),))]
                 job['current_title']=article['title']
                 with store.connection() as db:
                     db.execute("UPDATE jobs SET payload=json_set(payload,'$.current_title',?,'$.current_date',?,'$.current_size',?,'$.group_info',json(?)) WHERE id=?",(article['title'],article['published_at'],len(group),json.dumps(group_info),job['id']))
@@ -353,28 +409,60 @@ class WikiService:
                         if not store.reserve_call(job,revision):return
                         continue
                     store.stage(job,'publishing',revision)
-                    if not store.publish(job,article,output.get('proposal'),context,output.get('usage',{})): return
+                    try:
+                        if not store.publish(job,article,output.get('proposal'),context,output.get('usage',{})): return
+                    except ValueError as error:
+                        # A concurrent revision can invalidate an otherwise valid
+                        # proposal. Preserve paid output; never retry stale context.
+                        store.reject(job,article,output.get('proposal'),error,output.get('usage',{}))
+                        raise
                     job.pop('repair',None)
                     break
+                # Yield only after an entire tree has committed its coverage. Splitting
+                # earlier would replay already published segments on the next turn.
+                if covered:
+                    completed_groups+=1
+                    if max_groups is not None and completed_groups>=max_groups:
+                        with store.connection() as db:
+                            changed=db.execute("UPDATE jobs SET status=CASE WHEN done>=json_array_length(payload,'$.revisions') THEN 'completed' ELSE 'queued' END,updated_at=? WHERE id=? AND status='running'",(now(),job['id'])).rowcount
+                        if changed:self.wake.set()
+                        return
             with store.connection() as db: db.execute("UPDATE jobs SET status='completed',updated_at=? WHERE id=? AND status='running'",(now(),job['id']))
             if store.config().get('catch_up'):self.wake.set()
             log.info('wiki_job completed instrument=%s job=%s',store.instrument,job['id'])
         except Exception as error:
             with self.lock:
-                with store.connection() as db: failed=db.execute("UPDATE jobs SET status='failed',error=?,updated_at=? WHERE id=? AND status='running'",(str(error)[:600],now(),job['id'])).rowcount
-                if failed:
-                    cfg=store.config();cfg['enabled']=False;cfg['catch_up']=False;store.configure(cfg)
+                with store.connection() as db:
+                    # A restart must never observe terminal failure with catch-up
+                    # still enabled: both changes belong to one durable commit.
+                    db.execute('BEGIN IMMEDIATE')
+                    failed=db.execute("UPDATE jobs SET status='failed',error=?,updated_at=? WHERE id=? AND status='running'",(str(error)[:600],now(),job['id'])).rowcount
+                    if failed:
+                        saved=db.execute("SELECT value FROM metadata WHERE key='config'").fetchone()
+                        cfg=json.loads(saved[0]) if saved else {}
+                        cfg['enabled']=False;cfg['catch_up']=False
+                        db.execute('INSERT OR REPLACE INTO metadata VALUES (?,?)',('config',json.dumps(cfg)))
             log.warning('wiki_job failed instrument=%s job=%s error_type=%s',store.instrument,job['id'],type(error).__name__)
         finally: self.active=None
 
-    def tick(self):
+    def tick(self,max_groups=None):
         for store in self.stores():
             if self.stop.is_set(): break
-            self.refresh(store);self.process(store)
+            self.refresh(store);self.process(store,max_groups=max_groups)
+            from .research import Research, enabled
+            if enabled() and not self.stop.is_set():
+                from .classifier import process as classify_pending
+                classify_pending(store,self)
+                research=Research(store);research.observe_news(self.news)
+                l1_busy=False
+                for candidate in self.stores():
+                    with candidate.connection() as db:
+                        l1_busy=l1_busy or bool(db.execute("SELECT 1 FROM jobs WHERE status IN ('queued','running')").fetchone()) or bool(db.execute("SELECT 1 FROM research_jobs WHERE json_extract(payload,'$.operation')='classify_l1' AND status IN ('queued','running')").fetchone())
+                if not l1_busy:research.refresh_live();research.process(self)
 
     def loop(self):
         while not self.stop.is_set():
-            try: self.tick()
+            try: self.tick(max_groups=1)
             except Exception: log.exception('Wiki worker cycle failed')
             self.wake.wait(60);self.wake.clear()
 

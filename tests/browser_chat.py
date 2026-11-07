@@ -35,15 +35,20 @@ with tempfile.TemporaryDirectory(prefix='atlas-chat-qa-') as temp:
     if js(code):return
     time.sleep(.2)
    raise RuntimeError('Timed out: '+code+'; '+str(js("document.querySelector('.chat-status')?.textContent")))
+  call('Page.enable')
+  call('Page.addScriptToEvaluateOnNewDocument',{'source':"window.auditWorkspaceGuard=true;const original=fetch;window.fetch=(u,o)=>o?.method==='POST'&&String(u)==='/api/workspace'?Promise.resolve(new Response('{}',{status:200})):original(u,o)"})
+  call('Page.reload')
+  wait('window.auditWorkspaceGuard===true')
   wait("typeof AtlasRuntime!=='undefined'&&!!document.getElementById('chatTab')")
   print('PASS: real HTTP assets and runtime loaded',flush=True)
   wait("!!document.querySelector('#snapshots button')")
-  js("document.querySelector('#snapshots button').click()")
+  js("document.getElementById('saveStatus').textContent='';document.querySelector('#snapshots button').click()")
   wait('AtlasRuntime.state().counts.loaded>0',30)
-  js("document.getElementById('clearRoot').click();document.querySelector('#list [data-article-id]').click();document.getElementById('chatTab').click()")
+  wait("document.getElementById('saveStatus').textContent.startsWith('已載入')",60)
+  js("if(document.getElementById('highlightModeSwitch').checked)document.getElementById('highlightModeSwitch').click();document.getElementById('clearRoot').click();document.querySelector('#list [data-article-id]').click();document.getElementById('chatTab').click()")
   wait("document.querySelector('.chat-status').textContent.includes('已連線')")
   print('PASS: saved news loaded, selected root and Chat connected',flush=True)
-  state=js('AtlasRuntime.state()');assert state['root_ids'];assert state['counts']['scope']>0
+  state=js('AtlasRuntime.state()');assert state['root_ids'], {k:state.get(k) for k in ['highlight_mode','selected_article','root_ids','counts','busy']};assert state['counts']['scope']>0
   for action in [{'kind':'set','id':'renderBudget','value':'2400'},{'kind':'click','id':'modeTimeline'},{'kind':'set','id':'timelineZoom','value':2},{'kind':'click','id':'modeNetwork'}]:
    result=js('(async()=>{const a='+json.dumps(action)+';a.revision=AtlasRuntime.state().revision;return await AtlasRuntime.act(a);})()',True)
    print('PASS: actual UI action '+action['id'],flush=True)

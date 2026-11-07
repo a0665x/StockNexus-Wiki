@@ -1,6 +1,49 @@
+# 目前狀態
+
+## 有效交接：下一個 session 先讀這裡（2026-11-08）
+
+- **最新交付**：README.md／README.en.md 分開中英文、頂端互連，各自嵌入最新有明確輸出與箭頭的流程圖；移除影片介紹，聚焦問題與操作。研究進度／目錄不再掃描匯入整份新聞；L2 中央同步顯示排隊／整合／載入與等待秒數，讀取暫時失敗保留 job 並恢復，不重跑模型。隔離 Chromium 回歸及 23 項研究測試通過；2026-11-07 16:09:48 UTC 更新部署 healthy，HTTP JS/CSS 與原始碼相同。正式 HTTPS 瀏覽器已驗證 GOOGL 5 個既有 L2 節點可載入；詳細證據見 TESTING。
+- **本輪正式研究觀察**：GOOGL「動能」既有工作於 15:52:50 UTC 完成（約 67 秒），含 5 個 L2 claims／20 筆入選 L1 claims；唯讀瀏覽器可載入全部 5 個 L2 節點。截圖期間中央缺進度已重現；無法由截圖證明該正式工作曾永久卡住。額外驗證並修正已完成結果 GET 失敗會遺失追蹤的路徑。本輪沒有新增付費模型工作，也未清理資料；停止的 L1／年度工作保持停止。
+
+- **前次文件交付**：README 已加入中／英三層概念圖，對應 News→共享 L1→客製 L2；修正舊預覽／確認整理描述。2026-11-07 本輪從 `4e7ce10` 核對原始碼與限制，只改媒體／文件，未部署、未重跑 UI 或模型；圖不是完整能力驗收。見 RESEARCH_LAYERS 三層視覺模型及 TESTING。
+
+- **產品目的**：累積同股票、與 query 無關的共享 L1 觀點；Classifier／Taxonomy 是索引支援，不是第三層。使用者研究問題產生 owner／Lens 範圍的 L2，整合催化、反證、條件與缺口，不只查核新聞日期。意圖與已取代設計見 [RESEARCH_LAYERS](RESEARCH_LAYERS.md)；目前只是第一條垂直流程，完整長期目標尚未全部驗收。
+- **成本與資料**：顯示預算／來源勾選／開頁不等於重新推論；分組方法共用資料身分及已完成成果。先救援相容資料，不預設清庫。快取、快照及 merge 邊界分別查 [CALCULATION_METHODS](CALCULATION_METHODS.md)、[DATA_MERGE](DATA_MERGE.md)。
+- **目前有效測試範圍**：使用者後續指定 GOOGL 最近一個月；本次實際凍結為 UTC 2026-10-07→2026-11-07，gpt-6.1-sol/high。早先七股年度 heartbeat 已暫停，不復活它或其他取消工作。未來若新開「最近一月」工作，先確認當時日期及授權；不能把既有工作偷偷延長。正式驗收不新增付費模型探測。
+- **Git 與部署分開**：實際專案 `/home/a0665x/Desktop/AI_AGX_WS/StockNexus-Wiki`，branch llm_wiki（環境 GraphNews 已過時）。本輪從乾淨 `e325392` 開始；部署證據與測試見上方及 TESTING。下一 session 仍須重查 Git／工作樹／執行服務，不能把歷史交付當即時狀態。
+- **最後進度觀察，非即時狀態**：08:25 UTC，原 GOOGL 工作 v441／done71 接續；沒有證明整月或所有分類完成。資料預檢保留原成果，未清庫。來源取得完整度、Wiki coverage、分類完成度與觀點正確性分開判斷。
+- **最近驗收證據**：正式 15 項 UI 流程、5 次主入口回饋 133–1044ms；隔離 News 33、native 23、Wiki 48、研究／工作區／Chat 及 22 Node suites。完整命令、失敗原因及限制查 [TESTING](TESTING.md)「跨步驟互動驗收」。2 秒是可見回饋，不是模型完成期限或永久 SLA；本次文件整理沒有重跑這些行為測試。
+- **下一步**：有新任務時先對照相關契約與當前程式；要追蹤 GOOGL 則查現有 jobs／coverage／receipts／log 與持久重試紀錄，不另建重複工作。價格特徵／敘事基線、複雜語意 Lens、多 owner 與真實模型品質尚有限制，詳見 RESEARCH_LAYERS。不要為補齊長期願景而擴大當前授權。
+- **延續維護**：新明確修正合併到領域契約與 [偏好紀錄](ai-dev-experience-preferences.md)，標明取代關係；最新交接更新本節，詳細證據進 TESTING／CHANGELOG。skill 只提供讀寫方法，並不自帶聊天記憶。
+
+## 歷史觀察（保留追溯，不代表目前工作狀態）
+
+2026-11-07 完整交互驗收：實際操作跨 News／Timeline／Wiki／L2／設定／Chat，修正 L2 主畫面缺少載入／空／失敗重試提示、晚回覆搶回 L1、快照無回饋／重複點擊／舊回應覆蓋，以及背景 News 重繪改掉 Wiki 設定標籤。程式 `8480627`／`609f404`／`ca7c47a` 已推送 llm_wiki，最後補丁 08:24 UTC 安全部署 healthy、實際資產一致。正式 15 項流程 PASS、入口 133–1044ms，包含新導覽清除失效 spinner；隔離 News 33、native controls 23、Wiki 48、L2／工作區／Chat 與 22 Node suites PASS。完整 BDD、初始測試失敗原因、執行命令與限制見 [TESTING](TESTING.md)。資料無遷移或刪除；GOOGL 原月工作 v441／done71 接續，不代表整月完成。
+
+2026-11-07 按鈕回饋：Wiki／L2 非同步操作加即時 busy、防連點與失敗復原；停止成功拒絕舊 poll，導航保持可用。程式 `066d10b` 已推送 llm_wiki 並於 08:03 UTC 安全部署，正式資產一致、容器 healthy。真實正式頁面三輪 22 次回饋 84–1314ms；Wiki 隔離 48 checks、L2 流程與 22 Node suites 通過。2 秒指可見回饋，不是模型完成時間；寫入按鈕在隔離資料驗證。實作 `dist/wiki-view.js`／`research-view.js`，重跑 `tests/browser_wiki_live_feedback.py --url <服務網址>`，完整證據及測試 driver 修正見 [TESTING](TESTING.md)。原 GOOGL 月工作 v433／done43 持續 running，設定與成果保留；整月仍未完成，沒有新付費測試工作。
+
+2026-11-07 分類一致性：選單、柱狀圖與群列表共用模型分類群索引，原財務影響只留詳細屬性。新增噪聲／查核更正詞彙與相容舊 assignment 的增量升級；尚未分類明示，不以舊分類猜補。實作／升級見 RESEARCH_LAYERS，測試及部署見 TESTING。程式 `0b5915c` 已部署並推送；七個有效 Wiki 的兩術語已增量加入，重跑 unchanged，舊 assignment 保留。GOOGL 原月工作仍在原設定下推進至 v425／done 21，不代表整月完成。
+
+2026-11-07 GOOGL 正式月驗收發現舊 context revision 導致 CAS 衝突，及失敗／停用旗標分次提交導致重啟誤續跑。已保留 421 個原版本並取消誤建工作；修正當前 context 篩選、原子終止與拒絕用量紀錄。修正後正式續跑已發布至 v422、月覆蓋 921/2760；其餘仍在背景整理。驗證以 TESTING 最新記錄為準，首批成功不是整月完成。
+
+2026-11-07 最新資料前置：GOOGL 正式庫唯讀預檢通過（13943 article revisions、421 versions、2164 nodes、1373 edges），保留歷史、不清空。維護測試改為 UTC 2026-10-07→2026-11-07，2760 篇中 921 可重用、1839 待整理，694 舊觀點群可補分類。已修正補分類未遵守日期的問題；來源與實際部署／執行證據見 WIKI_RUNTIME／TESTING。預檢是結構與引用核對，不等於事實審查。
+
+2026-11-07 最新修正：Wiki 狀態 GET 重跑初始化造成 SQLite 寫鎖／503，已改為已初始化 schema 純讀；coverage 有界快取、輪詢單飛、重進重用圖。整理入口合併為單一開始／繼續，明確點擊才 plan/jobs，含缺漏分類。首次錯誤重試、保存篩選同步圖形均有瀏覽器回歸。來源：`news_atlas/wiki/store.py`、`compiler.py`、`dist/wiki-view.js`；測試與部署以 [TESTING](TESTING.md) 本次紀錄為準。無資料刪除或破壞性 migration。 已部署 8765 且原 TSM 佇列接續；程式修正 commit `1457de8` 已推送 llm_wiki，實際延遲與保留設定核對見 TESTING。
+
+2026-11-07 本輪：依使用者十項畫面回饋，整合共用 L1/L2 圖譜與 Chat、模型分類與舊群補足、唯讀分類定位、進度區尺寸保存、L1 忙碌守門。原始碼與邊界見 [RESEARCH_LAYERS](RESEARCH_LAYERS.md)，測試／部署證據見 [TESTING](TESTING.md)。既有資料保留；新 L1 prompt 為 wiki-extract-v8。
+
 # 目前功能與實作邊界
 
-查核日期：2026-11-06；以目前本地工作區原始碼為準。部署驗收記在 [TESTING](TESTING.md)，不以本頁推斷遠端分支或任意正在執行的服務已同步。
+查核日期：2026-11-07；以目前本地工作區原始碼為準。部署驗收記在 [TESTING](TESTING.md)，不以本頁推斷遠端分支或任意正在執行的服務已同步。
+
+## 雙層研究與合併資料的實作摘要
+
+- 主契約：[RESEARCH_LAYERS.md](RESEARCH_LAYERS.md)，完整使用者架構來源位於 `L2_Archirecture/`。已接到既有 SQLite／單模型槽／API／Wiki，沒有另建 mock 平台。舊 L1 保留，新 L1 加入條件與修訂原因；分組方式共用同一資料庫。
+- 新入口：Wiki → 我的研究 · L2。分類／全文 → 固定 snapshot → L2 → live/pinned → 增量刷新與來源圖。分類、模型推論、價格及事後 outcome 分開；新 inference 另做一次有界語意審核。
+- merge_data 修正匯入 captured_at 前視污染，增加引用 span/hash 與版本檢查；未知未來 schema 不得被開庫降級。來源／目標備份與衝突保存沿用。
+- 初版曾驗證 279 Python tests、Node chat suites、隔離 Chrome 研究與 live CLI merge；這是歷史結果，後續各輪範圍以 [TESTING](TESTING.md) 為準。正式資料不作額外付費模型測試。
+- 舊七股 heartbeat 已暫停；當時背景 AMD 的觀察已被後續 GOOGL 月驗收範圍取代。不要依歷史段落恢復取消／額度失敗工作；以本頁有效交接及即時 jobs 為準。
+- 邊界：確定性 Lens parser、詞彙分類、單人 local owner、無合格歷史價格特徵。模型語意審核不等於證明，來源抓取缺口另計；不能把第一條垂直流程說成完整長期研究平台。
 
 ## 已完成
 
@@ -10,6 +53,7 @@
 | 圖譜 | 規則關聯、自適應補合格孤立點、來源分組／混合、星河多 root、3D／時間軸；完整資料與 GPU 預算分離 | [UI](UI.md)、[計算](CALCULATION_METHODS.md) |
 | 時間／行情 | 可塑形時間大小、1／3／5／7 後續交易日平均報酬、共同日期軸、K 線／十字線／縮放、缺資料提示 | [PRICE_LENS](PRICE_LENS.md) |
 | 工具版面 | 時間與來源工具可拖動、收合、四邊／角落縮放、內容捲動、邊緣停靠分割，尺寸與位置保存 | [TOOL_DOCK](TOOL_DOCK.md) |
+| 雙層研究 | 分類／全文檢索、Lens、快照、L2 與 live/pinned、來源圖；第一版限制見契約 | [RESEARCH_LAYERS](RESEARCH_LAYERS.md) |
 | LLM Wiki | 每股票版本化文章／陳述／事件／觀點，逐字引用驗證、增量處理、重審、相依索引、跨文章 RELATED_TO；最後 10 個版本可選，舊引用證據保留 | [WIKI_RUNTIME](WIKI_RUNTIME.md) |
 | Wiki 分組／進度 | 詞彙／時間／融合 5、10、15、20 篇；Graph 從完整 News 圖自動採樣樹，直到 Wiki 日期內目標皆涵蓋；Apply 可取消舊工作後按新設定接續 | [WIKI_RUNTIME](WIKI_RUNTIME.md) |
 | Wiki 閱讀 | 側欄唯一日期入口；互動分類時間圖、按大類／主題漸進展開；星河選取保留全圖並調暗背景；左右及上下分隔可調 | [WIKI_RUNTIME](WIKI_RUNTIME.md) |
@@ -21,7 +65,7 @@
 
 - 新聞主要是來源提供的標題／摘要及欄位，沒有普遍抓全文；歷史可用性受來源與帳號限制。
 - News 的規則邊不是 LLM 支持關係。Wiki 模型提案通過引用／結構驗證，不代表事實、因果、預測能力已證實。
-- 無關群不造線；未成熟行情不補值。四種分類描述影響管道／證據狀態，不構成校準過的可信度排序。
+- 無關群不造線；未成熟行情不補值。舊四種財務影響／證據狀態只留詳細屬性；分類選單與圖表已改用 Classifier，不構成校準過的可信度排序。
 - 情境快照、無前視研究預測、事件階段樣本及完整回測屬 [研究設計](TEMPORAL_WIKI.md)，不是現有可交易系統。
 - 合併為逐庫原子、非跨庫全域交易；衝突另存，尚無 GUI 衝突解決器。新增來源資料不會擅自取代使用者正在看的 News 圖或觸發模型。
 - 正式驗收使用現有資料且攔截模型呼叫／測試偏好寫入；隔離測試不能證明所有硬體 GPU 或所有上游授權均正常。

@@ -19,6 +19,9 @@ test('session isolation, current selection, browser acknowledgement, cancellatio
  assert.equal((await post('/tool',{name:'read_news',args:{}},toolToken)).data.total,1);
  await post('/sync',{context:{revision:1,surface:'wiki',instrument:'NASDAQ:GOOGL',version:8,scope_ids:['n']},graph:{articles:[{id:'a',title:'Source'}],nodes:[{id:'n',kind:'Thesis',title:'Interpretation',citations:[{article_revision_id:'a'}]},{id:'hidden',kind:'Claim'}],edges:[],histories:{n:{original:{id:'old'}}}}},key);
  const wikiRead=(await post('/tool',{name:'read_wiki',args:{}},toolToken)).data;assert.equal(wikiRead.total,1);assert.equal(wikiRead.instrument,'NASDAQ:GOOGL');assert.equal(wikiRead.nodes[0].kind,'Thesis');assert.equal(wikiRead.histories.n.original.id,'old');
+ // The selected L2 claim and exact source chain travel through the real tool route.
+ await post('/sync',{context:{revision:2,surface:'wiki',instrument:'NASDAQ:GOOGL',version:8,layer:'both',research_run:'run-one',research_question:'Cloud demand?',scope_ids:['l2','n'],selected_node:{id:'l2',layer:'L2'}},graph:{articles:[{id:'a',title:'Source'}],nodes:[{id:'l2',kind:'CustomerOpinion',layer:'L2',run_id:'run-one',derived_from:['n:claim'],title:'Conditional interpretation'},{id:'n',kind:'Thesis',layer:'L1',citations:[{article_revision_id:'a'}]},{id:'other',kind:'Thesis'}],edges:[{source:'l2',target:'n',relation_type:'DERIVED_FROM'}],histories:{}}},key);
+ const l2Read=(await post('/tool',{name:'read_wiki',args:{}},toolToken)).data;assert.equal(l2Read.total,2);assert.equal(l2Read.layer,'both');assert.equal(l2Read.research_run,'run-one');assert.equal(l2Read.research_question,'Cloud demand?');assert.deepEqual(l2Read.nodes[0].derived_from,['n:claim']);
  const action=post('/tool',{name:'act',args:{kind:'click',id:'modeTimeline',revision:1}},toolToken);
  await new Promise(r=>setTimeout(r,30));
  assert.equal((await post('/sync',{context:{revision:1}},other)).data.commands.length,0);

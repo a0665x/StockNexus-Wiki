@@ -2,6 +2,130 @@
 
 入口：[PROJECT_MAP.md](PROJECT_MAP.md)。測試使用隔離 fixture／暫存 DB，不應改寫使用者的 data/news-atlas.sqlite3。
 
+## 2026-11-07：跨步驟互動驗收與可見等待狀態
+
+額外截圖回歸：背景 News settings paint 原先會覆寫 Wiki 頁右上角的設定名稱；已限制 News 只更新自己可見時的共用入口。
+
+本輪由使用者要求自行操作整段 UI，依「入口 → 等待 → 成功／失敗 → 切換再回來」驗證，並非只量按鈕事件。實際 Chromium 滑鼠／原生 select 鍵盤；慢回覆、錯誤、寫入／模型動作使用隔離 fixture。正式讀取另以 `tests/browser_live_interactions.py --url <網址>` 驗收，攔截工作區偏好 POST 並拒絕非允許寫入，不測試付費模型內容品質。
+
+| Given／When | Then／證據 |
+| --- | --- |
+| L1 頁直接切 L2，研究側欄未開，runs 慢回覆 | 主圖旁即時顯示讀取狀態；先紅後綠 `browser_research.py` |
+| L2 尚在讀取就打開研究表單 | 清除已被新導覽取代的主圖 loading，不留下永久轉圈；隔離及正式慢回覆操作驗證 |
+| 沒有 L2／runs 503 | 無研究指向研究問題入口；錯誤在主畫面顯示，重試後恢復；不是要求重做 L1 |
+| Wiki 開啟後背景新聞設定重繪 | 右上角仍稱 Wiki 設定、點開 Wiki dialog；`browser_research.py` 先紅後綠 |
+| L2 讀取在途切回 L1／歷史版本／其他股票 | 舊回覆不得改回 L2；研究讀取同時核對序號、股票、層與當前請求 |
+| 點慢快照、連點、失敗再試 | 狀態與按鈕 busy 即時可見，同按鈕一請求；原圖保留、失敗釋放控制，可重試 |
+| 先選慢快照再選快快照，舊回應晚到 | 保留最後所選快照；讀取途中啟動新搜尋也不以舊快照覆蓋新搜尋 |
+| 搜尋／關聯等待時切視圖、來源，停止後晚回覆 | 保留資料且狀態可解釋；不復活取消工作，GPU 預算與全資料量分離 |
+| 浮動工具收合／拖動／展開、時間軸與分類入口 | 實際指標可操作、工具遮蓋時先收合；tooltip／顏色／縮放連動正確 |
+| L2 建立、來源鏈、live 保存／更新、跨股票返回 | 共用圖及原 job，不重複付費；新 owner／歷史範圍隔離 |
+| Chat 與語言／行情／工作區恢復 | 使用目前選取；晚連線、取消／錯誤、重連及雙視窗語系一致，跨乾淨設定檔保存 |
+
+已執行：`browser_user_journeys.py` 33 checks PASS；`browser_native_controls.py` 23 checks PASS；`browser_wiki_layout.py` 48 checks PASS；`browser_research.py` 新增 L2 慢／空／錯誤重試、晚回覆場景與既有流程 PASS。`browser_workspace.py`、`browser_chat_language.py`、`browser_chat.py`（未加 --live）、`browser_detail_language.py` 通過；22 個 Node suites 通過。前兩個 Chat／detail 腳本仍含 runtime API 與程式點擊，因此不把其全部檢查稱為物理滑鼠操作；新增正式 journey 使用真實 CDP input。
+
+測試修正而非產品錯誤：舊新聞測試空 ticker 被目前必填股票契約拒絕；native 腳本硬寫 google-chrome 且缺現行 preview 串流 fixture；Chat 在舊 workspace 已有節點時提早認定新快照完成；CDP DOM object 不能當 Python 真值等待，需回傳布林。現已用有效 ticker、既有 Chromium、正確路由／真正完成狀態、pointer hit test；浮動工具遮住入口時先實際收合。首次失敗未計為通過。最早兩次 Chat 探測未隔離 workspace POST，可能保存 UI 偏好；最終版本已在 reload 前安裝 guard，未送出模型對話。
+
+原始失敗與最終日誌位於 `/tmp/wiki-interaction-audit/`；L2 新回歸為預設流程的一部分，不依賴額外環境變數。沒有後端／schema 修改或資料刪除，未重跑完整 Python backend suite。正式部署及最後頁面驗證另記，不能用 fixture 宣稱正式服務已更新。
+
+正式交付：程式 `8480627`／`609f404` 已推送 llm_wiki。於所有 Wiki／Research 工作無 running 的提交空檔停止舊容器，2026-11-07 08:19:46 UTC 啟動新版且 healthy；`app.js`、`i18n.js`、`wiki-view.js`、`research-view.js`、`relation-settings.js` 的實際 HTTP 資產逐位元組符合本地。GOOGL 原工作 `cb7b2bbc72bf4b68b243532033e4ef54` 接續 running，v439／done61；模型、high、凍結 universe／settings／selection／strategy 與原私有紀錄一致，沒有為驗收新增模型工作。原映像 `news-atlas:pre-interaction-20261107` 可回退，沿用現有 DB，不覆蓋新增成果。等待程序曾為納入新發現的修正而撤回；上述一批只在提交空檔更新服務，後續導覽狀態補驗另記。
+
+正式 Chromium `browser_live_interactions.py --url https://ubuntu.tail9e662c.ts.net:8765/` 於 08:19–08:21 UTC PASS：13 項流程核對，包含 News／Timeline、縮放、預算與完整資料量、設定、Wiki 節點／分類、歷史／最新、L1/L2、L1 忙碌提示、返回 News、1681px／390px 無橫向溢出。5 次主入口量測 142.9–1034.1ms；17 次偏好寫入被隔離，model actions=0，無未處理 JS 錯誤／非允許寫入。結果 `/tmp/wiki-interaction-live.json`，正式桌面／窄版截圖 `/tmp/wiki-interaction-1681.png`／`wiki-interaction-390.png` 已目視核對。窄版是 Chromium viewport 模擬，未測實體手機、其他瀏覽器及無限制負載；這些樣本不是永久兩秒 SLA。沒有以正式帳戶重做付費研究或聊天語意品質驗證。
+
+最後補驗：預設 `browser_research.py` 已包含背景 News paint 不改 Wiki 設定標籤的紅綠回歸，完整流程再次 PASS；`test_relation_settings.cjs` 再次通過。新增 UI 檢查器無命中，37 份 spec 本地連結／必備入口與 diff whitespace 通過。其餘已列 suites 為本輪前面實際執行的結果，不聲稱每次單行修正後重跑全部測試。
+
+最後導覽邊界補驗：`navigation-red.log` 以實際 select／按鈕操作重現「L2 runs 讀取中開研究表單」殘留主圖 spinner。`ca7c47a` 在新導覽開始時清掉已失效提示；預設 `browser_research.py` 全流程通過（`navigation-final.log`）。補丁於 08:24:53 UTC 再次在無 running 模型的提交空檔部署，healthy，所有變更 HTTP 資產一致；GOOGL 同 job v441／done71 接續 running，原凍結設定保留，私有核對 `data/private/wiki-feedback-20261107/interaction-final.json`。
+
+最終正式 `browser_live_interactions.py` 15 checks PASS，新增慢 L2 讀取及開表單清除舊轉圈；5 次入口回饋 132.9–1044ms，18 次偏好寫入隔離，model actions=0。日誌 `/tmp/wiki-interaction-audit/live-final.log`，最新 JSON `/tmp/wiki-interaction-live.json`；前次 13 項報告保留 `/tmp/wiki-interaction-live-initial.json`。此前明載的測試與截圖限制仍適用；修正及證據均推送 llm_wiki。
+
+## 2026-11-07：Wiki／L2 按鈕兩秒內回饋
+
+驗收時間定義：由真實滑鼠 click 到處理狀態／目標畫面已成立，再跨一個 animation frame 確認有繪製機會，門檻 2000ms；不把下載、讀圖或模型全部完成視為兩秒 SLA。這是本機 Chromium 樣本，不能保證所有硬體／網路永遠低於門檻。
+
+正式 Tailscale 網址先操作重現：進入 Wiki 約 72ms 顯示載入；延遲唯讀 Markdown 回應 3500ms 時，舊匯出按鈕超過 2 秒沒有回饋。補上共用按鈕處理態（文字、spinner、aria-busy、禁止重複請求、失敗復原）；停止按鈕輪詢保留 DOM，確認取消後不接受更舊的狀態／圖讀取。研究入口是導航，讀取未完成也能切股票；保存／刷新才鎖住發送按鈕。設定錯誤保留於尚未關閉的對話框。
+
+| 行為邊界 | 真實網頁操作驗證 |
+| --- | --- |
+| 開始整理，plan 尚未回覆 | 立即核對範圍狀態；雙點一個 plan，無過早模型 job |
+| 匯出三輪與失敗；停止維護／停止工作；套用設定與失敗 | 延遲超過 2 秒仍明示 busy，雙點單次請求；成功／失敗可見且可重試 |
+| 停止已成功，舊 jobs 回覆晚到 | 停止提示及已保存圖譜保留，不重新顯示 running |
+| 觀點與來源讀取 | 點可見按鈕立即顯示 loading，回覆後明細／外部連結可用 |
+| L2 建立／保存／更新，延遲 POST 2500ms | 真實隔離 HTTP＋Chromium 點擊；立即 busy，完成後保存／沿用結果 |
+| 研究資料載入中快切股票 | 不鎖住導航、不混用不同股票結果；原佇列續用 |
+
+`browser_wiki_layout.py` 最終 48 checks PASS，包含物理滑鼠、連點、慢回應、錯誤重試、晚到 poll、桌面／手機；其中 API 回應受控，不使用正式模型。新增的按鈕最終 12 次量測約 22.1–33.0ms（已跨過繪製機會）；觀點測試先因在 200ms 側欄動畫移動中點錯位置失敗，修正 driver 等 elementFromPoint 命中實際可見按鈕，不用程式 click 冒充。`browser_research.py` 隔離真實 HTTP／模型 fixture，建立／保存／更新三次量測介於 16.9–21.5ms，完整流程 PASS。22 個 Node suites、兩份 JS 語法及 diff 檢查通過；本次沒有修改 Python 後端，不重報前輪完整 Python suite 為本輪測試。
+
+`tests/browser_wiki_live_feedback.py --url <服務網址>` 提供正式頁面的唯讀重複點擊驗收：隔離工作區偏好寫入、保留模型工作，只讀 Markdown，沒有開始／停止正式模型。以 `/usr/bin/python3` 使用既有 websocket-client／Chromium；導覽、設定開關、研究開關及匯出三輪；結果 `/tmp/wiki-live-feedback.json`。正式部署後的結果另記於本節，不能用隔離 fixture 宣稱正式全部操作通過。
+
+
+正式部署與驗收（08:03–08:06 UTC）：程式 `066d10b`、量測修正 `8b11ec3` 已推送；於所有 Wiki／Research 工作無 running 的提交空檔停止舊容器，08:03:14 UTC 啟動新版且 healthy。三份正式 HTTP JS/CSS 與本地逐位元組相同；GOOGL 原工作 ID 保留，v429→v433、done35→43，部署後 running；model／reasoning_effort／graph_universe／graph_settings／graph_selection／strategy 與私有部署前紀錄相同，未新增測試模型工作。沒有資料遷移或刪除。舊 image `news-atlas:pre-feedback-20261107` 可回退；不需還原 DB、不得覆蓋新成果。曾嘗試直接替換靜態檔案，被容器 read-only rootfs 拒絕，沒有變更檔案；故改用上述安全 image 部署。
+
+正式 Chromium 於 `https://ubuntu.tail9e662c.ts.net:8765/` 完整三輪 PASS：22 次導覽／設定／研究／匯出點擊回饋 84–1314ms（含繪製機會），最大 1314ms；三次 Markdown 人為延遲 3500ms，2.1 秒後仍 busy，重複點擊未重複請求，完成無錯誤。15 次工作區偏好 POST 由測試隔離，模型 action=0；結果 `/tmp/wiki-live-feedback.json`、畫面 `/tmp/wiki-button-live.png`、log `/tmp/wiki-live-feedback-guarded.log`。開始／停止／保存等寫入動作由上列隔離瀏覽器驗證，沒有在正式服務中停掉使用者工作；此結果不等於所有按鈕在所有裝置／負載永遠達標。
+
+第一次正式三輪雖完成時間量測，報告因 preload 未安裝而 ReferenceError，不能列為完整通過或聲稱偏好寫入被隔離。測試補 `Page.enable` 及操作前 guard，重新完整執行後才取得上述 PASS；第一次只有導航／下載，可能保存 UI 偏好，沒有模型開始／停止／設定提交。既有 48 項 Wiki、L2 流程及 22 Node suites 不因純測試 preload 修正重報為再次執行。37 份 spec 連結與必備入口檢查通過。
+
+## 2026-11-07：同一分類來源與穩定下拉選單
+
+| Given／When 邊界 | Then／驗證 |
+| --- | --- |
+| 一個群有兩個模型標籤，其他群待分類／未歸類 | 選單、柱狀圖與列表以同一群索引計數，多標籤各一次；不退回舊財務分類 |
+| 點柱狀圖，再開原生下拉選單 | 同步圖譜與明細；沒有額外 plan/jobs；工具列及畫布幾何不變，沒有第二浮層 |
+| 新增分類詞但舊詞定義完整不變 | 重用原 assignment 和 taxonomy revision，L2 檢索同樣重用；新增詞記未評估；enqueue unchanged |
+| 修改舊詞定義／查閱升級前 snapshot | 定義變更不套用舊分類；歷史仍使用原 taxonomy，不借未來知識 |
+| 沒有噪聲或查核 assignment | 保持零筆；未分類不能冒充錯誤新聞 |
+
+`test_wiki_taxonomy_view.py`：先 2 failures／1 error 重現，修正後 3 tests OK，另補 L2 lookup 斷言通過。Wiki focused 77 tests OK；完整 `python3 -m unittest discover -s tests -q` 304 tests／61.177s／OK（既有 ResourceWarning 不隱藏）。`browser_wiki_layout.py` 真實 Chromium／pointer 34 checks PASS，含桌面與 390px 版面；`browser_research.py` 真實隔離 HTTP／Chrome 流程 PASS。第一次使用 conda Python 缺 websocket-client，改用原已安裝依賴的 `/usr/bin/python3`，未安裝新依賴。瀏覽器使用隔離 TSLA fixture，不等於正式模型語意驗證；正式工作仍限 GOOGL 一個月。
+
+一次 UI detector 指到已移除巢狀 topic 樹的舊 border 樣式；確認無使用者後刪除。桌面／手機實際截圖檢查與最終補驗列於交付紀錄。未要求模型為新增詞重算全部歷史。
+
+正式交付補驗：34 項瀏覽器檢查再次通過，桌面及手機選單在視窗內；移除的巢狀 topic 樣式無其他引用。升級 CLI 首次 POST 因缺少 Origin 被同源保護拒絕（403，沒有 taxonomy 寫入），補上合法同源標頭，不放寬伺服器權限。新增 `test_wiki_taxonomy_upgrade.py` 真實隔離 HTTP 測試先失敗、修正後 1 test OK，驗證 preview 不寫、apply 一版、repeat unchanged，零新 jobs；此測試是上述 304 項完整回歸之後的追加 focused 驗證。
+
+部署程式 `0b5915c` 已推送 llm_wiki，於所有 DB 沒有 running 模型工作時持寫鎖停止，再以 healthy 新容器啟動；HTTP 的 JS/CSS 與 container 的 classifier/research/store 檔案逐位元組相同。升級腳本在主機執行，七個已有有效版本的 Wiki 各增加兩術語；第二次全數 unchanged，沒有復活已停止工作。沒有版本的輸入草稿 DB 未作遷移。術語舊版及工作設定備份、升級收據及驗證在 gitignored `data/private/wiki-taxonomy-20261107/`，舊 image `news-atlas:pre-taxonomy-chart-20261107`；資料未刪除。
+
+07:41 UTC 實際 API：GOOGL 月圖 v425，1748 nodes／750 觀點群，99 個標籤 membership；TSM 同月圖 v11，127 nodes／51 群、32 個標籤 membership。這是實際已有分類的計數，不是新增兩詞已完成全量評估。GOOGL 67 個既有 assignment 保留原版本，結構預檢 ready／quick_check ok，13943 articles／2216 nodes／1425 edges／425 versions。原工作 `cb7b2bbc72bf4b68b243532033e4ef54` 持續 running、done 21、4 receipts，model/high、凍結 universe／selection／settings／strategy 與部署前相同；舊分類工作同 ID 36/694 queued，未因詞彙升級重排或增加付費工作。GOOGL／TSM graph GET 分別約 2747／1365ms，僅本機樣本；新標籤內容品質尚未作獨立語意驗收。
+
+## 2026-11-07：GOOGL 資料先行與月範圍維護
+
+先執行 `python3 scripts/wiki_data_audit.py --instrument NASDAQ:GOOGL`：正式資料庫 schema 1、quick_check ok，13943 article revisions／421 versions／2164 nodes／1373 edges，文章 hash、引用 span/hash、端點及版本關係均無錯誤。939 個知識節點缺舊版未記錄的 opinion_metadata、283 缺翻譯，標為 legacy；保留原文、ID、日期與模型成果，不虛構補齊。node.scope 是模型的研究適用描述，不應誤當必須等於 EXCHANGE:TICKER 的股票欄位；股票隔離核對 DB metadata 與 edge.instrument_id。
+
+正式 GOOGL 以 SQLite backup 保存在 gitignored `data/private/googl-month-20261107/backup.sqlite3`；另在 staging 副本驗證補分類清單，沒有先在正式 DB 亂改格式。UTC 2026-10-07→2026-11-07 共 2760 篇（Google 1063、Yahoo 1167、Massive 530），921 已抽取／1839 待處理；月內 694 個舊觀點群待補分類。僅計目前已取得來源，不表示供應商全年／月新聞完整。所有資料前置檢查完成後才執行本輪 BDD。
+
+| 場景邊界 | 驗證 |
+| --- | --- |
+| 相容舊版缺 metadata／翻譯 | audit ready、列 legacy，節點原文逐列不變 |
+| 來源被篡改、錯股票、未來 schema、缺 DB | 預檢失敗、不猜修補、不建立空庫 |
+| 月首／月底、前一天／後一天、未知日期、跨 UTC 時區 | 只將區間內證據所屬觀點排入分類；未知不混入 |
+| 同日期雙次開始／改成年度範圍 | 同工作重用；活動中的不同範圍拒絕，不偷偷擴大 |
+| 新聞已完成、僅缺分類 | plan 日期傳入分類並保存新範圍，不增加 extraction |
+
+本輪新增／修改測試位於 `test_wiki_data_audit.py`、`test_wiki_classifier.py`。集中 11 tests OK；完整 `python3 -m unittest discover -s tests`：294 tests / 68.429s / OK（既有 ResourceWarning 保留，無失敗）；文件連結及 diff whitespace 通過。隔離測試仍可用 TSLA fixture 驗證協定；正式維護驗收只用 GOOGL 一個月，不啟動其他股票。原始資料預檢不等於事實審查或完整付費模型驗收，正式執行結果另記。
+
+實際啟動紀錄：公開 API 核對同一月範圍 2760／921 重用／1839 pending，Graph root 共 793 棵；以 gpt-6.1-sol/high、update、continuous=false 開始固定月內補足與 694 組舊分類。既有 TSM 為使用者 cancelled，未復活。Wiki 工作區已保存 GOOGL、精確日期與同一 universe，保留面板布局；原設定留私有備份。開始工作不等於整月完成，需以後續發布／receipt 判定。
+
+首次正式 plan 約 155 秒；graph cache miss 記錄 87753.41ms（其中關聯 compute 86780.10ms）。檢查發現每棵 root 都重建鄰接索引，因此共用同一次準備的索引。正式 cache 的唯讀重播，包含取新聞與全部 root 準備但排除 relation build、cache decode、HTTP：0.343 秒，2760 targets／793 roots，完整 forest 與原 plan 相等。這不是端到端延遲保證。多 root／空鄰接索引共享、完整 coverage 及瀏覽器 mixed/separate trace parity 測試通過；本次 focused forest/API 16 tests / 9.533s / OK，Node exploration assertions PASS。 最終完整回歸（建置結束後單獨執行）：295 tests / 48.650s / OK。
+
+本次沒有 schema migration／刪庫；程式回退可用 `news-atlas:pre-googl-month-20261107` 搭配現有資料，但舊版補分類不具月範圍限制，回退後不可直接啟動分類。還原 DB 備份會失去之後新增成果，須先停止工作並確認需要，不能拿舊備份覆蓋正常增量資料。
+
+## 2026-11-07：Wiki 503／單一整理入口回歸
+
+故障證據：正式服務 log 的 `GET /api/wiki/jobs?instrument=NASDAQ:TSM` 回 503，堆疊位於 WikiStore 初始化 executescript，錯誤 `database is locked`。隔離第二 SQLite 連線持有 BEGIN IMMEDIATE 時，舊路徑可重現失敗；修正後同一 HTTP jobs 讀取成功，不需釋放 writer。TSM 正式庫 read-only quick_check 為 ok；這不是歷史新聞內容正確性的保證。
+
+| Given／When 邊界 | Then／自動驗證 |
+| --- | --- |
+| 已初始化庫正在由另一連線寫入；使用者查狀態 | GET jobs 200，開庫純讀；`test_wiki_responsiveness.py` |
+| 重複讀同股票覆蓋；之後提交設定變更 | 未變更不重掃，提交後失效；同檔案的 coverage test |
+| 沒有新新聞但觀點缺分類；明確按開始 | 仍排分類、重用舊 L1；`test_wiki_classifier.py` |
+| 進頁或慢 poll；反覆點主按鈕 | 進頁零 plan、輪詢不疊加、準備態立即顯示、僅一份 jobs；`browser_wiki_layout.py` |
+| 第一次 graph 503 後離開再進 | 錯誤可見、重進恢復且不啟動模型；`WIKI_RESPONSIVE_SCENARIO=retry` |
+| 保存 Claim 篩選後重新掛載 | 控制與圖形一致，一次 graph GET；`WIKI_RESPONSIVE_SCENARIO=restore` |
+| 新研究、查看來源、保存 live、切換頁面 | 真實 HTTP／Chrome 研究回歸；`browser_research.py` |
+
+本輪瀏覽器：retry 31 checks PASS、restore 30 checks PASS；research real HTTP/Chrome PASS。瀏覽器使用隔離資料、可控 API 回應／模型 fixture，包含實際 pointer 點擊、桌面與 390px overflow，不等於對正式模型做付費驗收。新增 HTTP／cache 3 tests、classifier 6 tests 先各自通過；完整 `python3 -m unittest discover -s tests`：289 tests / 133.543s / OK（有既有測試連線 ResourceWarning；無失敗）。部署已於 2026-11-07 06:42 UTC 完成：L1 與 research_jobs 都沒有 running 時持有 DB 寫鎖停止容器，再以新版 image 啟動。未中斷在途模型。`node --check dist/wiki-view.js`、spec 路由驗證、diff whitespace 通過。一次 UI detector 無命中；獨立 reviewer 的兩項 findings 均 resolved，documenter 確認沒有新的設計系統規則。
+
+正式驗證：container healthy；HTTP 提供的 wiki-view.js 與本地完全一致，容器 compiler.py／store.py 位元組也相同。`GET /api/wiki/status` 317.7ms、TSM jobs 三次 425.8／1328.5／408.7ms，全部 200（本機小樣本，非效能 SLA）。同一 TSM job 重啟後 running，done 22→62、version 10→11；原 model/high、Graph root、日期 2025-11-06→2026-11-07 及凍結圖範圍完全相同。quick_check ok。新容器觀察期間無 database-is-locked；啟動時有一筆已斷線客戶端的 BrokenPipe，handler 在已送出 200 後嘗試寫 503 並再次失敗，因此 log 留有一筆 503，不能聲稱完全無 503 紀錄。其後實測 graph/jobs 皆為 200；本輪未改通用斷線例外處理。測試不新增付費工作，既有使用者佇列正常接續。程式修正已推送 `1457de8`（llm_wiki）；本段為部署證據補記。
+
+原有 11 個 Wiki DB 已以 SQLite backup 保存到 gitignored `data/private/wiki-responsive-backup-20261107/`，舊執行 image tag 為 `news-atlas:pre-wiki-responsive-20261107`。本次沒有新 schema migration，不刪資料。回退優先使用舊程式/image 與現有 DB；如要還原備份需先停工作，確認接受備份之後新增成果的損失，不能自動覆蓋較新 DB。
+
 ## 命令
 
 ```bash
@@ -10,6 +134,8 @@ for test in tests/*.cjs; do node "$test" || exit; done
 node --check dist/app.js
 python3 spec/scripts/verify_docs.py
 ```
+
+完整 suite 的啟動器 TTY 測試會取得主機 8765 啟動鎖；不要與 `run.sh build/up` 並行，否則會測到真實啟動器佔鎖而非產品回歸。2026-11-07 的首次 295 項 run 因此有 1 項失敗，Docker build 完成後才重跑；不可把這次失敗隱去或改弱鎖保護。
 
 一般單元測試不需網路／Massive key。部分 Python API parity 測試呼叫 Node，因此完整測試需要 Node。不要把通過 mock 測試宣稱為 Massive 帳號實際授權成功。
 
@@ -206,3 +332,113 @@ PYTHONPATH=.:tests python tests/browser_chat_language.py
 正式 8765 已更新至映像 `f0e6c8d97f93`；備份 `data/private/language-runtime-20261106-174752`。重啟前後 22 張 Wiki 表內容一致，五個修改資產與本地逐位元相同，Chat bridge ready、容器 healthy。部署時活動中的 GOOGL 按原設定接續，TSLA 維持停止；使用者之後的設定變更仍可正常生效。
 
 正式服務使用兩個獨立 URL 分頁驗證英文冷啟動、實際 Chat 連線／sync、雙向語言切換、reload 後重新連線及 News／Wiki 返回；所有 UI 斷言通過且無 JS 錯誤。QA 在導覽前攔截 workspace 寫入與模型／來源／設定變更，不送出模型 turn。第一次正式測試沿用小 fixture 的限時等待，未等完整 Wiki 初始化便逾時；改為等待 `show()` 真正完成後再檢查，不改產品結果斷言。正式服務進行中的推論不是 QA 觸發，資料可因使用者既有工作持續更新。
+
+## 多股票 Wiki 輪替
+
+`python3 -m unittest discover -s tests -p test_wiki_fairness.py -v`：兩支股票都有三批待辦時，每輪各處理一批，再輪替；所有文章最終各呼叫一次。重審同工作已完成文章也不重送。`test_wiki_forest.py` 驗證大樹全部分段發布後才讓出，完成覆蓋與去重維持一致。測試使用隔離 DB／模型回覆，不代表正式模型品質或所有來源歷史完整。
+
+## 2026-11-07 缺失 Wiki 端點回饋回歸
+
+`python3 -m unittest discover -s tests -p 'test_wiki*.py' -q`：53 項通過。`test_missing_relation_target_feedback_repairs_only_the_bad_edge` 在舊訊息先失敗，修正後保留有效關聯、只記一次 coverage、兩次 usage 均計入；`test_unrepaired_missing_target_never_publishes_or_credits_coverage` 確認未修正仍有界失敗。真實拒絕提案僅離線重播，沒有為測試呼叫模型或寫正式圖；正式續跑是另行授權的批次操作。
+
+同輪完整 Python 回歸：`python3 -m unittest discover -s tests -q`，254 項通過；文件連結檢查 36 份通過。
+
+部署：在所有 Wiki 工作均無 running 的發布邊界停止舊容器，六股 queued／done 原值保留，無需重送活動推論；重建後 8765 healthy。容器與主機 `news_atlas/wiki/store.py` SHA-256 同為 `17eebe73754948a0a92eb108f829776054ff631304963753486878b8af931390`。TSM 續跑依私有批次紀錄的一次額度進行；此部署驗證不等於後續全部推論已通過。
+
+## 雙層研究與合併邊界（2026-11-07）
+
+- `python3 -W ignore::ResourceWarning -m unittest discover -s tests -p 'test_*.py'`：279 tests OK（新增 L2 inference 語意拒絕、live 重啟不付費重試、時間窗、撤回、候選詞、CAS、合併引用等）。
+- `node --test tests/chat*.test.mjs`：9 個 Node 測試檔 OK；`tests/*.cjs` 全部通過。橋接為受控 fixture，不代表正式模型已成功推論。
+- `PYTHONPATH=tests /usr/bin/python3 tests/browser_research.py`：真實 HTTP＋Chrome PASS；含建立研究、來源鏈、live 保存、離開在途工作、切股票、圖 tooltip 轉義及 1393／390px 無水平溢出。WebSocket dependency 使用主機已有系統 Python。
+- `PYTHONPATH=tests /usr/bin/python3 tests/browser_live_merge.py`：真實 CLI 在 HTTP／Chrome 開啟下合併 PASS，新股票出現在選單、既有版本更新、使用者選擇及 News runtime 保留。
+- `test_imported_source_not_known_before_import` 修正前為 FAIL，修正後通過。新版 schema 拒絕、損壞引用拒絕與備份／雙向合併仍通過。
+- 新 UI detector 僅報既有 Wiki CSS 的舊 2px border；沒有修改該既有裝飾。獨立 review 的 6 個實質問題已修正，最後舊 await 回應 guard 已補。
+- 未驗證：新 L2 正式模型品質、真實行情特徵、跨使用者登入（本版為單人 local owner）。第一版限制與未完長期驗收項詳見 RESEARCH_LAYERS。
+
+部署驗證：11 個 Wiki SQLite 已以 SQLite backup 備份至 `data/private/research-migration-backup-20261107/`，舊映像保留為 `news-atlas:pre-research-20261107`。第一次部署在 AMD 完整提交邊界（version 24、done 371）停止，重啟後同一 job ID 正常 running，既有六個 failed 工作未復活；HTTP JS 與容器 research.py SHA-256 均和主機一致，容器 healthy，模型目錄可讀。沒有為新 L2 驗收呼叫正式模型。最後 UI guard 修正後再次執行隔離 Chrome PASS；關閉測試瀏覽器後的 BrokenPipe 是未完成輪詢連線被關閉，不是斷言失敗。
+
+## 共用 L1／L2 工作區與模型分類（2026-11-07，第二輪）
+
+- `python3 -m unittest discover -s tests -v`：285 tests OK；包含分類補足不重抽新聞、精確 taxonomy revision、未知標籤原子拒絕、queued/running 分類取消保留已發布成果，以及模型分類資料合併重用。
+- `node --test tests/*.test.mjs`：9 tests OK；`tests/*.cjs` 全部通過。Chat 真實本機工具路由驗證 selected L2、DERIVED_FROM 與研究 metadata；使用 fixture，不消耗正式模型。
+- `PYTHONPATH=tests /usr/bin/python3 tests/browser_research.py`：真實 HTTP／Chrome 驗證共用 3D 實例、實際進度分隔線拖曳、550ms 忙碌說明、L1 忙碌 API 拒絕、保存研究、同股票與跨股票重開接續同一 job、歷史版本隔離、Chat 清除隱藏選取與 1393／390px 溢出邊界。
+- `browser_wiki_layout.py`：22 項實際互動 PASS；`browser_chat_language.py`：語言、多視窗同步、重載及發送生命週期 PASS。
+- 文件檢查：37 份 Markdown 通過。UI 維持原工作區視覺；未建立另一套 3D／設計系統。獨立 review 發現的版本、選取、工作接續問題均追加行為測試。
+- 未驗證：正式模型的新分類品質、巨大分類集合的手動探索及完整手機滾動旅程；本輪沒有為 QA 呼叫正式模型。Tailscale 網頁的 Chat 仍遵守既有本機來源限制，使用本機 `127.0.0.1:8765` 測試 Chat。
+
+本輪部署：SQLite backup 保留 11 個股票資料庫於 `data/private/shared-workspace-backup-20261107/`；舊映像 `news-atlas:pre-shared-wiki-20261107`。同時確認 jobs／research_jobs 沒有 running 後重啟容器與 Chat bridge。8765 healthy；HTTP 的 wiki-view.js、research-view.js、wiki-view.css 與主機逐位元相同，容器 classifier.py、compiler.py、research.py 亦相同。模型目錄可讀取 8 個選項，沒有進行付費推論。11 個 Wiki version 與部署前一致；AMD job 保持 cancelled／done 467，沒有復活使用者停止的工作。
+
+獨立審查最後 verdict 為 ship，範圍是已列出的版本、選取、研究接續與分類取消問題；不表示正式模型品質已驗收。最終 Chrome 回歸 PASS，結束後的 BrokenPipe 是已關閉瀏覽器的輪詢連線。開啟保存研究會保留真正選取的 L1 底圖版本，L2 來源另外明示固定快照，不把歷史底圖誤標最新版本。Documenter 確認普通工作區延伸沿用原設計，沒有新增 DESIGN.md 或另一套樣式規範。
+
+回退：停止工作並保留最新 DB 備份後，可用 `ATLAS_IMAGE_TAG=pre-shared-wiki-20261107 docker compose up -d --no-build` 回到本輪前映像；Chat 主機程式需同步回到前次 commit `c6d3f66`。本輪分類資料為新增研究物件，沒有刪表或重寫既有 L1。不要直接覆寫目前 SQLite；需要還原舊備份時先保留本輪新增成果。
+
+
+## 2026-11-07：GOOGL 正式發布衝突回歸
+
+- 在資料預檢／備份後，首個正式月工作因舊 context revision 被 CAS 拒絕，version 保持 421；舊程式未保存此次 publish 拒絕的模型輸出／usage，不補造缺失紀錄。
+- 停止邊界撞上 failed 與停用 catch_up 分開提交，重啟誤建工作；已用公開 cancel API 停止。這次誤啟動可能消耗模型用量，不能宣稱沒有成本。
+- `python3 -m unittest discover -s tests -p test_wiki_revision_recovery.py -v`：4 個 BDD 修正前均 FAIL、修正後 OK。覆蓋當前 revision／歷史保留、相依 Thesis 不帶回舊版、每次 commit 可見性與重啟不重試、CAS 拒絕保留 usage／receipt 且無半套圖或 coverage。
+- `python3 -m unittest discover -s tests -q`：299 tests / 68.400s / OK；隔離 fixture，不使用正式模型。既有 ResourceWarning 仍可出現，不算通過的行為證據。
+- 真實 GOOGL 備份與首棵月 root 重播：12 context nodes 中 superseded 從 1 降至 0；未改歷史 payload，沒有 schema migration 或清庫。
+- 正式修正後續跑以 private report 的同原因一次額度為準；未發布前不得宣稱整月或模型驗收完成。
+
+
+第二次正式推論在 2026-11-07T07:18:47Z（約 600 秒）以 The operation was aborted 結束，原 CAS 錯誤沒有重現，但此次也沒有發布結果，不能宣稱正式 L1 已通過。失敗後 enabled/catch_up 都為 false、沒有誤建下一份 L1；原圖 v421 保留。月分類另有 12/694 組成功保存，這與新聞 coverage 分開記帳。
+
+容量修正 BDD `test_wiki_root_budget.py`：1／12 不拆、13 拆兩段、44 拆四段；重用證據仍出現在 context，但不被再次算新 coverage。兩個測試修正前 FAIL、修正後 OK。既有 forest 的部分失敗／全樹記帳／排程公平 8 tests OK。GOOGL 首樹離線重播 44 成員→12／12／12／11，每段共用 anchor，全部來源保留，coverage 記帳為 0／0／0／21。此項離線檢查不使用模型，也不能冒充正式推論通過。
+
+容量修正完整回歸：`python3 -m unittest discover -s tests -q`，301 tests / 64.576s / OK。沒有在完整 suite 同時跑啟動器 build/up。
+
+
+修正後正式部署／續跑：容器 compiler.py、store.py、classifier.py、forest.py 與主機一致，8765 healthy；其他取消的股票沒有復活。公開 plan/jobs 使用同一 2026-10-07→2026-11-07／2760 篇 universe／gpt-6.1-sol high，首次修正後計畫與啟動合計 4.533 秒（有快取）；其後超時修正為 12 篇容量分段。版本衝突與超時分別有獨立原因紀錄，各在修正後續跑一次，沒有重設同原因次數。模型在途 status/jobs 三次 HTTP 200：324.4／903.2／945.5ms，小樣本不是 SLA。
+
+正式發布證據（2026-11-07T07:28:59.047145+00:00）：版本 421→422，本次 done=0，receipts=1；月覆蓋 921/2760、pending=1839。原備份文章／節點／邊／版本逐列保留，新增後 audit ready／quick_check ok，無引用或端點錯誤。每段是獨立完整提交，整棵尚未完成時 done 可以維持 0。這表示首段真實模型結果已成功發布，並不代表整月／全部分類完成或觀點事實被證實。其餘授權月份資料繼續背景處理，失敗按既有停用／有界重試規則保留成果。
+
+## 2026-11-07：延續性文件核對（僅文件）
+
+本輪沿 `project-spec-onboarding` 的入口順序核對 PROJECT_MAP → 偏好／CURRENT_STATE → RESEARCH_LAYERS。人工閱讀可找到六項答案：L1／L2 與 Classifier 分工、顯示切換不重做模型、目前 GOOGL 月範圍及七股舊範圍取代、資料保留與必要時救援、歷史測試／Git／部署的區別、未完成能力與下次查核入口。過時 AMD 交接已改為歷史，舊四分類已明示只是詳情屬性。這是文件可發現性核對，不是另開 agent 的盲測，也不保證未讀檔的新聊天自動記得內容。
+
+執行 `python3 spec/scripts/verify_docs.py`：37 份 Markdown 的本地連結與必要入口 PASS；`git diff --check` 通過。人工核對目前 skill 及其 preferences／spec-authoring references，已涵蓋明確偏好來源、作用範圍、取代關係、BDD 與持續更新，不必改全域 skill。沒有變更執行程式、DB 或 runtime，未重跑 UI／模型／後端測試；本頁其他測試結果保持其原執行時間與限制。
+
+## 2026-11-07 — README 中英文概念圖驗收（文件／媒體）
+
+- 情境：新讀者從 README 理解三層資料結構與兩個觀點層，能開啟繁體中文／英文原圖，且不把願景誤認成完整實作。
+- 核對：`dist/wiki-view.js` 的共用 wikiCanvas／L1/L2/both、`dist/research-view.js` 的研究入口／結果讀取；`news_atlas/wiki/classifier.py` 的 exact revision 標籤／候選詞；`research.py` 的確定性 Lens、classification/full_text bundle、price/baseline unavailable、live 更新與 input_hash。不是新一輪正式 UI 操作或模型品質測試。
+- 內建 imagegen 製作兩圖並逐張目視檢查層級／中文與英文標示；PNG signature／尺寸檢查通過，均 1536×1024。英文約 1.96 MB，中文約 2.01 MB；向量風格的點陣圖，不是 SVG。
+- `python3 spec/scripts/verify_docs.py`：PASS，37 份 spec Markdown 本地連結；額外檢查 README.md 與 docs/media/README.md 的本地連結全部存在。
+- `git diff --check`：PASS。README 使用 repo 相對路徑，圖檔一起提交；中文預設展示，英文 details 展開及直接連結。
+- 未驗證：GitHub 網頁實際展開渲染；無 UI／backend 行為變更，未重跑行為測試、重啟服務、修改 DB 或呼叫 Wiki 模型。
+
+## 2026-11-07 — L2 跨股票忙碌與狀態恢復
+
+- 正式重現：TSM 無 queued/running L1；`research/availability?instrument=NASDAQ:TSM` 回 busy=true、instruments=[NASDAQ:GOOGL]。GOOGL cb7b2bbc72bf4b68b243532033e4ef54 有近期 updated_at；全局模型槽守門正確，缺陷是操作旁沒有原因，只藏在 tooltip。
+- RED：`/usr/bin/python3 tests/browser_research.py` 新增別股 GOOGL 工作 fixture，在「idle current stock must visibly name the other stock blocking L2 without hover」失敗。初次使用環境 python3 缺 websocket，改用已有依賴的 /usr/bin/python3；不是產品故障。修正版首次測試又碰到初始化 checking，改為先等 ready 再加入阻擋工作，避免把初始載入誤判成忙碌。
+- GREEN：同指令 PASS。覆蓋真實 HTTP／Chromium 的跨股原因、前往股票／返回／草稿與期間保存、工作完成解除、availability 503 與恢復；既有建立研究／來源／live 保存／版本／desktop/mobile overflow 皆通過。使用 fixture runner，沒有真實模型呼叫。
+- 正式操作：`/usr/bin/python3 tests/browser_live_research_availability.py --url https://ubuntu.tail9e662c.ts.net:8765/` PASS。攔截 workspace 寫入並拒絕模型寫入；實際點擊到 TSM 研究入口，當時 availability=false，建立按鈕 enabled。跨股忙碌／跳轉是在隔離 HTTP 測試驗證，不能說成正式仍忙碌時也重跑成功。
+- 使用者在部署前已取消 GOOGL L1（15:19:58 UTC）；部署前快照無活動 L1，v588。安全邊界檢查亦確認無 running 研究才停容器，不復活取消工作。最後保留 v588／done604／cancelled，全部原 Wiki 版本未倒退；無 migration 或清庫。
+- 第一輪部署的 `/api/status` 健康探測失敗：實測全庫統計 3.364 秒，超過內部 timeout=3。`tests/test_healthcheck.py` 從實際 Dockerfile 讀探測路徑，給不可用 stats；舊路徑 RED，新 `/api/capabilities` GREEN（1 test），確認不掃描資料庫。這是 HTTP serving readiness，不宣稱 DB 或模型供應商可用；統計 API 保留。
+- 最後容器 2026-11-07 15:24:01 UTC 啟動 healthy，served research-view.js 與原始碼 byte 相同；capabilities HTTP 200／0.003469 秒。回退映像 `news-atlas:pre-l2-availability-20261107`；回退不覆蓋資料庫。
+- 另觀察到部署後外部發起的 GOOGL L2 工作因「缺少比較基線，不可宣稱動能變化」失敗；不是本測試建立，未放寬驗證或付費重試。按鈕恢復不代表所有研究推論都能通過證據檢查。
+- 中英文 PNG 目視確認移除限制／警語旁註；核心新聞屬性、具體觀點與分類、選取 L2 引用圖保留。`node --check dist/research-view.js`、spec 37 份連結與 `git diff --check` PASS；未重跑完整 backend suite。
+
+
+## 2026-11-08 — README 雙語與 L2 進度／結果恢復
+
+正式觀察：GOOGL 研究 `7f2de70caff7434593d4f41978154f09` created 15:51:43、completed 15:52:50 UTC；公開 run 為 5 claims／20 入選 L1 claims。使用者截圖無法證明持續卡死；中間缺進度則可在隔離真實 UI 重現。另一程式缺陷是先清 pending 再讀 completed run，503 會失去自動恢復。沒有對正式資料另跑模型。
+
+- RED：`/usr/bin/python3 tests/browser_research.py`，`/tmp/research-progress-red.log`，在 queued 後中央仍為空／無 busy，assert「running L2 must show progress in the main graph」失敗。
+- GREEN：同命令，`/tmp/research-progress-green.log`，PASS。額外注入 completed run GET 503，關閉研究側欄，復原後既有圖出現、研究工作數不變；覆蓋跨股忙碌、晚回覆、來源、保存、1393/390px。建立／保存／刷新按鈕可見回饋約 30.1／31.2／20ms（隔離瀏覽器，非所有環境保證）。
+- `/usr/bin/python3 -m unittest discover -s tests -p test_research.py`：23 tests PASS。
+- `node --check dist/research-view.js`、`git diff --check`：PASS。兩 README 相對連結及圖片路徑存在，無 mp4/gif 入口；圖片人工核對語言、輸出框與箭頭。
+- 部署前唯讀 Chromium：`tests/browser_live_research_availability.py --stock NASDAQ:GOOGL --check-l2` PASS。原生下拉載入現有 run，全部 5 個 L2 節點與 API claim 數一致；零模型寫入，工作區偏好 POST 被隔離。
+- 2026-11-07 16:05:10 UTC 新容器 healthy；無 running 模型時停止舊容器，GOOGL v588 與其他股票既有版本保留、未恢復取消工作。HTTP `research-view.js`／`wiki-view.css` byte-match 本地。
+- 無 schema migration；回退程式可使用 `news-atlas:pre-l2-progress-20261108` 映像，既有 Wiki DB 不需還原。未以正式模型重演付費推論、未宣稱所有自然語言研究品質通過。
+
+
+本輪部署後的 HTTPS 冷啟動驗收曾失敗，並非忽略：`/tmp/live-l2-after-diagnostic.log` 顯示中央 `signal timed out`。本輪新增的 15 秒 GET 期限過短；又查到 handle_research 每次 job/runs/taxonomy GET 都 observe_news、掃描及 ingest 整份來源。先用 `PYTHONPATH=tests /usr/bin/python3 -m unittest test_research.ResearchTests.test_polling_and_catalog_reads_do_not_reingest_news` RED（poll reingested entire source corpus），再把這三個既有資料 GET 分離；run/lenses 的來源新鮮度觀察保留，GET 期限改為 45 秒。最終回歸及正式驗收見下方，早期失敗不是 PASS。
+
+
+最終回歸：`/tmp/l2-progress-python-final.log` 23 tests PASS；`/tmp/research-progress-final.log` 完整隔離 Chromium PASS，建立／保存／刷新回饋 24.6／32.7／22ms。最終部署 16:09:48 UTC healthy，HTTP JS/CSS 與本地一致；正式本機 GET runs 約 0.010 秒、job 約 0.005 秒。所有股票部署前無活動模型工作，未啟動新工作。
+
+
+最終正式 HTTPS 驗收 PASS：`/usr/bin/python3 tests/browser_live_research_availability.py --url https://ubuntu.tail9e662c.ts.net:8765/ --stock NASDAQ:GOOGL --check-l2`；證據 `/tmp/live-l2-final.log`、`/tmp/research-availability-live.json`、`/tmp/research-availability-live.png`。從新瀏覽器設定檔以滑鼠及原生下拉切 GOOGL→L2，現有「動能」run 的 5 個 L2 節點全數渲染、與 API claims 數一致；無 JS 錯誤、零模型動作，3 次工作區偏好寫入已隔離。

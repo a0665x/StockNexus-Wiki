@@ -76,6 +76,23 @@ def main():
                 check('no unhandled errors',"errors.length===0")
                 print(json.dumps(checks));call('Browser.close');ws.close();return 0
             check('initial 3D ready',"!!graph&&!graphFailure&&renderBudget===800")
+            js("window.snapshotRequests=0;window.snapshotRelease=null;window.snapshotFail=false;window.snapshotPayload=savedPayload();snapshotPayload.name='Slow snapshot';snapshotPayload.created_at='2026-11-07T00:00:00Z';const beforeSnapshots=fetch;window.fetch=async(u,o)=>{if(u==='/api/snapshots')return new Response(JSON.stringify({snapshots:[{id:'slow',name:'Slow snapshot',created_at:'2026-11-07T00:00:00Z'},{id:'fast',name:'Fast snapshot',created_at:'2026-11-07T00:00:00Z'}]}));if(u==='/api/snapshots/fast')return new Response(JSON.stringify({...snapshotPayload,name:'Fast snapshot'}));if(u==='/api/snapshots/slow'){snapshotRequests++;await new Promise(r=>snapshotRelease=r);return snapshotFail?new Response(JSON.stringify({error:'Controlled snapshot outage'}),{status:503}):new Response(JSON.stringify(snapshotPayload));}return beforeSnapshots(u,o)};replies['/api/snapshots']={snapshots:[{id:'slow',name:'Slow snapshot',created_at:'2026-11-07T00:00:00Z'},{id:'fast',name:'Fast snapshot',created_at:'2026-11-07T00:00:00Z'}]};loadSnapshots()")
+            wait_for("!!$('snapshots').querySelector('button')")
+            js("$('snapshots').closest('details').open=true;$('snapshots').querySelector('button').id='slowSnapshot'")
+            click('slowSnapshot');wait_for('snapshotRelease!==null')
+            check('snapshot announces waiting and blocks double click',"$('slowSnapshot').disabled&&$('slowSnapshot').getAttribute('aria-busy')==='true'&&$('saveStatus').getAttribute('aria-busy')==='true'&&$('saveStatus').textContent.includes('載入')")
+            click('slowSnapshot');check('one request for repeated snapshot click','snapshotRequests===1')
+            js('snapshotRelease()');wait_for("!$('slowSnapshot').disabled")
+            check('snapshot completion releases controls',"$('saveStatus').getAttribute('aria-busy')==='false'&&$('saveStatus').textContent.includes('已載入')&&articles.length===3")
+            js("$('snapshots').querySelectorAll('button')[1].id='fastSnapshot';snapshotRelease=null")
+            click('slowSnapshot');wait_for('snapshotRelease!==null');click('fastSnapshot')
+            wait_for("$('saveStatus').textContent.includes('Fast snapshot')")
+            js('snapshotRelease()');wait_for("!$('slowSnapshot').disabled")
+            check('late snapshot cannot replace latest chosen snapshot',"$('saveStatus').textContent.includes('Fast snapshot')")
+            js('snapshotFail=true;snapshotRelease=null');click('slowSnapshot');wait_for('snapshotRelease!==null');js('snapshotRelease()');wait_for("!$('slowSnapshot').disabled")
+            check('snapshot failure keeps graph and restores retry',"articles.length===3&&$('saveStatus').textContent.includes('Controlled snapshot outage')&&$('saveStatus').getAttribute('aria-busy')==='false'")
+            js('snapshotFail=false;snapshotRelease=null');click('slowSnapshot');wait_for('snapshotRelease!==null');js('snapshotRelease()');wait_for("!$('slowSnapshot').disabled")
+            check('snapshot retry succeeds without page reload',"$('saveStatus').textContent.includes('已載入')")
             js("""window.realFetch=window.fetch;window.holdPreview=true;window.fetch=async(url,options)=>{
               if(url==='/api/graph/preview'){
                 const body=JSON.parse(options.body);window.pendingBuild=body;
@@ -93,7 +110,7 @@ def main():
             click('viewRelationsStop');check('cancel keeps graph',"viewRelationState.phase==='stopped'&&articles.length===3&&!$('activityText').textContent.includes('NaN')")
             js("finishBuild();holdPreview=false");time.sleep(.3)
             check('late cancelled reply ignored',"viewRelationState.phase==='stopped'")
-            js("$('query').value='test';$('ticker').value='';$('start').value='2026-01-01';$('end').value='2026-01-31'")
+            js("$('query').value='TSLA, test';$('ticker').value='NASDAQ:TSLA';$('start').value='2026-01-01';$('end').value='2026-01-31'")
             click('submit');wait_for("!!window.feed")
             check('waiting search preserves graph and gives status',"!!controller&&articles.length===3&&!$('activitySpinner').hidden")
             click('modeTimeline');click('modeNetwork')
