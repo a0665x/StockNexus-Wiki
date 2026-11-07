@@ -76,7 +76,7 @@
     function fields(cfg){for(const [k,v] of Object.entries(defaults)){const input=$('relation-'+k);if(typeof v==='boolean')input.checked=cfg[k];else input.value=cfg[k];}}
     function read(){return Object.fromEntries(Object.entries(defaults).map(([k,v])=>[k,typeof v==='boolean'?$('relation-'+k).checked:Number($('relation-'+k).value)]));}
     function paint(){
-      $('relationOpen').textContent=say('⚙ 關聯設定','⚙ Edge settings');
+      if($('wikiPanel')?.hidden!==false)$('relationOpen').textContent=say('⚙ 關聯設定','⚙ Edge settings');
       hooks.status?.({busy:applying,waiting:externalBusy,error,started});
       $('relationStatus').hidden=!error;$('relationStatus').textContent=error;
     }

@@ -72,6 +72,8 @@ def main():
      js("AtlasWiki.show()")
      wait("$('wikiInstrument').value==='NASDAQ:TSLA'&&$('wikiModel').options.length>0")
      wait("AtlasWiki.graph()&&AtlasWiki.graph().graphData().nodes.length>0")
+     js("relationUI.restore(relationUI.applied())")
+     assert js("$('relationOpen').textContent.includes('Wiki')"), 'background News settings paint must not rename the active Wiki settings button'
      js("window.sharedWikiGraph=AtlasWiki.graph();window.originalWikiNodes=sharedWikiGraph.graphData().nodes.slice();true;")
      before_height=js("$('wikiLive').getBoundingClientRect().height")
      bar=js("(()=>{const r=$('wikiResizeLive').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()")
