@@ -51,15 +51,34 @@ def main():
      wait("typeof AtlasWiki!=='undefined'")
      js("AtlasWiki.show()")
      wait("$('wikiInstrument').value==='NASDAQ:TSLA'&&$('wikiModel').options.length>0")
+     wait("AtlasWiki.graph()&&AtlasWiki.graph().graphData().nodes.length>0")
+     js("window.sharedWikiGraph=AtlasWiki.graph();window.originalWikiNodes=sharedWikiGraph.graphData().nodes.slice();true;")
+     before_height=js("$('wikiLive').getBoundingClientRect().height")
+     bar=js("(()=>{const r=$('wikiResizeLive').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()")
+     for event,dy in [('mousePressed',0),('mouseMoved',55),('mouseReleased',55)]:
+      serial+=1;ws.send(json.dumps({'id':serial,'method':'Input.dispatchMouseEvent','params':{'type':event,'x':bar['x'],'y':bar['y']+dy,'button':'left','buttons':0 if event=='mouseReleased' else 1,'clickCount':1}}))
+      while json.loads(ws.recv()).get('id')!=serial:pass
+     time.sleep(.2)
+     assert js("$('wikiLive').getBoundingClientRect().height")>before_height+35
+     assert js("AtlasWiki.graph()===sharedWikiGraph&&sharedWikiGraph.graphData().nodes[0]===originalWikiNodes[0]")
      js("$('researchOpen').click()")
      wait("!$('researchPanel').hidden&&$('researchTaxonomy').children.length>0")
+     assert js("!$('researchInclude')&&!$('researchExclude')&&!$('researchTaxonomy').querySelector('input')")
+     with paused.connection() as db:db.execute("UPDATE jobs SET status='queued'")
+     wait("$('researchSubmit').disabled")
+     js("$('researchSubmitWrap').focus()")
+     time.sleep(.25);assert js("$('researchBusyTip').hidden")
+     time.sleep(.4);assert js("!$('researchBusyTip').hidden&&$('researchBusyTip').textContent.includes('停止 L1')")
+     assert js("fetch('/api/wiki/research/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instrument:'NASDAQ:TSLA',query:'動能'})}).then(r=>r.status)")==400
+     with paused.connection() as db:db.execute("UPDATE jobs SET status='completed'")
+     wait("!$('researchSubmit').disabled")
      js("$('researchQuestion').value='動能';$('researchForm').requestSubmit()")
      wait("$('researchStatus').textContent.includes('等待')")
      wiki.tick()
-     wait("$('researchStatus').textContent==='研究完成'")
+     wait("$('researchStatus').textContent.startsWith('研究完成')")
      assert js("$('researchResult').textContent.includes('價格動能')&&$('researchResult').textContent.includes('來源陳述')")
      js("[...$('researchResult').querySelectorAll('summary')].find(n=>n.textContent==='查看依據與條件').click()")
-     assert js("$('researchResult').textContent.includes('新聞證據')")
+     assert js("!!$('researchResult').querySelector('blockquote')&&!!$('researchResult').querySelector('a[href^=\"https://\"]')")
      js("[...$('researchResult').querySelectorAll('button')].find(n=>n.textContent==='持續追蹤').click()")
      wait("$('researchSaved').textContent.includes('動能')")
      before=len(wiki.store('NASDAQ:TSLA').jobs())
@@ -67,22 +86,45 @@ def main():
      assert len(wiki.store('NASDAQ:TSLA').jobs())==before
      # Real HTTP requests: a forged owner cannot read or create another result.
      assert js("fetch('/api/wiki/research/lenses?instrument=NASDAQ:TSLA&owner=other').then(r=>r.status)")==400
-     js("window.originalResearchGraph=ForceGraph3D;window.ForceGraph3D=(...args)=>{const factory=originalResearchGraph(...args);return (...params)=>{window.qaResearchGraph=factory(...params);return qaResearchGraph;};};[...$('researchResult').querySelectorAll('summary')].find(n=>n.textContent==='研究圖譜').click()")
-     wait("window.qaResearchGraph&&qaResearchGraph.graphData().nodes.length>0")
-     assert js("qaResearchGraph.nodeLabel()({title:'<img src=x onerror=alert(1)>'}).includes('&lt;img')")
-     # Leaving a queued query cannot strand the submit button. No second paid job.
-     js("$('researchQuestion').value='new query';$('researchForm').requestSubmit()")
-     wait("$('researchSubmit').disabled")
+     wait("AtlasWiki.graph().graphData().nodes.some(n=>n.layer==='L2')")
+     assert js("AtlasWiki.graph()===sharedWikiGraph")
+     js("window.l2Node=sharedWikiGraph.graphData().nodes.find(n=>n.layer==='L2');AtlasWiki.selectNode(l2Node.id)")
+     assert js("AtlasWiki.runtime.state().selected_node.layer==='L2'&&AtlasWiki.runtime.data().edges.some(e=>e.relation_type==='DERIVED_FROM')")
+     assert js("sharedWikiGraph.nodeLabel()({title:'<img src=x onerror=alert(1)>',layer:'L2'}).includes('&lt;img')")
+     js("$('wikiLayer').value='L2';$('wikiLayer').dispatchEvent(new Event('change'))")
+     assert js("sharedWikiGraph.graphData().nodes.every(n=>n.layer==='L2')")
+     js("$('wikiLayer').value='both';$('wikiLayer').dispatchEvent(new Event('change'))")
+     assert js("sharedWikiGraph.graphData().nodes.some(n=>n.layer==='L1')&&sharedWikiGraph.graphData().nodes.some(n=>n.layer==='L2')")
+     js("$('wikiLayer').value='L1';$('wikiLayer').dispatchEvent(new Event('change'))")
+     assert js("AtlasWiki.runtime.state().selected_node===null&&AtlasWiki.runtime.state().scope_ids.every(id=>sharedWikiGraph.graphData().nodes.some(n=>n.id===id&&n.layer!=='L2'))")
+     old_ids={n['id'] for n in paused.graph(version=1)['nodes']}
+     p=wiki.plan({'instrument':'NASDAQ:TSLA','model':'fixture','articles':rows[1:2]});wiki.start({'plan_id':p['plan_id']});wiki.tick()
+     paused.configure({**paused.config(),'enabled':False,'catch_up':False})
+     # Re-entering a queued query resumes the same paid work, including a stock switch.
+     js("$('researchQuestion').value='風險';$('researchForm').requestSubmit()")
+     wait("$('researchStatus').textContent.includes('等待')")
+     with paused.connection() as db:jobs_before=db.execute('SELECT count(*) FROM research_jobs').fetchone()[0]
      js("$('researchBack').click();$('researchOpen').click()")
-     assert js("!$('researchSubmit').disabled")
+     wait("$('researchSubmit').disabled&&$('researchStatus').textContent.includes('等待')")
      wiki.store('NASDAQ:AMD')
-     js("$('researchBack').click();$('wikiInstrument').value='NASDAQ:AMD';$('researchOpen').click()")
+     js("$('researchBack').click();$('wikiInstrument').value='NASDAQ:AMD';$('wikiInstrument').dispatchEvent(new Event('change'));$('researchOpen').click()")
      wait("$('researchStock').textContent==='NASDAQ:AMD'")
      assert js("!$('researchResult').textContent.includes('Tesla earnings')&&!$('researchResult').textContent.includes('來源陳述')")
-     js("$('researchBack').click();$('wikiInstrument').value='NASDAQ:TSLA';$('researchOpen').click()")
-     wait("$('researchSaved').textContent.includes('動能')")
+     js("$('researchBack').click();$('wikiInstrument').value='NASDAQ:TSLA';$('wikiInstrument').dispatchEvent(new Event('change'));$('researchOpen').click()")
+     wait("$('researchSaved').textContent.includes('動能')&&$('researchSubmit').disabled")
+     from news_atlas.wiki.research import Research
+     Research(paused).process(wiki)
+     wait("$('researchStatus').textContent.startsWith('研究完成')")
+     with paused.connection() as db:assert db.execute('SELECT count(*) FROM research_jobs').fetchone()[0]==jobs_before
+     assert js("sharedWikiGraph.graphData().nodes.some(n=>n.layer==='L2')")
+     js("$('wikiVersion').value='1';$('wikiVersion').dispatchEvent(new Event('change'))")
+     wait("AtlasWiki.runtime.state().version===1&&$('wikiLayer').value==='L1'&&AtlasWiki.runtime.data().nodes.every(n=>n.layer!=='L2')")
+     assert set(js("AtlasWiki.runtime.data().nodes.map(n=>n.id)"))<=old_ids
+     assert js("AtlasWiki.runtime.state().research_run===null")
      js("document.querySelector('#researchSaved button').click()")
      wait("$('researchResult').textContent.includes('來源陳述')")
+     wait("AtlasWiki.runtime.state().research_run!==null&&!$('researchResult').hidden")
+     assert js("$('wikiVersion').value==='1'&&AtlasWiki.runtime.state().version===1&&$('wikiCounts').textContent.includes('固定快照')")
      for width in (1393,390):
       serial+=1;ws.send(json.dumps({'id':serial,'method':'Emulation.setDeviceMetricsOverride','params':{'width':width,'height':1000,'deviceScaleFactor':1,'mobile':False}}))
       while json.loads(ws.recv()).get('id')!=serial:pass

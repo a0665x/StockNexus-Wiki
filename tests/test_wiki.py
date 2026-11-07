@@ -13,7 +13,12 @@ from test_server import row
 
 def proposal(a):
     cite={'revision_id':a['revision_id'],'field':'title','quote':a['title']}
-    return {'nodes':[{'key':'n1','kind':'Claim','title':a['title'],'summary':'來源陳述，待判讀','scope':'TSLA:earnings','citations':[cite]}],'relations':[]}
+    result={'nodes':[{'key':'n1','kind':'Claim','title':a['title'],'summary':'來源陳述，待判讀','scope':'TSLA:earnings','citations':[cite]}],'relations':[]}
+    if a.get('_taxonomy'):
+        from news_atlas.wiki.research import matches
+        labels=[{'term_id':t['id'],'rationale':'Fixture classification','confidence':'low'} for t in a['_taxonomy']['terms'] if any(matches(a['title'],x) for x in t['aliases'])]
+        result['nodes'][0]['classification']={'labels':labels,'candidates':[],'unclassified_reason':'' if labels else 'Fixture unclassified'}
+    return result
 
 class WikiTests(unittest.TestCase):
     def setUp(self):

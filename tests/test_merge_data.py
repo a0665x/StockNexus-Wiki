@@ -28,6 +28,16 @@ class MergeDataTests(unittest.TestCase):
     def count(self,p,t):
         with sqlite3.connect(p) as d:return d.execute('SELECT count(*) FROM '+t).fetchone()[0]
 
+    def test_model_classifications_survive_compatible_taxonomy_import(self):
+        source=self.wiki(self.sa,[row(title='Data center demand',suffix='classified')])
+        target=self.wiki(self.sb,[row(title='Other news',suffix='local')])
+        run(self.a,self.b)
+        graph=target.graph();node=next(n for n in graph['nodes'] if n['kind']=='Claim' and n['title']=='Data center demand')
+        self.assertIn('driver.demand',node['classification_terms'])
+        self.assertEqual(node['classification_status'],'classified')
+        before=self.count(target.path,'research_objects');run(self.a,self.b)
+        self.assertEqual(self.count(target.path,'research_objects'),before)
+
     def test_news_union_conflicts_and_idempotency(self):
         shared=row(suffix='same');changed={**shared,'title':'Incoming conflicting title'}
         self.sa.save('massive','query',[changed,row(suffix='source')],[])

@@ -36,11 +36,11 @@ def save(store,section,value):
     else:
         if value.get('instrument'):instrument(value['instrument'])
         controls=value.get('controls',{})
-        keys={'wikiScope','wikiModel','wikiOperation','wikiRange','wikiStartDate','wikiEndDate','wikiRangeStart','wikiRangeEnd','wikiVersion','wikiKind','wikiRelation','wikiBudget','wikiAssessment','wikiLanguages','wikiEvidenceSize','wikiStrategy','wikiContinuous'}
+        keys={'wikiLayer','wikiScope','wikiModel','wikiOperation','wikiRange','wikiStartDate','wikiEndDate','wikiRangeStart','wikiRangeEnd','wikiVersion','wikiKind','wikiRelation','wikiBudget','wikiAssessment','wikiLanguages','wikiEvidenceSize','wikiStrategy','wikiContinuous'}
         if not isinstance(controls,dict) or set(controls)-keys or any(not isinstance(v,(str,bool,int,float)) or len(str(v))>150 for v in controls.values()):raise ValueError('Invalid Wiki controls')
         layout=value.get('layout')
         if layout is not None:
-            if not isinstance(layout,dict) or set(layout)-{'left','right','bottom'} or any(type(v) not in (int,float) or not (140 if k=='bottom' else 220)<=v<=(700 if k=='bottom' else 620) for k,v in layout.items()):raise ValueError('Invalid Wiki layout')
+            if not isinstance(layout,dict) or set(layout)-{'left','right','bottom','live'} or any(type(v) not in (int,float) or not (64 if k=='live' else 140 if k=='bottom' else 220)<=v<=(340 if k=='live' else 700 if k=='bottom' else 620) for k,v in layout.items()):raise ValueError('Invalid Wiki layout')
         selection=value.get('root_selection')
         if selection is not None:
             if not isinstance(selection,dict) or set(selection)-{'ticker','trees'} or not isinstance(selection.get('trees'),list) or len(selection['trees'])>10:raise ValueError('Invalid saved roots')

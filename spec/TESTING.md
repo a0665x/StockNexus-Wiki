@@ -230,3 +230,18 @@ PYTHONPATH=.:tests python tests/browser_chat_language.py
 - 未驗證：新 L2 正式模型品質、真實行情特徵、跨使用者登入（本版為單人 local owner）。第一版限制與未完長期驗收項詳見 RESEARCH_LAYERS。
 
 部署驗證：11 個 Wiki SQLite 已以 SQLite backup 備份至 `data/private/research-migration-backup-20261107/`，舊映像保留為 `news-atlas:pre-research-20261107`。第一次部署在 AMD 完整提交邊界（version 24、done 371）停止，重啟後同一 job ID 正常 running，既有六個 failed 工作未復活；HTTP JS 與容器 research.py SHA-256 均和主機一致，容器 healthy，模型目錄可讀。沒有為新 L2 驗收呼叫正式模型。最後 UI guard 修正後再次執行隔離 Chrome PASS；關閉測試瀏覽器後的 BrokenPipe 是未完成輪詢連線被關閉，不是斷言失敗。
+
+## 共用 L1／L2 工作區與模型分類（2026-11-07，第二輪）
+
+- `python3 -m unittest discover -s tests -v`：285 tests OK；包含分類補足不重抽新聞、精確 taxonomy revision、未知標籤原子拒絕、queued/running 分類取消保留已發布成果，以及模型分類資料合併重用。
+- `node --test tests/*.test.mjs`：9 tests OK；`tests/*.cjs` 全部通過。Chat 真實本機工具路由驗證 selected L2、DERIVED_FROM 與研究 metadata；使用 fixture，不消耗正式模型。
+- `PYTHONPATH=tests /usr/bin/python3 tests/browser_research.py`：真實 HTTP／Chrome 驗證共用 3D 實例、實際進度分隔線拖曳、550ms 忙碌說明、L1 忙碌 API 拒絕、保存研究、同股票與跨股票重開接續同一 job、歷史版本隔離、Chat 清除隱藏選取與 1393／390px 溢出邊界。
+- `browser_wiki_layout.py`：22 項實際互動 PASS；`browser_chat_language.py`：語言、多視窗同步、重載及發送生命週期 PASS。
+- 文件檢查：37 份 Markdown 通過。UI 維持原工作區視覺；未建立另一套 3D／設計系統。獨立 review 發現的版本、選取、工作接續問題均追加行為測試。
+- 未驗證：正式模型的新分類品質、巨大分類集合的手動探索及完整手機滾動旅程；本輪沒有為 QA 呼叫正式模型。Tailscale 網頁的 Chat 仍遵守既有本機來源限制，使用本機 `127.0.0.1:8765` 測試 Chat。
+
+本輪部署：SQLite backup 保留 11 個股票資料庫於 `data/private/shared-workspace-backup-20261107/`；舊映像 `news-atlas:pre-shared-wiki-20261107`。同時確認 jobs／research_jobs 沒有 running 後重啟容器與 Chat bridge。8765 healthy；HTTP 的 wiki-view.js、research-view.js、wiki-view.css 與主機逐位元相同，容器 classifier.py、compiler.py、research.py 亦相同。模型目錄可讀取 8 個選項，沒有進行付費推論。11 個 Wiki version 與部署前一致；AMD job 保持 cancelled／done 467，沒有復活使用者停止的工作。
+
+獨立審查最後 verdict 為 ship，範圍是已列出的版本、選取、研究接續與分類取消問題；不表示正式模型品質已驗收。最終 Chrome 回歸 PASS，結束後的 BrokenPipe 是已關閉瀏覽器的輪詢連線。開啟保存研究會保留真正選取的 L1 底圖版本，L2 來源另外明示固定快照，不把歷史底圖誤標最新版本。Documenter 確認普通工作區延伸沿用原設計，沒有新增 DESIGN.md 或另一套樣式規範。
+
+回退：停止工作並保留最新 DB 備份後，可用 `ATLAS_IMAGE_TAG=pre-shared-wiki-20261107 docker compose up -d --no-build` 回到本輪前映像；Chat 主機程式需同步回到前次 commit `c6d3f66`。本輪分類資料為新增研究物件，沒有刪表或重寫既有 L1。不要直接覆寫目前 SQLite；需要還原舊備份時先保留本輪新增成果。

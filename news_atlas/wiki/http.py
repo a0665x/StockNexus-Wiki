@@ -39,7 +39,9 @@ def handle(handler):
             if path=='graph': data={**store.graph(version,params.get('as_of',[None])[0],start=params.get('start',[None])[0],end=params.get('end',[None])[0]),'coverage':service.coverage(store)}
             elif path=='jobs':
                 with store.connection() as db: latest=db.execute('SELECT COALESCE(max(version),0) FROM versions').fetchone()[0]
-                data={'jobs':store.jobs(),'config':store.config(),'version':latest,'coverage':service.coverage(store)}
+                with store.connection() as db:
+                    classification=[{**dict(r),'payload':json.loads(r['payload'])} for r in db.execute("SELECT * FROM research_jobs WHERE json_extract(payload,'$.operation')='classify_l1' ORDER BY created_at DESC LIMIT 1")]
+                data={'jobs':store.jobs(),'classification_jobs':classification,'config':store.config(),'version':latest,'coverage':service.coverage(store)}
             elif path=='node':
                 with store.connection() as db:row=db.execute('SELECT payload FROM nodes WHERE id=? AND created_version<=?',(params.get('id',[''])[0],int(version) if version else 2147483647)).fetchone()
                 if not row:raise ValueError('此版本找不到觀點')

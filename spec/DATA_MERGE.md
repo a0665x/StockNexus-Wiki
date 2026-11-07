@@ -93,4 +93,6 @@ Wiki 開啟時約每 6 秒重讀股票目錄，視窗／選單取得焦點也會
 
 新增 research_objects/lenses/jobs 可合併，活動研究工作也會阻止目標寫入。來源 captured_at 在新機器以匯入時間保存；已存在的相同 revision 保留本機時間。匯入前逐一核對引用 span／原文／hash、node ID 與版本外鍵。已重現並修正「匯入來源沿用舊取得時間」的歷史污染；程式開庫也拒絕未知較新 schema，不能重設 user_version 掩蓋不相容。
 
-研究 snapshot 自含證據，私人 L2 封存於 imported owner，不能自動冒充本機 local owner。目標 taxonomy 沿用，classification 由目標針對 exact revisions 增量重建；來源撤回事件在本機匯入時才開始可見。完整邊界與回退見 [RESEARCH_LAYERS](RESEARCH_LAYERS.md)。
+研究 snapshot 自含證據，私人 L2 封存於 imported owner，不能自動冒充本機 local owner。目標 taxonomy 沿用；完全相同定義的模型 classification 可映射重用，不相容者保留原版，待使用者明確補足；來源撤回事件在本機匯入時才開始可見。完整邊界與回退見 [RESEARCH_LAYERS](RESEARCH_LAYERS.md)。
+
+模型分類補充：匯入的 taxonomy／assignment 原版封存；只有整份 term 定義與 alias 相同，才將模型 assignment 映射至本機 taxonomy revision 並記錄來源 revision，首次可見仍以本機匯入時間為準。重複合併不重複 assignment，不相容定義不覆蓋本機政策。

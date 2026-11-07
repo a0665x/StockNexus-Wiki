@@ -258,8 +258,11 @@ class WikiService:
             rows=self.scope_rows(store,dates)
             if len(rows)>10000:raise ValueError('範圍超過10000篇，請重新預覽較小範圍')
             store.ingest(rows);cfg.update(date_range=dates,revision_ids=[a['revision_id'] for a in rows],catch_up=True)
-            store.configure(cfg);self._refresh(store);self.wake.set()
-            return {'instrument':store.instrument,'coverage':self.coverage(store),'config':store.config()}
+            store.configure(cfg);self._refresh(store)
+            from .classifier import enqueue
+            classification=enqueue(store,cfg['model'],cfg.get('reasoning_effort','high'))
+            self.wake.set()
+            return {'instrument':store.instrument,'coverage':self.coverage(store),'config':store.config(),'classification':classification}
 
     def configure(self,body):
         with self.lock:return self._configure(body)
@@ -276,7 +279,12 @@ class WikiService:
         with self.lock:return self._cancel(body)
 
     def _cancel(self,body):
-        store=self.store(body.get('instrument'));store.cancel(body.get('job_id'))
+        store=self.store(body.get('instrument'));ident=body.get('job_id')
+        with store.connection() as db:
+            classification=db.execute("SELECT 1 FROM research_jobs WHERE id=? AND json_extract(payload,'$.operation')='classify_l1'",(ident,)).fetchone()
+        if not classification:store.cancel(ident)
+        with store.connection() as db:
+            db.execute("UPDATE research_jobs SET status='cancelled',updated_at=? WHERE json_extract(payload,'$.operation')='classify_l1' AND status IN ('queued','running')",(now(),))
         try: self.bridge_request('/wiki/cancel',{'job_id':body.get('job_id')},timeout=2)
         except RuntimeError: pass
         cfg=store.config();cfg['enabled']=False;cfg['catch_up']=False;store.configure(cfg)
@@ -346,7 +354,10 @@ class WikiService:
                 if not store.reserve_call(job,revision): return
                 context=store.context({**article,'summary':' '.join(a['title']+' '+a['summary'][:1500] for a in group)})
                 refs=[n['id'] for n in context if n['kind']=='ArticleRevision']
-                with store.connection() as db:article['_related_articles']=[json.loads(r[0]) for r in db.execute('SELECT payload FROM articles WHERE id IN (SELECT value FROM json_each(?))',(json.dumps(refs),))]
+                with store.connection() as db:
+                    from .research import taxonomy
+                    article['_taxonomy']=taxonomy(db)
+                    article['_related_articles']=[json.loads(r[0]) for r in db.execute('SELECT payload FROM articles WHERE id IN (SELECT value FROM json_each(?))',(json.dumps(refs),))]
                 job['current_title']=article['title']
                 with store.connection() as db:
                     db.execute("UPDATE jobs SET payload=json_set(payload,'$.current_title',?,'$.current_date',?,'$.current_size',?,'$.group_info',json(?)) WHERE id=?",(article['title'],article['published_at'],len(group),json.dumps(group_info),job['id']))
@@ -396,7 +407,14 @@ class WikiService:
             self.refresh(store);self.process(store,max_groups=max_groups)
             from .research import Research, enabled
             if enabled() and not self.stop.is_set():
-                research=Research(store);research.observe_news(self.news);research.refresh_live();research.process(self)
+                from .classifier import process as classify_pending
+                classify_pending(store,self)
+                research=Research(store);research.observe_news(self.news)
+                l1_busy=False
+                for candidate in self.stores():
+                    with candidate.connection() as db:
+                        l1_busy=l1_busy or bool(db.execute("SELECT 1 FROM jobs WHERE status IN ('queued','running')").fetchone()) or bool(db.execute("SELECT 1 FROM research_jobs WHERE json_extract(payload,'$.operation')='classify_l1' AND status IN ('queued','running')").fetchone())
+                if not l1_busy:research.refresh_live();research.process(self)
 
     def loop(self):
         while not self.stop.is_set():

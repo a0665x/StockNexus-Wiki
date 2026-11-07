@@ -339,3 +339,7 @@ GraphRepository 以每次請求 ticker 路由搜尋、關聯快取、股價、�
 ## 2026-11-07：共享 L1 與 Lens／L2 垂直流程
 
 新增分類版本、Research Lens、固定證據快照、L2 claim registry、來源圖與 live/pinned。沿用單模型槽與資料庫；新推論有界語意核對，失敗保留前版。移除 L1 輸入的未來報酬。合併修正取得時間污染並嚴格驗證引用與 schema。真實修改／BDD／遷移／限制見 [RESEARCH_LAYERS](RESEARCH_LAYERS.md)，測試見 [TESTING](TESTING.md)。
+
+## 2026-11-07 共用 L1/L2 工作區
+
+模型分類接入 L1 原子發布與明確補足；模型 assignment 可跨相容 taxonomy 合併重用。共用圖譜增加層切換、分類色彩與選取光暈；L2 研究與 Chat 使用相同節點來源鏈。移除手填分類／包含排除欄，新增 550ms 忙碌原因與可保存進度高度。驗證與限制見 TESTING、RESEARCH_LAYERS。

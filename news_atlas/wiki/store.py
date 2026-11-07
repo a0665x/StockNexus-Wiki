@@ -9,7 +9,7 @@ import re
 import sqlite3
 import uuid
 
-PROMPT_VERSION = 'wiki-extract-v7'
+PROMPT_VERSION = 'wiki-extract-v8'
 KINDS = ('Claim', 'Event', 'Thesis')
 RELATIONS = ('SUPPORTS', 'CONTRADICTS', 'UPDATES', 'DEPENDS_ON', 'RELATED_TO', 'TEMPORALLY_PRECEDES')
 
@@ -213,6 +213,10 @@ class WikiStore:
             all_nodes={n['id']:n for n in [*article_nodes,*nodes]}
             all_nodes.update({n['id']:n for n in context})
             for n in [*article_nodes,*nodes]:
+                classification=n.pop('_classification',None)
+                if classification:
+                    from .classifier import save
+                    save(db,classification)
                 n={**n,'available_at':stamp,'version':version,'is_fixture':self.fixture,'batch_id':job['id']+':'+article['revision_id']}
                 db.execute('INSERT OR IGNORE INTO nodes VALUES (?,?,?,?)',(n['id'],n['kind'],version,encode(n)))
             for edge in edges:
@@ -294,10 +298,14 @@ class WikiStore:
                 JOIN visible t ON e.target=t.id WHERE e.created_version<=?''',(chosen,allowed,allowed,limit,chosen))]
             total=db.execute('SELECT count(*) FROM nodes WHERE created_version<=? AND (? IS NULL OR id IN (SELECT value FROM json_each(?)))',(chosen,allowed,allowed)).fetchone()[0]
             count=db.execute('SELECT count(*) FROM articles').fetchone()[0]
+            from .classifier import enrich
+            cutoff=dt.datetime.fromisoformat(stamp) if as_of else (dt.datetime.fromisoformat(next(v['created_at'] for v in versions if v['version']==chosen)) if version and chosen else None)
+            classification=enrich(db,{'nodes':nodes,'edges':edges},cutoff)
+            classification_jobs=[{**dict(r),'payload':json.loads(r['payload'])} for r in db.execute("SELECT * FROM research_jobs WHERE json_extract(payload,'$.operation')='classify_l1' ORDER BY created_at DESC LIMIT 1")]
         perspectives=extra.pop('filtered_perspectives')
         visible_ids={n['id'] for n in nodes}|{n['id'] for n in perspectives['theses']}
         extra['histories']={k:v for k,v in extra['histories'].items() if k in visible_ids}
-        return {**extra,'instrument':self.instrument,'mode':'live_recorded','version':chosen,'versions':versions,'nodes':nodes,'edges':edges,'total_nodes':total,'captured_articles':count,'truncated':total>len(nodes),'config':self.config(),'jobs':self.jobs(),'perspectives':perspectives}
+        return {**extra,'classification_jobs':classification_jobs,'taxonomy':classification['taxonomy'],'opinion_groups':classification['opinion_groups'],'instrument':self.instrument,'mode':'live_recorded','version':chosen,'versions':versions,'nodes':nodes,'edges':edges,'total_nodes':total,'captured_articles':count,'truncated':total>len(nodes),'config':self.config(),'jobs':self.jobs(),'perspectives':perspectives}
 
     def markdown(self,version=None):
         graph=self.graph(version=version)
@@ -366,6 +374,10 @@ def validate_proposal(article,proposal,context):
             meta=n['opinion_metadata']
             if not isinstance(meta,dict) or set(meta)!={'claim_type','conditions','horizon','change_reason'} or meta['claim_type'] not in ('reported_claim','fact_excerpt','inference','hypothesis') or not isinstance(meta['conditions'],list) or len(meta['conditions'])>8 or any(not isinstance(x,str) or len(x)>500 for x in meta['conditions']) or not isinstance(meta['horizon'],str) or len(meta['horizon'])>300 or not isinstance(meta['change_reason'],str) or len(meta['change_reason'])>500:raise ValueError('Invalid opinion metadata')
             node['opinion_metadata']=meta;node['id']='node-'+digest([node['id'],meta]);ident=node['id']
+        if 'classification' in n:
+            from .classifier import validate
+            if not article.get('_taxonomy'):raise ValueError('Classification requires frozen taxonomy')
+            node['_classification']=validate(n['classification'],node,article['_taxonomy'])
         mapped[n['key']]=node;nodes.append(node)
         for source_id in dict.fromkeys(c['article_revision_id'] for c in refs):
             edges.append({'source':source_id,'target':ident,'type':'SUPPORTS','rationale':'原文支持此LLM提案；只核對引用，不代表陳述已證實。','citations':[c for c in refs if c['article_revision_id']==source_id]})

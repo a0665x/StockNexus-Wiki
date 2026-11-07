@@ -131,7 +131,7 @@ def parse_lens(body,stock,tax,clock=None):
     exclusions=re.findall(r'(?:排除|不含|excluding|exclude)\s*[「"\']([^」"\']+)[」"\']',q,re.I)
     unparsed=re.sub(r'(?:排除|不含|excluding|exclude)\s*[「"\'][^」"\']+[」"\']','',q,flags=re.I)
     if re.search(r'排除|不含|不包括|僅限|只要|必須|\b(?:exclude|excluding|only|AND|OR|NOT)\b',unparsed,re.I):
-        raise ValueError('硬條件尚不明確：請用篩選器，或以「排除「關鍵字」」指定排除文字')
+        raise ValueError('硬條件尚不明確：請在問題中以 排除「關鍵字」 指定排除文字；其他複雜硬條件目前無法解析')
     if exclusions:ast={'op':'and','args':[ast,*[{'op':'not','arg':{'op':'text','value':x}} for x in exclusions]]}
     soft=[t['id'] for t in tax['terms'] if any(matches(q,a) for a in [t['label'],*t['aliases']])]
     momentum=bool(re.search(r'動能|momentum',q,re.I))
@@ -148,7 +148,7 @@ def epochs(db):
     nodes=[tuple(r) for r in db.execute('SELECT id,created_version FROM nodes ORDER BY id')]
     edges=[tuple(r) for r in db.execute('SELECT id FROM edges ORDER BY id')]
     tax=taxonomy(db)
-    status_events=[tuple(r) for r in db.execute("SELECT id FROM research_objects WHERE kind='source_status' ORDER BY id")]
+    status_events=[tuple(r) for r in db.execute("SELECT id FROM research_objects WHERE kind IN ('source_status','classification') ORDER BY id")]
     consumed_prefix=0
     for source in sources:
         if source[0] not in done:break
@@ -183,7 +183,13 @@ def bundle(db,lens):
     classified={}
     for r in db.execute("SELECT payload FROM research_objects WHERE kind='classification' AND owner=''"):
         a=json.loads(r[0])
-        if a['taxonomy_revision']==tax['revision_id'] and instant(a['available_at'])<=cutoff:classified[a['opinion_revision']]=a
+        if a.get('classifier_version')=='llm-v1' and a['taxonomy_revision']==tax['revision_id'] and instant(a['available_at'])<=cutoff:classified[a['opinion_revision']]=a
+    from .classifier import groups
+    membership=groups({'nodes':list(nodes.values()),'edges':edges})
+    inherited={i:[] for i in nodes}
+    for root,members in membership.items():
+        for member in members:
+            if member!=root:inherited[member].extend(classified.get(root,{}).get('assignments',[]))
     candidates=[];excluded={'outdated_source':0,'outside_window':0,'hard_filter':0,'unresolved_source':0};assignments=[]
     for n in nodes.values():
         if n['id'] in superseded:continue
@@ -194,17 +200,18 @@ def bundle(db,lens):
         if not any(a.get('published_at') and start<=instant(a['published_at'])<cutoff for a in sources):excluded['outside_window']+=1;continue
         text=n.get('title','')+' '+n.get('summary','')
         classification=classified.get(n['id'],{})
-        items=classification.get('assignments',[])
+        items=[*classification.get('assignments',[]),*inherited.get(n['id'],[])]
         labels=[a['term_id'] for a in items];assignments.extend(items)
         if not allowed(lens['filter_ast'],text,labels):excluded['hard_filter']+=1;continue
         terms=re.findall(r'[a-z0-9]{2,}|[\u3400-\u9fff]{2,}',lens['query'].lower())
-        score=sum(1 for x in terms if matches(text,x))+2*len(set(labels)&set(lens['soft_terms']))
+        soft_hits=sum(any(matches(text,a) for a in [t['label'],*t['aliases']]) for t in tax['terms'] if t['id'] in lens['soft_terms'])
+        score=sum(1 for x in terms if matches(text,x))+soft_hits+2*len(set(labels)&set(lens['soft_terms']))
         evid=[]
         for c in cites:
             a=articles[c['article_revision_id']]
             if a.get(c['field'],'')[c['start']:c['end']]!=c['quote']:raise ValueError('L1 引用內容與來源不符')
             evid.append({**c,'revision_id':a['revision_id'],'url':a['url'],'provider':a['provider'],'published_at':a['published_at'],'available_at':a['available_at'],'content_completeness':'summary_only','syndication_group':digest(re.sub(r'\W','',a['title'].casefold()))})
-        candidates.append({'opinion_id':logical(n['id']),'revision_id':n['id'],'claim_id':n['id']+':claim','claim_type':n.get('opinion_metadata',{}).get('claim_type','inference' if n['kind']=='Thesis' else 'reported_claim'),'statement':n['summary'],'title':n['title'],'scope':n['scope'],'available_at':n['available_at'],'conditions':n.get('opinion_metadata',{}).get('conditions',[]),'horizon':n.get('opinion_metadata',{}).get('horizon'),'change_reason':n.get('opinion_metadata',{}).get('change_reason','legacy wrapper'),'legacy':'opinion_metadata' not in n,'evidence':evid,'labels':labels,'score':score,'selection_reason':'分類／全文相關' if score else '同股票時間窗內背景觀點'})
+        candidates.append({'opinion_id':logical(n['id']),'revision_id':n['id'],'kind':n['kind'],'claim_id':n['id']+':claim','claim_type':n.get('opinion_metadata',{}).get('claim_type','inference' if n['kind']=='Thesis' else 'reported_claim'),'statement':n['summary'],'title':n['title'],'scope':n['scope'],'available_at':n['available_at'],'conditions':n.get('opinion_metadata',{}).get('conditions',[]),'horizon':n.get('opinion_metadata',{}).get('horizon'),'change_reason':n.get('opinion_metadata',{}).get('change_reason','legacy wrapper'),'legacy':'opinion_metadata' not in n,'evidence':evid,'labels':labels,'score':score,'selection_reason':'分類／全文相關' if score else '同股票時間窗內背景觀點'})
     # Keep contrary connected opinions only when they passed the same filters and time checks.
     candidates.sort(key=lambda n:(-n['score'],n['revision_id']))
     pool={n['revision_id']:n for n in candidates}
@@ -268,12 +275,14 @@ class Research:
     def prepare(self,body,clock=None):
         with self.store.connection() as db:
             db.execute('BEGIN IMMEDIATE')
-            classify(db)
             tax=taxonomy(db);lens=parse_lens(body,self.store.instrument,tax,clock)
             b=bundle(db,lens);snapshot='snapshot-'+digest(b)
             return lens,b,snapshot
 
     def query(self,body):
+        with self.store.connection() as db:
+            if db.execute("SELECT 1 FROM jobs WHERE status IN ('queued','running')").fetchone() or db.execute("SELECT 1 FROM research_jobs WHERE json_extract(payload,'$.operation')='classify_l1' AND status IN ('queued','running')").fetchone():
+                raise ValueError('請先停止 L1 資料補足，再開始進階觀點分析；已保存的研究仍可閱讀。')
         lens,b,snapshot=self.prepare(body)
         model=body.get('model') or 'gpt-6.1-sol';effort=body.get('reasoning_effort') or 'high'
         if not isinstance(model,str) or len(model)>100 or effort not in ('low','medium','high','xhigh','max','ultra'):raise ValueError('模型設定錯誤')
@@ -282,7 +291,7 @@ class Research:
             db.execute('BEGIN IMMEDIATE')
             for r in db.execute("SELECT * FROM research_jobs WHERE owner=? AND status IN ('queued','running','completed')",(OWNER,)):
                 p=json.loads(r['payload'])
-                if p['key']==key:
+                if p.get('operation')!='classify_l1' and p['key']==key:
                     if r['status']=='completed' and not body.get('lens_id'):
                         previous=obj(db,p['run_id'],'run');previous_bundle=obj(db,previous['snapshot'],'snapshot')
                         if previous_bundle['lens']['time_spec']!=lens['time_spec']:
@@ -334,6 +343,8 @@ class Research:
 
     def read(self,kind,ident=None):
         with self.store.connection() as db:
+            if kind=='runs':
+                return {'runs':[{'id':r['id'],'created_at':r['created_at']} for r in db.execute("SELECT id,created_at FROM research_objects WHERE kind='run' AND owner=? ORDER BY created_at DESC LIMIT 20",(OWNER,))]}
             if kind=='run':
                 r=obj(db,ident,'run');b=obj(db,r['snapshot'],'snapshot')
                 return {**r,'bundle':b,'current_epochs':epochs(db)}
@@ -342,7 +353,9 @@ class Research:
                 if not r:raise ValueError('找不到研究工作')
                 return {**dict(r),'payload':json.loads(r['payload'])}
             if kind=='taxonomy':
-                tax=taxonomy(db);tax['membership_source']='exact snapshot assignments';return tax
+                from .classifier import enrich
+                graph={'nodes':[json.loads(r[0]) for r in db.execute('SELECT payload FROM nodes')],'edges':[json.loads(r[0]) for r in db.execute('SELECT payload FROM edges')]}
+                return enrich(db,graph)['taxonomy']
             if kind=='lenses':
                 state=epochs(db);out=[]
                 for r in db.execute('SELECT payload FROM research_lenses WHERE owner=? ORDER BY updated_at DESC',(OWNER,)):
@@ -376,6 +389,7 @@ class Research:
             terms=body.get('terms')
             if not isinstance(terms,list) or not 1<=len(terms)<=200:raise ValueError('分類數量錯誤')
             ids=set()
+            terms=[{k:v for k,v in t.items() if k not in ('color','opinion_ids','node_ids')} for t in terms]
             for t in terms:
                 if set(t)!={'id','facet','label','aliases','definition','include','exclude','related_terms','status'} or t['facet'] not in ('topic','driver','analysis_dimension') or not re.fullmatch(r'(topic|driver|analysis)\.[a-z_]+',t['id']) or t['id'] in ids:raise ValueError('分類格式或 ID 錯誤')
                 ids.add(t['id'])
@@ -387,7 +401,7 @@ class Research:
                     if not isinstance(t[k],list) or any(not isinstance(x,str) or len(x)>200 for x in t[k]):raise ValueError('分類清單格式錯誤')
                 if t['status'] not in ('active','deprecated'):raise ValueError('分類狀態錯誤')
             if not {t['id'] for t in old['terms']}<=ids:raise ValueError('穩定 ID 不可刪除，請標 deprecated')
-            new={'revision_id':uuid.uuid4().hex,'available_at':now(),'terms':terms};put(db,'taxonomy',new,'',new['revision_id']);classify(db);return new
+            new={'revision_id':uuid.uuid4().hex,'available_at':now(),'terms':terms};put(db,'taxonomy',new,'',new['revision_id']);return new
 
     def observe_news(self,news):
         if not hasattr(news,'for_ticker'):return
@@ -416,7 +430,7 @@ class Research:
     def process(self,service):
         with self.store.connection() as db:
             db.execute('BEGIN IMMEDIATE')
-            r=db.execute("SELECT * FROM research_jobs WHERE status='queued' ORDER BY created_at LIMIT 1").fetchone()
+            r=db.execute("SELECT * FROM research_jobs WHERE status='queued' AND COALESCE(json_extract(payload,'$.operation'),'')!='classify_l1' ORDER BY created_at LIMIT 1").fetchone()
             if not r:return
             job=dict(r);p=json.loads(job['payload']);b=obj(db,p['snapshot'],'snapshot')
             db.execute("UPDATE research_jobs SET status='running',updated_at=? WHERE id=?",(now(),job['id']))
@@ -475,6 +489,16 @@ def handle_research(handler,service,path,params,can_write):
     from .store import instrument, folder_name
     stock=instrument(body.get('instrument',''))
     if not (service.root/folder_name(stock)/'wiki.sqlite3').exists():raise ValueError('請先建立此股票的 L1 Wiki')
+    if path in ('query','refresh','availability'):
+        active=[s.instrument for s in service.stores() if any(j['status'] in ('queued','running') for j in s.jobs())]
+        for s in service.stores():
+            with s.connection() as db:
+                if db.execute("SELECT 1 FROM research_jobs WHERE json_extract(payload,'$.operation')='classify_l1' AND status IN ('queued','running')").fetchone() and s.instrument not in active:active.append(s.instrument)
+        if path=='availability':
+            with service.store(stock).connection() as db:
+                job=db.execute("SELECT id,status FROM research_jobs WHERE owner=? AND coalesce(json_extract(payload,'$.operation'),'')!='classify_l1' AND status IN ('queued','running') ORDER BY created_at LIMIT 1",(OWNER,)).fetchone()
+            handler.json_response(200,{'busy':bool(active),'instruments':active,'active_job':dict(job) if job else None});return
+        if active:raise ValueError('請先停止 L1 資料補足，再開始進階觀點分析：'+', '.join(active))
     research=Research(service.store(stock));research.observe_news(service.news)
     if handler.command=='GET':result=research.read(path,body.get('id'))
     elif path=='query':result=research.query(body);service.wake.set()

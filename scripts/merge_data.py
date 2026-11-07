@@ -188,11 +188,26 @@ def wiki_merge(src,dst,stats,stamp):
             else:union_row(dst,t,r,stats)
     # Research snapshots are self-contained immutable artifacts. Local owner is not portable.
     # Archive foreign personal results under an import owner, never expose as local results.
+    from news_atlas.wiki.research import taxonomy as active_taxonomy
+    local_tax=active_taxonomy(dst)
+    incoming_tax={json.loads(r['payload'])['revision_id']:json.loads(r['payload']) for r in src.execute("SELECT payload FROM research_objects WHERE kind IN ('taxonomy','taxonomy_archive')")} if 'research_objects' in st else {}
     for t in sorted(RESEARCH_TABLES & st):
         for raw in src.execute('SELECT * FROM '+t):
             r=dict(raw)
             if t=='research_objects' and r['kind'] in ('taxonomy','classification'):
-                continue  # local taxonomy policy is authoritative; snapshots retain their manifest
+                value=json.loads(r['payload'])
+                if r['kind']=='classification' and value.get('classifier_version')=='llm-v1':
+                    source_tax=incoming_tax.get(value['taxonomy_revision'])
+                    if source_tax and encoded(source_tax['terms'])==encoded(local_tax['terms']):
+                        mapped={**value,'available_at':stamp,'taxonomy_revision':local_tax['revision_id'],'original_taxonomy_revision':value['taxonomy_revision'],'taxonomy_mapping':'identical_definitions_and_aliases','assignments':[{**a,'taxonomy_revision':local_tax['revision_id']} for a in value['assignments']]}
+                        ident='classification-'+digest([value['opinion_revision'],local_tax['revision_id'],'llm-v1'])
+                        if not dst.execute('SELECT 1 FROM research_objects WHERE id=?',(ident,)).fetchone():
+                            union_row(dst,'research_objects',{'id':ident,'kind':'classification','owner':'','created_at':stamp,'payload':encoded(mapped)},stats)
+                if r['kind']=='taxonomy':
+                    if dst.execute('SELECT 1 FROM research_objects WHERE id=?',(r['id'],)).fetchone():continue
+                    r['kind']='taxonomy_archive'
+                else:r['kind']='classification_archive';r['id']='archive-'+r['id']
+                r['owner']='';union_row(dst,t,r,stats);continue
             if t=='research_objects' and r['kind']=='source_status':
                 if dst.execute('SELECT 1 FROM research_objects WHERE id=?',(r['id'],)).fetchone():continue
                 event=json.loads(r['payload']);event['original_known_at']=event['known_at'];event['known_at']=stamp;event['committed_at']=stamp

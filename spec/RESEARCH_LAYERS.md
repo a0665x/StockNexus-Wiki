@@ -43,20 +43,20 @@ SQLite 新增 `research_objects`（不可變 taxonomy/classification/source_stat
 
 Live 保存代表後續增量維護：工作槽輪到該股票時檢查 candidates/taxonomy/source status/UTC 日期變動；重檢索後有效輸入相同不呼叫模型。第一次模型失敗／重啟中斷便停止自動付費重試，保留上一份 run，等使用者按更新。未完成 L1 水位會讓 live 保持 stale。Pinned 保留完整 snapshot，讀取另外附 current_epochs，內容不回寫。一次工作 snapshot 所有表讀取使用同一 SQLite transaction。沒有外部索引發布，因此無 DB/索引雙寫混版。
 
-UI：Wiki 右上「我的研究 · L2」，沿用股票與模型。Enter 建立研究；來源可展開，研究圖以 DERIVED_FROM/SUPPORTED_BY 呈現。保存 live／pinned、刷新、歷史版本與前版 claim 差異；分類詞彙可改定義／別名／文字排除規則。所有來源 tooltip 先轉義。
+UI：Wiki 右上「研究問題 · L2」，沿用股票與模型。Enter 建立研究；來源可展開，研究圖以 DERIVED_FROM/SUPPORTED_BY 呈現。保存 live／pinned、刷新、歷史版本與前版 claim 差異；分類清單唯讀，可定位到共用圖的 L1 群；不要求使用者編寫分類定義。所有來源 tooltip 先轉義。
 
 ## 遷移、合併與回退
 
-新增表透過 WikiStore 初始化。保留 legacy L1，不全量重寫；分類按 exact opinion/taxonomy revision 增量建立，歷史 cutoff 不能使用今天才分類的 assignment。新模型提案另存 claim_type/conditions/horizon/change_reason；UPDATES 沿用 logical lineage，已被修訂的 base 拒絕並行覆寫。
+新增表透過 WikiStore 初始化。保留 legacy L1，不全量重寫；模型分類按 exact opinion/taxonomy revision 增量建立，歷史 cutoff 不能使用今天才分類的 assignment。新模型提案另存 claim_type/conditions/horizon/change_reason；UPDATES 沿用 logical lineage，已被修訂的 base 拒絕並行覆寫。
 
-merge_data.sh 同時檢查 L1/research 活動工作，驗證版本外鍵、引用 field/start/end/quote/content_hash、node ID，所有 DB 預檢後才提交。新匯入來源 captured_at 與撤回 known_at 以本機匯入時間記錄；原 source snapshot 備份保存。分類在目標重建，目標 taxonomy 不覆蓋。私人研究成果保存為 imported owner 封存，不自動冒充本機 local owner 或啟動背景模型；目前需重新建立本機 Lens。這是明確的跨 owner 邊界，不是匯入資料丟失。
+merge_data.sh 同時檢查 L1/research 活動工作，驗證版本外鍵、引用 field/start/end/quote/content_hash、node ID，所有 DB 預檢後才提交。新匯入來源 captured_at 與撤回 known_at 以本機匯入時間記錄；原 source snapshot 備份保存。目標 taxonomy 不覆蓋；完整定義與別名相同時，匯入模型分類以可追溯映射重用，available_at 為本機匯入時間；不相容定義的原分類封存，等明確補足。私人研究成果保存為 imported owner 封存，不自動冒充本機 local owner 或啟動背景模型；目前需重新建立本機 Lens。這是明確的跨 owner 邊界，不是匯入資料丟失。
 
 關閉新功能：`NEWS_ATLAS_RESEARCH=0`（Compose 環境轉交）後重啟；L1 保持可用。資料回退使用 merge report 中 before 備份，停服務後 SQLite backup 還原，不能只覆蓋有 WAL 的主檔。原 Wiki 未刪除。
 
 ## 已知限制（不可當成完整長期架構驗收）
 
 - Lens 是確定性解析＋顯式 Boolean AST；未知的自然語言硬條件拒絕並提示。尚未接 LLM 複雜查詢解析、跨語種語意檢索、任意自然語言時間政策。
-- Classifier 第一版為詞彙規則、low confidence；不是已驗證的語意分類器。candidate 不自動升級；舊 L1 條件不足清楚標 legacy。新原子觀點仍需人工抽查。
+- Classifier 已接 L1 模型輸出與舊群分類工作；schema／版本／術語白名單由程式驗證，語意仍需抽查。candidate 不自動升級。無模型分類的舊節點標 pending，仍有文字與 alias 檢索降級；不能把文字命中當作模型分類。
 - 價格動能與敘事量化基線不可用；不計算假數字。現有事後行情檢視保留，尚無新的 MarketFeature／Outcome 版本儲存與成熟排程。
 - 模型敘事 inference 有引用白名單、數值、條件、反證與基線規則，新 inference 額外做一次有界語意支持檢查，失敗不自動重試；原文 excerpt 不加付費審核。模型通過仍不是證明。`semantic_validation` 明示是否 model_checked_not_proven；引用存在不代表支持關係為真。真實模型輸出品質尚未在此輪付費驗收。
 - 自動更新時窗粒度為 UTC 日；尚無完整市場交易日曆／盤中滾動排程。Saved Lens 修改規則目前以建立新研究保存，歷史不覆寫。
@@ -64,3 +64,17 @@ merge_data.sh 同時檢查 L1/research 活動工作，驗證版本外鍵、引�
 - L2 Graph 第一版為結論→L1→原文來源；沒有新增獨立 Evidence DB，引用 span 是 evidence identity。
 
 這些缺口是後續驗收項，不以 mock 或 schema 通過宣稱全部 A01–A24 已滿足。
+
+## 2026-11-07 共用觀點工作區
+
+使用者回饋取代獨立 L2 3D 畫布與手填 taxonomy 編輯器：一個 `wikiCanvas`、相同攝影機／選取／側欄 Chat，提供 L1／L2／L1+L2。研究輸入位於左欄，已驗證的完整結果提交後逐點顯示 L2；推論中只有真實 queued/running 狀態，不預先顯示未驗證結論。L2 IDs 由 run+claim 組成，DERIVED_FROM 連到精確 L1，來源及時間仍屬固定 snapshot。
+
+原「直接／間接／低關聯／不足」是財務影響與證據屬性，保留在詳情；頂部分類篩選、色彩圖例、L1 群與 L2 檢索都使用同一 taxonomy assignment。`classifier.py` 沿 DEPENDS_ON 與反向 SUPPORTS/CONTRADICTS 取有界依賴群，不沿 RELATED_TO 把共享新聞擴成無限群。分類有多標籤；主色按穩定 term ID，hover 顯示所有分類。信心不是市場機率。
+
+新 L1 同次模型呼叫回傳分類，與觀點一併驗證／原子提交。按「補足到今天」另外為尚無當前 taxonomy 模型分類的獨立群排程，最多每批 12 群／65000 字元上下文，不重抽既有新聞。過時修訂跳過，失敗保留成果，需明確重試。方法切換不刪分類。已有 L1 分組工作不會因單純部署自動新增分類補足工作。
+
+L1 與分類工作共用模型槽；全局仍有 queued/running 時，研究頁可讀，但新 L2／更新 API 與按鈕拒絕，停留 550ms 顯示原因。停止 L1 不刪已完成資料。持續追蹤研究在 L1 空閒後才檢查更新。進度區新增可拖拉／鍵盤調整邊界，尺寸與既有工作區一起保存；不修改圖資料、鏡頭或模型設定。
+
+BDD 增補：分類補足重入不重複付費；未知 term 不部分發布；同定義資料合併不丟模型分類；分類不跨 RELATED_TO 擴散；忙碌拒絕新 L2 但舊圖可讀；真實指標拖拉不重建圖；停留提示時限；L1/L2 切換共用相同 3D 實例；Chat 工具依選取回傳 L2、L1 與精確來源。GET research 新增 `availability`、`runs`，仍遵守原本機來源／owner 邊界。
+
+交叉審查補充邊界：純 L1 只讀目前所選 L1 版本，切換歷史版本會退出研究疊圖；L2 引用背景明示固定研究快照，bundle 保留原節點 kind。隱藏的選取會同步從 Chat 清除，無選取時只以畫面可見節點為預設範圍。返回設定／切換股票再回來會接續原研究 job，availability 可找回該股票活動工作；不因重新開頁重送模型。分類工作可用同一停止按鈕取消，取消後的模型例外不能把 cancelled 改成 failed，已提交標籤保留。
