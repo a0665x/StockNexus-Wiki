@@ -121,3 +121,5 @@ Wiki 使用與深色圖譜一致的細線文件、掃描光條與知識連線，
 正式驗收目標固定為 GOOGL，最近一個日曆月（本輪 UTC 2026-10-07 至 2026-11-07，含起訖日）。本輪從既有 News DB 選 2760 篇，root universe 也僅含這個月，不擴成全年、不重新抓新聞。舊成果重用；其他使用者已取消的股票工作不復活。後續換日期需明記 cutoff，不能把一次固定日期寫成永久「最近」。
 
 `classify_missing` 將 plan.date_range 傳給 classifier。只對依賴鏈含區間內來源的舊觀點群補分類，日期以來源發布 UTC 日為準；未知日期不符合有限窗口。區間外節點可保留為該群的既有脈絡，但不因此全庫重新分類。分類仍是 exact opinion/taxonomy revision 的共享成果，不依方法另開 DB；相同 revision 已分類即重用。活動分類工作若日期不同必須停止舊工作，不能靜默沿用。僅剩分類時也保存新維護範圍，避免畫面仍顯示年度分母。
+
+月範圍實測也暴露 root 準備成本：同一圖的每個 root 都重建／排序全部鄰接資料。`exploration.adjacency_index` 現在由 `forest.prepare` 每次只建立一次，傳給各次 trace；索引只屬於此準備請求，不跨股票或設定共用。排序、barrier、depth、branch／node budget 及覆蓋記帳不變。正式月圖的 793 棵樹與原計畫完全相同；實測邊界與數字見 TESTING。

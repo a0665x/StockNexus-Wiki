@@ -7,7 +7,7 @@ import json
 from ..graph_storage import select
 from ..graph_cache import build_cached
 from ..graph_payload import graph_payload
-from ..exploration import trace,settings
+from ..exploration import trace,settings,adjacency_index
 from .store import capture
 from .evidence import bounded_groups
 
@@ -54,10 +54,10 @@ def prepare(news,ident,universe,graph_settings,dates):
     degree={n:0 for n in refs}
     for e in edges:degree[e['source']]+=e['weight'];degree[e['target']]+=e['weight']
     roots=sorted((n for n,items in refs.items() if any((a['provider'],a['id']) in target_keys for a in items)),key=lambda n:(-degree[n],n))
-    trees=[];context_keys=set()
+    trees=[];context_keys=set();adjacency=adjacency_index(edges)
     for root in roots:
         if not any((a['provider'],a['id']) in uncovered for a in refs[root]):continue
-        tree=trace(edges,root,cfg)
+        tree=trace(edges,root,cfg,adjacency=adjacency)
         members=[a for n in tree['nodes'] for a in refs[n['id']]]
         covered=[a for a in members if (a['provider'],a['id']) in uncovered]
         if not covered:continue

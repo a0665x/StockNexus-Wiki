@@ -128,4 +128,23 @@ class ForestTests(unittest.TestCase):
         self.assertEqual(self.store.jobs()[0]['status'],'completed')
         self.assertEqual(self.service.coverage(self.store)['scope_done'],16)
 
+    def test_many_roots_share_one_index_without_changing_browser_tree_results(self):
+        from unittest.mock import patch
+        from news_atlas.exploration import adjacency_index, trace
+        rows=[row(title='Isolated '+str(i),suffix=str(i)) for i in range(8)]
+        body=self.body(rows)
+        body['graph_settings']['relation_settings'].update(title=False)
+        observed=[]
+        def checked(edges,root,cfg,**kw):
+            result=trace(edges,root,cfg,**kw)
+            self.assertEqual(result,trace(edges,root,cfg))
+            observed.append(id(kw['adjacency']))
+            return result
+        with patch('news_atlas.wiki.forest.adjacency_index',wraps=adjacency_index) as build, patch('news_atlas.wiki.forest.trace',side_effect=checked):
+            plan=self.service.plan(body)
+        self.assertGreater(len(plan['graph_selection']['trees']),1)
+        self.assertEqual(build.call_count,1)
+        self.assertEqual(len(set(observed)),1)
+        self.assertEqual(sum(len(t['targets']) for t in plan['graph_selection']['trees']),len(rows))
+
 if __name__=='__main__':unittest.main()

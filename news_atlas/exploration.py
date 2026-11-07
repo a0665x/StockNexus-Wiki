@@ -94,11 +94,16 @@ def rank_roots(rows,query,limit):
     matches.sort(key=lambda r:(-r['score'],r['id']))
     return matches[:limit],len(matches)
 
-def trace(edges,root,cfg,barriers=()):
+def adjacency_index(edges):
+    """Build the deterministic traversal index once for a shared graph."""
     adj={}
     for e in edges:
         for a,b in [(e['source'],e['target']),(e['target'],e['source'])]: adj.setdefault(a,[]).append((b,e))
     for values in adj.values(): values.sort(key=lambda pair:(-pair[1]['weight'],pair[1]['id']))
+    return adj
+
+def trace(edges,root,cfg,barriers=(),*,adjacency=None):
+    adj=adjacency_index(edges) if adjacency is None else adjacency
     nodes={root:{'id':root,'depth':0,'strength':1,'parent':None}};selected=[];frontier=[root];truncated=False
     for depth in range(1,int(cfg['depth'])+1):
         new=[]

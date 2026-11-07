@@ -18,6 +18,10 @@
 
 本輪新增／修改測試位於 `test_wiki_data_audit.py`、`test_wiki_classifier.py`。集中 11 tests OK；完整 `python3 -m unittest discover -s tests`：294 tests / 68.429s / OK（既有 ResourceWarning 保留，無失敗）；文件連結及 diff whitespace 通過。隔離測試仍可用 TSLA fixture 驗證協定；正式維護驗收只用 GOOGL 一個月，不啟動其他股票。原始資料預檢不等於事實審查或完整付費模型驗收，正式執行結果另記。
 
+實際啟動紀錄：公開 API 核對同一月範圍 2760／921 重用／1839 pending，Graph root 共 793 棵；以 gpt-6.1-sol/high、update、continuous=false 開始固定月內補足與 694 組舊分類。既有 TSM 為使用者 cancelled，未復活。Wiki 工作區已保存 GOOGL、精確日期與同一 universe，保留面板布局；原設定留私有備份。開始工作不等於整月完成，需以後續發布／receipt 判定。
+
+首次正式 plan 約 155 秒；graph cache miss 記錄 87753.41ms（其中關聯 compute 86780.10ms）。檢查發現每棵 root 都重建鄰接索引，因此共用同一次準備的索引。正式 cache 的唯讀重播，包含取新聞與全部 root 準備但排除 relation build、cache decode、HTTP：0.343 秒，2760 targets／793 roots，完整 forest 與原 plan 相等。這不是端到端延遲保證。多 root／空鄰接索引共享、完整 coverage 及瀏覽器 mixed/separate trace parity 測試通過；本次 focused forest/API 16 tests / 9.533s / OK，Node exploration assertions PASS。 最終完整回歸（建置結束後單獨執行）：295 tests / 48.650s / OK。
+
 本次沒有 schema migration／刪庫；程式回退可用 `news-atlas:pre-googl-month-20261107` 搭配現有資料，但舊版補分類不具月範圍限制，回退後不可直接啟動分類。還原 DB 備份會失去之後新增成果，須先停止工作並確認需要，不能拿舊備份覆蓋正常增量資料。
 
 ## 2026-11-07：Wiki 503／單一整理入口回歸
@@ -48,6 +52,8 @@ for test in tests/*.cjs; do node "$test" || exit; done
 node --check dist/app.js
 python3 spec/scripts/verify_docs.py
 ```
+
+完整 suite 的啟動器 TTY 測試會取得主機 8765 啟動鎖；不要與 `run.sh build/up` 並行，否則會測到真實啟動器佔鎖而非產品回歸。2026-11-07 的首次 295 項 run 因此有 1 項失敗，Docker build 完成後才重跑；不可把這次失敗隱去或改弱鎖保護。
 
 一般單元測試不需網路／Massive key。部分 Python API parity 測試呼叫 Node，因此完整測試需要 Node。不要把通過 mock 測試宣稱為 Massive 帳號實際授權成功。
 
