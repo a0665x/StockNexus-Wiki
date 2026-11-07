@@ -16,6 +16,12 @@
 
 一次 UI detector 指到已移除巢狀 topic 樹的舊 border 樣式；確認無使用者後刪除。桌面／手機實際截圖檢查與最終補驗列於交付紀錄。未要求模型為新增詞重算全部歷史。
 
+正式交付補驗：34 項瀏覽器檢查再次通過，桌面及手機選單在視窗內；移除的巢狀 topic 樣式無其他引用。升級 CLI 首次 POST 因缺少 Origin 被同源保護拒絕（403，沒有 taxonomy 寫入），補上合法同源標頭，不放寬伺服器權限。新增 `test_wiki_taxonomy_upgrade.py` 真實隔離 HTTP 測試先失敗、修正後 1 test OK，驗證 preview 不寫、apply 一版、repeat unchanged，零新 jobs；此測試是上述 304 項完整回歸之後的追加 focused 驗證。
+
+部署程式 `0b5915c` 已推送 llm_wiki，於所有 DB 沒有 running 模型工作時持寫鎖停止，再以 healthy 新容器啟動；HTTP 的 JS/CSS 與 container 的 classifier/research/store 檔案逐位元組相同。升級腳本在主機執行，七個已有有效版本的 Wiki 各增加兩術語；第二次全數 unchanged，沒有復活已停止工作。沒有版本的輸入草稿 DB 未作遷移。術語舊版及工作設定備份、升級收據及驗證在 gitignored `data/private/wiki-taxonomy-20261107/`，舊 image `news-atlas:pre-taxonomy-chart-20261107`；資料未刪除。
+
+07:41 UTC 實際 API：GOOGL 月圖 v425，1748 nodes／750 觀點群，99 個標籤 membership；TSM 同月圖 v11，127 nodes／51 群、32 個標籤 membership。這是實際已有分類的計數，不是新增兩詞已完成全量評估。GOOGL 67 個既有 assignment 保留原版本，結構預檢 ready／quick_check ok，13943 articles／2216 nodes／1425 edges／425 versions。原工作 `cb7b2bbc72bf4b68b243532033e4ef54` 持續 running、done 21、4 receipts，model/high、凍結 universe／selection／settings／strategy 與部署前相同；舊分類工作同 ID 36/694 queued，未因詞彙升級重排或增加付費工作。GOOGL／TSM graph GET 分別約 2747／1365ms，僅本機樣本；新標籤內容品質尚未作獨立語意驗收。
+
 ## 2026-11-07：GOOGL 資料先行與月範圍維護
 
 先執行 `python3 scripts/wiki_data_audit.py --instrument NASDAQ:GOOGL`：正式資料庫 schema 1、quick_check ok，13943 article revisions／421 versions／2164 nodes／1373 edges，文章 hash、引用 span/hash、端點及版本關係均無錯誤。939 個知識節點缺舊版未記錄的 opinion_metadata、283 缺翻譯，標為 legacy；保留原文、ID、日期與模型成果，不虛構補齊。node.scope 是模型的研究適用描述，不應誤當必須等於 EXCHANGE:TICKER 的股票欄位；股票隔離核對 DB metadata 與 edge.instrument_id。

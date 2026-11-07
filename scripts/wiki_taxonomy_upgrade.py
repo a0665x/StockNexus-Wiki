@@ -26,7 +26,7 @@ def main():
         report={'instrument':stock,'previous_revision':old['revision_id'],'added':[t['id'] for t in missing],'status':'preview' if missing else 'unchanged'}
         if args.apply and missing:
             body={'instrument':stock,'expected_revision':old['revision_id'],'terms':old['terms']+missing}
-            request=urllib.request.Request(endpoint,data=json.dumps(body).encode(),headers={'Content-Type':'application/json'},method='POST')
+            request=urllib.request.Request(endpoint,data=json.dumps(body).encode(),headers={'Content-Type':'application/json','Origin':args.url.rstrip('/')},method='POST')
             with urllib.request.urlopen(request,timeout=60) as r:new=json.load(r)
             report.update(status='updated',revision=new['revision_id'])
         print(json.dumps(report,ensure_ascii=False),flush=True)
