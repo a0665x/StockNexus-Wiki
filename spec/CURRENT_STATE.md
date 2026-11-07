@@ -1,6 +1,6 @@
 # 目前狀態
 
-2026-11-07 完整交互驗收：實際操作跨 News／Timeline／Wiki／L2／設定／Chat，修正 L2 主畫面缺少載入／空／失敗重試提示、晚回覆搶回 L1、快照無回饋／重複點擊／舊回應覆蓋，以及背景 News 重繪改掉 Wiki 設定標籤。程式 `8480627`／`609f404` 已推送 llm_wiki，08:19 UTC 安全部署 healthy、實際資產一致。正式 13 項流程 PASS、入口 143–1034ms；隔離 News 33、native controls 23、Wiki 48、L2／工作區／Chat 與 22 Node suites PASS。完整 BDD、初始測試失敗原因、執行命令與限制見 [TESTING](TESTING.md)。資料無遷移或刪除；GOOGL 原月工作 v439／done61 接續，不代表整月完成。
+2026-11-07 完整交互驗收：實際操作跨 News／Timeline／Wiki／L2／設定／Chat，修正 L2 主畫面缺少載入／空／失敗重試提示、晚回覆搶回 L1、快照無回饋／重複點擊／舊回應覆蓋，以及背景 News 重繪改掉 Wiki 設定標籤。程式 `8480627`／`609f404`／`ca7c47a` 已推送 llm_wiki，最後補丁 08:24 UTC 安全部署 healthy、實際資產一致。正式 15 項流程 PASS、入口 133–1044ms，包含新導覽清除失效 spinner；隔離 News 33、native controls 23、Wiki 48、L2／工作區／Chat 與 22 Node suites PASS。完整 BDD、初始測試失敗原因、執行命令與限制見 [TESTING](TESTING.md)。資料無遷移或刪除；GOOGL 原月工作 v441／done71 接續，不代表整月完成。
 
 2026-11-07 按鈕回饋：Wiki／L2 非同步操作加即時 busy、防連點與失敗復原；停止成功拒絕舊 poll，導航保持可用。程式 `066d10b` 已推送 llm_wiki 並於 08:03 UTC 安全部署，正式資產一致、容器 healthy。真實正式頁面三輪 22 次回饋 84–1314ms；Wiki 隔離 48 checks、L2 流程與 22 Node suites 通過。2 秒指可見回饋，不是模型完成時間；寫入按鈕在隔離資料驗證。實作 `dist/wiki-view.js`／`research-view.js`，重跑 `tests/browser_wiki_live_feedback.py --url <服務網址>`，完整證據及測試 driver 修正見 [TESTING](TESTING.md)。原 GOOGL 月工作 v433／done43 持續 running，設定與成果保留；整月仍未完成，沒有新付費測試工作。
 

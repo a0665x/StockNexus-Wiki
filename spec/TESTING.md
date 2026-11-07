@@ -34,6 +34,10 @@
 
 最後補驗：預設 `browser_research.py` 已包含背景 News paint 不改 Wiki 設定標籤的紅綠回歸，完整流程再次 PASS；`test_relation_settings.cjs` 再次通過。新增 UI 檢查器無命中，37 份 spec 本地連結／必備入口與 diff whitespace 通過。其餘已列 suites 為本輪前面實際執行的結果，不聲稱每次單行修正後重跑全部測試。
 
+最後導覽邊界補驗：`navigation-red.log` 以實際 select／按鈕操作重現「L2 runs 讀取中開研究表單」殘留主圖 spinner。`ca7c47a` 在新導覽開始時清掉已失效提示；預設 `browser_research.py` 全流程通過（`navigation-final.log`）。補丁於 08:24:53 UTC 再次在無 running 模型的提交空檔部署，healthy，所有變更 HTTP 資產一致；GOOGL 同 job v441／done71 接續 running，原凍結設定保留，私有核對 `data/private/wiki-feedback-20261107/interaction-final.json`。
+
+最終正式 `browser_live_interactions.py` 15 checks PASS，新增慢 L2 讀取及開表單清除舊轉圈；5 次入口回饋 132.9–1044ms，18 次偏好寫入隔離，model actions=0。日誌 `/tmp/wiki-interaction-audit/live-final.log`，最新 JSON `/tmp/wiki-interaction-live.json`；前次 13 項報告保留 `/tmp/wiki-interaction-live-initial.json`。此前明載的測試與截圖限制仍適用；修正及證據均推送 llm_wiki。
+
 ## 2026-11-07：Wiki／L2 按鈕兩秒內回饋
 
 驗收時間定義：由真實滑鼠 click 到處理狀態／目標畫面已成立，再跨一個 animation frame 確認有繪製機會，門檻 2000ms；不把下載、讀圖或模型全部完成視為兩秒 SLA。這是本機 Chromium 樣本，不能保證所有硬體／網路永遠低於門檻。
