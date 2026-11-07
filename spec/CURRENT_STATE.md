@@ -1,5 +1,7 @@
 # 目前狀態
 
+2026-11-07 最新修正：Wiki 狀態 GET 重跑初始化造成 SQLite 寫鎖／503，已改為已初始化 schema 純讀；coverage 有界快取、輪詢單飛、重進重用圖。整理入口合併為單一開始／繼續，明確點擊才 plan/jobs，含缺漏分類。首次錯誤重試、保存篩選同步圖形均有瀏覽器回歸。來源：`news_atlas/wiki/store.py`、`compiler.py`、`dist/wiki-view.js`；測試與部署以 [TESTING](TESTING.md) 本次紀錄為準。無資料刪除或破壞性 migration。
+
 2026-11-07 本輪：依使用者十項畫面回饋，整合共用 L1/L2 圖譜與 Chat、模型分類與舊群補足、唯讀分類定位、進度區尺寸保存、L1 忙碌守門。原始碼與邊界見 [RESEARCH_LAYERS](RESEARCH_LAYERS.md)，測試／部署證據見 [TESTING](TESTING.md)。既有資料保留；新 L1 prompt 為 wiki-extract-v8。
 
 # 目前功能與實作邊界

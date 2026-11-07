@@ -6,7 +6,7 @@
 
 新聞圖與 Wiki 為獨立視圖，返回連結保留新聞節點／鏡頭。品牌圖片使用 `dist/stocknexus-wiki.png`，來源為根目錄使用者提供的同名 PNG。
 
-選股票、來源、日期、維護方式、模型／思考深度後，500ms debounce 自動呼叫 `POST plan` 核對範圍，不呼叫模型。按「確認並開始整理」或「補足到今天」啟動工作；正在整理時按設定 Apply 會中斷舊工作並以新設定接續。閒置時 Apply 只保存，不啟動模型。沒有預覽按鈕、歷史工作列表或每日用量配額。開始按鈕 hover/focus 550ms 顯示說明，離開或 Escape 關閉。
+覆蓋進度下只有一個「開始整理／繼續整理」主要入口，依目前顯示的日期與設定執行，不暗中延伸日期。進頁、切換設定或輪詢不建立 plan；按下後立即顯示準備狀態，依序 `POST plan` 核對快取範圍、`POST jobs` 排入未完成新聞與缺漏分類。重複點擊不重複排入。正在整理時按設定 Apply 會中斷舊工作並以新設定接續；閒置 Apply 只保存，不啟動模型。開始按鈕 hover/focus 550ms 顯示說明，離開或 Escape 關閉。
 
 整理日期上方輸入是滑桿的固定全局邊界；兩個 thumb 共用一條軌道，在邊界內選取包含起訖日的 UTC 日期。下方顯示所選新聞的抽取覆蓋與待辦。全局來源是目前查詢 memberships＋已載入文章；重新開啟時可用已存查詢與文章，不是所有股票的全 DB。日期先過濾再套 10000 篇單次選取安全上限；不是每日限制。
 
@@ -66,7 +66,7 @@ UPDATES 由新節點指向舊節點，原文與既有節點不可覆寫。詳情
 
 本次延伸使用既有 nodes/edges/jobs JSON payload，沒有改 SQLite 表格或版本號；雙語、batch_id、receipts 均隨原合併機制保存。版本號在匯入時映射，批次識別保持不變。不得直接覆蓋同名 DB；一致性備份使用 SQLite backup，或停服後正確複製 WAL。data/private 金鑰/socket/log 不搬進別台知識庫。
 
-`GET status/models/graph/jobs/article/node/markdown`；graph 接 instrument、version/as_of、start/end。`POST plan` 接 instrument/model/reasoning_effort、languages、evidence_size、strategy、graph_edges、graph_settings、graph_selection、price_horizon、scope、date_range、operation 與 articles/search/sources；回傳範圍覆蓋、有效 10 分鐘 plan_id、區間 usage。`POST apply` 接與 plan 相同的範圍與設定及 continuous，閒置儲存、活動工作中斷續跑；`POST jobs {plan_id,continuous}` 明確開始；`resume {instrument}` 沿用設定延伸到 UTC 今天；`cancel {instrument,job_id}` 同時停止工作及後續維護。所有寫入維持同源 Origin/Host/local-peer 防護。
+`GET status/models/graph/jobs/article/node/markdown`；graph 接 instrument、version/as_of、start/end。`POST plan` 接 instrument/model/reasoning_effort、languages、evidence_size、strategy、graph_edges、graph_settings、graph_selection、price_horizon、scope、date_range、operation 與 articles/search/sources；回傳範圍覆蓋、有效 10 分鐘 plan_id、區間 usage。`POST apply` 接與 plan 相同的範圍與設定及 continuous，閒置儲存、活動工作中斷續跑；`POST jobs {plan_id,continuous,classify_missing?}` 明確開始；`resume {instrument}` 沿用設定延伸到 UTC 今天；`cancel {instrument,job_id}` 同時停止工作及後續維護。所有寫入維持同源 Origin/Host/local-peer 防護。
 
 原始碼：`store.py` 原子版本與引用驗證；`compiler.py` 工作與授權範圍；`workbench.py` 分組／版本摘要／歷史／用量；`forest.py` 完整圖譜自動取樹與目標／脈絡分離；`evidence.py` 舊星河相容、輸入分段、股價快取觀察；`chat/wiki.mjs` 結構化推論；`chat/service.mjs` SDK；`dist/wiki-view.js/css` 工作介面。
 
@@ -105,3 +105,11 @@ Wiki 使用與深色圖譜一致的細線文件、掃描光條與知識連線，
 ## 外部合併與目錄刷新
 
 顯示 Wiki 時約每 6 秒（2 秒 poll、5 秒間隔門檻）讀 status/instruments；視窗或選單 focus 立即刷新。只更新已建立 Wiki 選項，不重套模型／日期／工作設定；保留空白「建立新的股票」選項。最新版本由既有 jobs/version 輪詢載入，歷史版本維持固定。API 直接發現股票目錄，新庫不需重啟 Python。完整在線合併契約見 [DATA_MERGE](DATA_MERGE.md)。
+
+## 2026-11-07 狀態讀取與頁面響應
+
+- 已初始化的 WikiStore 只驗證 schema 與股票，不執行 DDL、user_version 或 metadata 寫入。新庫／不完整 schema 仍遷移，較新版 schema 仍拒絕；沒有本次破壞性 migration。
+- coverage 以股票、Wiki／新聞主檔與 WAL 的檔案簽章及 UTC 日期識別快取，最長 5 秒、最多 64 股票；提交變動後失效。回傳深複本避免呼叫者污染快取；狀態不得重跑未使用的完整 review pending 查詢。
+- 輪詢至多一筆在途；同條件 graph 請求合併。重進保留既有圖譜，僅版本／分類變更重讀；首載先取保存日期再讀 graph。首次 503 後重進可重試，恢復篩選值必須同步 render，晚回應仍核對股票與 request。
+- 進頁及明確啟動均立即提供 aria-busy／spinner／階段文字。閒置不轉圈；poll 恢復只清掉自身的錯誤，不覆蓋其他操作錯誤。
+- `classify_missing:true` 是使用者明確開始時的選項：增量 L1 沒有新新聞但舊觀點缺分類時仍可排分類；重啟、唯讀 API 或舊呼叫者不隱含啟動補分類。

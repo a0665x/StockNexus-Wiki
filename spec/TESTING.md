@@ -2,6 +2,24 @@
 
 入口：[PROJECT_MAP.md](PROJECT_MAP.md)。測試使用隔離 fixture／暫存 DB，不應改寫使用者的 data/news-atlas.sqlite3。
 
+## 2026-11-07：Wiki 503／單一整理入口回歸
+
+故障證據：正式服務 log 的 `GET /api/wiki/jobs?instrument=NASDAQ:TSM` 回 503，堆疊位於 WikiStore 初始化 executescript，錯誤 `database is locked`。隔離第二 SQLite 連線持有 BEGIN IMMEDIATE 時，舊路徑可重現失敗；修正後同一 HTTP jobs 讀取成功，不需釋放 writer。TSM 正式庫 read-only quick_check 為 ok；這不是歷史新聞內容正確性的保證。
+
+| Given／When 邊界 | Then／自動驗證 |
+| --- | --- |
+| 已初始化庫正在由另一連線寫入；使用者查狀態 | GET jobs 200，開庫純讀；`test_wiki_responsiveness.py` |
+| 重複讀同股票覆蓋；之後提交設定變更 | 未變更不重掃，提交後失效；同檔案的 coverage test |
+| 沒有新新聞但觀點缺分類；明確按開始 | 仍排分類、重用舊 L1；`test_wiki_classifier.py` |
+| 進頁或慢 poll；反覆點主按鈕 | 進頁零 plan、輪詢不疊加、準備態立即顯示、僅一份 jobs；`browser_wiki_layout.py` |
+| 第一次 graph 503 後離開再進 | 錯誤可見、重進恢復且不啟動模型；`WIKI_RESPONSIVE_SCENARIO=retry` |
+| 保存 Claim 篩選後重新掛載 | 控制與圖形一致，一次 graph GET；`WIKI_RESPONSIVE_SCENARIO=restore` |
+| 新研究、查看來源、保存 live、切換頁面 | 真實 HTTP／Chrome 研究回歸；`browser_research.py` |
+
+本輪瀏覽器：retry 31 checks PASS、restore 30 checks PASS；research real HTTP/Chrome PASS。瀏覽器使用隔離資料、可控 API 回應／模型 fixture，包含實際 pointer 點擊、桌面與 390px overflow，不等於對正式模型做付費驗收。新增 HTTP／cache 3 tests、classifier 6 tests 先各自通過；完整 `python3 -m unittest discover -s tests`：289 tests / 133.543s / OK（有既有測試連線 ResourceWarning；無失敗）。部署核對補記於本節。`node --check dist/wiki-view.js`、spec 路由驗證、diff whitespace 通過。一次 UI detector 無命中；獨立 reviewer 的兩項 findings 均 resolved，documenter 確認沒有新的設計系統規則。
+
+原有 11 個 Wiki DB 已以 SQLite backup 保存到 gitignored `data/private/wiki-responsive-backup-20261107/`，舊執行 image tag 為 `news-atlas:pre-wiki-responsive-20261107`。本次沒有新 schema migration，不刪資料。回退優先使用舊程式/image 與現有 DB；如要還原備份需先停工作，確認接受備份之後新增成果的損失，不能自動覆蓋較新 DB。
+
 ## 命令
 
 ```bash

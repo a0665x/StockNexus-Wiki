@@ -74,6 +74,15 @@ class WikiStore:
         self.fixture=fixture
         with self.connection() as db:
             if db.execute('PRAGMA user_version').fetchone()[0]>1:raise ValueError('Newer database format; update application before opening')
+            # A normal read must not acquire SQLite's writer lock. Migrate only
+            # incomplete schemas; never cache row data or skip stock validation.
+            tables={r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            required={'metadata','articles','versions','nodes','edges','extractions','jobs','review_coverage','reviews','calls','rejected_proposals','research_objects','research_lenses','research_jobs'}
+            if required<=tables:
+                row=db.execute("SELECT value FROM metadata WHERE key='instrument'").fetchone()
+                if row:
+                    if json.loads(row[0])!=self.instrument:raise ValueError('Wiki資料庫股票識別不符')
+                    return
             db.execute('PRAGMA journal_mode=WAL')
             db.executescript('''
             CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY,value TEXT NOT NULL);
@@ -93,6 +102,8 @@ class WikiStore:
             ''')
             from .research import migrate
             migrate(db)
+            from .research import taxonomy
+            taxonomy(db)
             db.execute('INSERT OR IGNORE INTO metadata VALUES (?,?)',('instrument',encode(ident)))
             actual=json.loads(db.execute("SELECT value FROM metadata WHERE key='instrument'").fetchone()[0])
             if actual!=ident: raise ValueError('Wiki資料庫股票識別不符')

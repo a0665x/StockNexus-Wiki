@@ -67,3 +67,15 @@ class ClassifierTests(unittest.TestCase):
         with self.store.connection() as db:
             self.assertEqual(classifier.assignments(db,taxonomy(db)['revision_id']),before)
         self.assertFalse(self.store.config()['catch_up'])
+
+    def test_unified_start_backfills_labels_when_all_news_are_already_done(self):
+        with self.store.connection() as db:
+            articles=[json.loads(r[0]) for r in db.execute('SELECT payload FROM articles')]
+            before=db.execute('SELECT count(*) FROM jobs').fetchone()[0]
+        plan=self.service.plan({'instrument':self.store.instrument,'model':'fixture','articles':[{**a,'source':{'provider':a['provider']}} for a in articles]})
+        self.assertEqual(plan['pending'],0)
+        result=self.service.start({'plan_id':plan['plan_id'],'classify_missing':True})
+        self.assertEqual(result['status'],'queued')
+        self.assertEqual(self.research.read('job',result['job_id'])['payload']['operation'],'classify_l1')
+        with self.store.connection() as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM jobs').fetchone()[0],before)

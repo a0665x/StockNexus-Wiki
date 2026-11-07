@@ -13,7 +13,7 @@
  <label><span data-ui="saved"></span><select id="wikiSaved"></select></label>
  <label><span data-ui="instrument"></span><input id="wikiInstrument" placeholder="NASDAQ:GOOGL" maxlength="40"></label>
  <label><span data-ui="scope"></span><select id="wikiScope"><option value="global"></option><option value="loaded"></option><option value="focus"></option></select></label>
- <p id="wikiSelection" class="wiki-note"></p><section id="wikiCoverage" class="wiki-coverage"></section><button id="wikiResume" class="wiki-primary" hidden></button>
+ <p id="wikiSelection" class="wiki-note"></p><section id="wikiCoverage" class="wiki-coverage"></section><p id="wikiStatus" class="wiki-status" role="status"></p><div class="wiki-actions"><button id="wikiStart" class="wiki-primary" disabled></button><button id="wikiPause" hidden></button></div>
  <label><span data-ui="dates"></span><select id="wikiRange"><option value="month"></option><option value="quarter"></option><option value="all"></option><option value="custom"></option></select></label>
  <div id="wikiDates"><div class="wiki-pair"><label><span data-ui="start"></span><input id="wikiStartDate" type="date"></label><label><span data-ui="end"></span><input id="wikiEndDate" type="date"></label></div>
  <div class="wiki-dual"><div class="wiki-track"></div><input id="wikiRangeStart" type="range"><input id="wikiRangeEnd" type="range"></div><output id="wikiInterval"></output></div>
@@ -21,7 +21,7 @@
  <label><span data-ui="operation"></span><select id="wikiOperation"><option value="update"></option><option value="review"></option></select></label>
  <label><span data-ui="model"></span><select id="wikiModel"></select></label><p id="wikiModelNote" class="wiki-note"></p>
  <label class="wiki-check"><input type="checkbox" id="wikiContinuous"><span data-ui="continuous"></span></label>
- <p id="wikiStatus" class="wiki-status" role="status"></p><div class="wiki-actions"><button id="wikiStart" class="wiki-primary" disabled></button><button id="wikiPause" hidden></button></div>
+
  <div id="wikiStartTip" class="wiki-tip" role="tooltip" hidden></div></aside>
  <div id="wikiResizeLeft" class="wiki-resize" role="separator" tabindex="0" aria-orientation="vertical" aria-controls="wikiControls"></div>
  <main class="wiki-canvas-area"><div class="wiki-toolbar">
@@ -39,7 +39,7 @@
  const dialog=el('dialog',undefined,'wiki-settings');dialog.id='wikiSettings';dialog.dataset.ownI18n='true';dialog.innerHTML=`<form method="dialog"><button id="wikiSettingsClose">×</button></form><h2 id="wikiSettingsTitle"></h2><label><span id="wikiLanguageLabel"></span><select id="wikiLanguages"><option value="both"></option><option value="zh-Hant">繁體中文</option><option value="en">English</option></select></label><label><span id="wikiStrategyLabel"></span><select id="wikiStrategy"><option value="lexical"></option><option value="chronological"></option><option value="root"></option><option value="fusion"></option></select></label><p id="wikiStrategyNote" class="wiki-note"></p><label><span id="wikiEvidenceLabel"></span><select id="wikiEvidenceSize"><option>5</option><option>10</option><option>15</option><option>20</option></select></label><p id="wikiEvidenceNote" class="wiki-note"></p><div class="wiki-settings-actions"><span id="wikiApplyStatus" role="status"></span><button id="wikiApply" class="wiki-primary" hidden>Apply</button></div>`;document.body.append(dialog);
  const open=el('button','LLM Wiki');open.id='modeWiki';$('modeTimeline').after(open);
  let data=null,info=null,graph=null,plan=null,busy=false,models=[],pollTimer=null,previewTimer=null,generation=0,request=0,previewSerial=0;
- let catalogAt=0,catalogPending=null;
+ let catalogAt=0,catalogPending=null,polling=false,showPending=null,loading=0,pollError=null;const graphRequests=new Map();
  let fitPending=false,fitKey='';
  let baseData=null,researchRun=null,reveal=Infinity,revealTimer=null,hoverNode=null,glow=null,classStamp='';
  let lastJobs=[],lastConfig={},lastCoverage=null,selectedDetail=null,selectedEdge=false;
@@ -48,7 +48,7 @@
  const runtimeKeys=['wikiLayer','wikiScope','wikiModel','wikiOperation','wikiRange','wikiStartDate','wikiEndDate','wikiRangeStart','wikiRangeEnd','wikiVersion','wikiKind','wikiRelation','wikiBudget','wikiAssessment','wikiLanguages','wikiEvidenceSize','wikiStrategy','wikiContinuous'];
  const topicNames=()=>({revenue:t('營收與獲利','Revenue and earnings'),operations:t('生產與營運','Production and operations'),costs:t('成本與投資','Costs and investment'),market:t('市場與股價','Market and price'),trading:t('交易觀點','Trading views'),other:t('其他／待分類','Other / unclassified')});
  const copy=(node)=>{const fields=node.translations?.[language()];return fields?{...node,title:fields.title||node.title,summary:fields.summary||node.summary,rationale:fields.rationale||node.rationale,assessment:{...node.assessment,rationale:fields.rationale}}:node;};
- const status=(text,error=false)=>{$('wikiStatus').textContent=text;$('wikiStatus').classList.toggle('error',error);};
+ const status=(text,error=false,working=false)=>{$('wikiStatus').textContent=text;$('wikiStatus').classList.toggle('error',error);$('wikiStatus').classList.toggle('wiki-working',working);$('wikiStatus').setAttribute('aria-busy',String(working));};
  const current=()=>$('wikiInstrument').value.trim().toUpperCase();
  const day=d=>d.toISOString().slice(0,10),stamp=d=>Date.parse(d+'T00:00:00Z')/86400000;
  const option=(name,value)=>new Option(name,value);
@@ -56,7 +56,7 @@
  const ui={layer:['觀點層','Opinion layer'],saved:['已建立的 Wiki','Saved Wikis'],instrument:['股票識別','Instrument'],scope:['來源範圍','Evidence scope'],dates:['整理日期（UTC）','News dates (UTC)'],start:['全局起始日期','Outer start date'],end:['全局結束日期','Outer end date'],operation:['維護方式','Operation'],model:['模型與思考深度','Model and reasoning depth'],continuous:['持續檢查這個日期範圍的新證據','Watch new evidence in this fixed date range'],version:['版本','Version'],viewStart:['版本內新聞起日（UTC）','News from (UTC)'],viewEnd:['版本內新聞迄日（UTC）','News through (UTC)'],kind:['節點','Nodes'],relation:['關係','Relations'],budget:['渲染上限','Render budget'],category:['觀點分類','Classification']};
  function translate(){
   panel.querySelectorAll('[data-ui]').forEach(n=>n.textContent=t(...ui[n.dataset.ui]));
-  const labels={wikiBack:['← 新聞圖譜','← News graph'],wikiExport:['匯出 Markdown','Export Markdown'],wikiResume:['補足到今天','Catch up to today'],wikiStart:['開始整理','Start maintenance'],wikiPause:['停止持續維護','Stop watching'],wikiSettingsTitle:['Wiki 設定','Wiki settings'],wikiLanguageLabel:['生成與保存語系','Generate and store languages'],wikiEvidenceLabel:['每次推論的新聞篇數','Articles per reasoning call'],wikiStrategyLabel:['整理時如何選取證據','How to group evidence'],wikiEvidenceNote:['每組 5／10／15／20 篇；Graph 自動覆蓋模式依整棵樹的篇數。沒有每日上限，可隨時停止。','5 / 10 / 15 / 20 per group; Graph coverage uses each complete tree size. No daily limit; stop any time.']};
+  const labels={wikiBack:['← 新聞圖譜','← News graph'],wikiExport:['匯出 Markdown','Export Markdown'],wikiStart:['開始整理','Start maintenance'],wikiPause:['停止持續維護','Stop watching'],wikiSettingsTitle:['Wiki 設定','Wiki settings'],wikiLanguageLabel:['生成與保存語系','Generate and store languages'],wikiEvidenceLabel:['每次推論的新聞篇數','Articles per reasoning call'],wikiStrategyLabel:['整理時如何選取證據','How to group evidence'],wikiEvidenceNote:['每組 5／10／15／20 篇；Graph 自動覆蓋模式依整棵樹的篇數。沒有每日上限，可隨時停止。','5 / 10 / 15 / 20 per group; Graph coverage uses each complete tree size. No daily limit; stop any time.']};
   for(const [id,text] of Object.entries(labels))$(id).textContent=t(...text);
   choices('wikiScope',[['global',t('全局：目前查詢與 DB','Global: current queries and DB')],['loaded',t('目前已載入新聞','Loaded news')],['focus',t('目前焦點與關聯節點','Focused roots and related nodes')]]);
   choices('wikiRange',[['month',t('最近一個月','Past month')],['quarter',t('最近三個月','Past three months')],['all',t('全部日期','All dates')],['custom',t('自訂範圍','Custom range')]]);
@@ -89,7 +89,7 @@
  function tokenText(usage){return `${usage?.input_tokens||0} ${t('輸入','in')} / ${usage?.output_tokens||0} ${t('輸出','out')}`;}
  function miningIcon(){const span=el('span',undefined,'wiki-worker');span.setAttribute('aria-hidden','true');span.innerHTML=`<svg viewBox="0 0 96 86" focusable="false"><use href="/knowledge-mining.svg#base"/><use class="wiki-scan" href="/knowledge-mining.svg#scan"/><use class="wiki-signal" href="/knowledge-mining.svg#signal"/></svg>`;return span;}
  function activity(){
-  const active=lastJobs.find(j=>['queued','running'].includes(j.status)),running=active?.status==='running',waiting=!!active||(lastConfig.catch_up&&lastCoverage?.scope_pending>0),box=$('wikiLive');box.dataset.state=running?'running':waiting?'queued':lastCoverage?.scope_pending?'idle':'complete';
+  const active=lastJobs.find(j=>['queued','running'].includes(j.status)),running=active?.status==='running',waiting=!!active||!!(lastConfig.catch_up&&lastCoverage?.scope_pending>0),box=$('wikiLive');box.dataset.state=running?'running':waiting?'queued':lastCoverage?.scope_pending?'idle':'complete';
   const labels={compiling:t('LLM 正在梳理證據與相依觀點','LLM is analyzing evidence and dependent viewpoints'),repairing:t('正在修正未通過驗證的提案','Repairing a proposal that failed validation'),publishing:t('正在核對引用並保存版本','Checking citations and saving a version')};
   const title=active?.payload.operation==='classify_l1'?t('LLM 正在補足通用觀點分類','LLM is classifying existing L1 opinions'):running?labels[active.payload.stage]||labels.compiling:waiting?t('等待背景整理開始','Waiting for background work'):lastCoverage?.scope_pending?t('尚有新聞待補；模型目前沒有運行','Evidence pending; model is idle'):t('目前沒有進行中的整理','No active work');
   const worker=box.querySelector('.wiki-worker')||miningIcon();if(!worker.isConnected)box.append(worker);for(const child of [...box.children])if(child!==worker)child.remove();const content=el('div');content.append(el('strong',title));
@@ -102,33 +102,46 @@
   const usage=plan?.usage||lastCoverage?.usage;if(usage){content.append(el('small',t('所選新聞時段累計 ','Selected news interval total ')+tokenText(usage.reported)));if(usage.legacy_jobs_without_attribution)content.append(el('small',t('較早版本沒有逐批用量資料，未納入此區間統計。','Older jobs lack per-batch usage and are excluded from interval totals.')));}
   if(!waiting){const failed=lastJobs.find(j=>j.status==='failed'||j.status==='interrupted');if(failed&&failed===lastJobs[0]){box.dataset.state='failed';content.append(el('small',t('前次工作停止：','Previous work stopped: ')+(failed.error||failed.status)));}}
   box.append(content);
-  for(const id of ['wikiStart','wikiResume']){$(id).classList.toggle('wiki-working',waiting);$(id).setAttribute('aria-busy',String(waiting));}
-  $('wikiStart').disabled=busy||waiting||!plan?.pending;$('wikiPause').hidden=!(lastConfig.enabled||lastConfig.catch_up);$('wikiResume').disabled=busy||waiting||!info?.writable||!!$('wikiVersion').value;
-  const coverage=$('wikiCoverage');coverage.replaceChildren();$('wikiResume').hidden=!lastCoverage;
+  $('wikiStart').classList.toggle('wiki-working',busy||waiting);$('wikiStart').setAttribute('aria-busy',String(busy||waiting));
+  $('wikiStart').textContent=busy?t('準備整理…','Preparing…'):waiting?t('整理中…','Processing…'):lastCoverage?t('繼續整理','Continue processing'):t('開始整理','Start processing');
+  $('wikiStart').disabled=busy||waiting||loading>0||!info?.writable||!$('wikiModel').value||!current();$('wikiPause').hidden=!(lastConfig.enabled||lastConfig.catch_up);
+  const coverage=$('wikiCoverage');coverage.replaceChildren();
   if(lastCoverage){if(lastCoverage.unavailable)coverage.append(el('p',lastCoverage.error));else{meter(coverage,t('已確認新聞','Confirmed evidence'),lastCoverage.scope_done,lastCoverage.scope_total);const store=el('details');store.append(el('summary',t('資料庫','Database')),el('p',lastCoverage.storage,'wiki-storage'));coverage.append(store);}}
  }
  function invalidate(){generation++;previewSerial++;plan=null;$('wikiStart').disabled=true;$('wikiSelectedCoverage').replaceChildren();}
- function schedulePreview(){invalidate();clearTimeout(previewTimer);if(panel.hidden)return;previewTimer=setTimeout(preview,500);}
+ function schedulePreview(){invalidate();clearTimeout(previewTimer);activity();}
  function paintPlan(){if(!plan)return;const box=$('wikiSelectedCoverage');box.replaceChildren();meter(box,t('所選區間已處理','Processed in selected interval'),plan.reused,plan.selected);box.append(el('small',t(`待處理 ${plan.pending} 篇；按開始後持續整理，可隨時停止。`,`${plan.pending} articles pending. Start to process; stop any time.`)));if(plan.graph_selection?.mode==='coverage')box.append(el('small',t(`完整圖譜 ${plan.graph_selection.universe_articles} 篇 → ${plan.graph_selection.trees.length} 棵 root；區間目標 ${plan.graph_selection.target_articles} 篇，整樹含脈絡 ${plan.graph_selection.context_articles} 篇。`,`Full graph ${plan.graph_selection.universe_articles} articles → ${plan.graph_selection.trees.length} roots; ${plan.graph_selection.target_articles} interval targets, ${plan.graph_selection.context_articles} members including context.`)));else if(plan.graph_selection)box.append(el('small',plan.graph_selection.trees.map(x=>x.title+' · '+x.articles.length+t(' 篇',' articles')).join(' / ')));status(plan.pending?plan.instrument:t('此範圍無待辦，未啟動模型。','Nothing pending in this range. Model remains idle.'));}
  function draftSettings(){return {languages:$('wikiLanguages').value==='both'?['zh-Hant','en']:[$('wikiLanguages').value],evidence_size:Number($('wikiEvidenceSize').value)||5,strategy:$('wikiStrategy').value,...($('wikiStrategy').value==='root'?{graph_universe:graphUniverse,graph_settings:graphSettings||lastConfig.graph_settings||{}}:{} )};}
  function dirtySettings(){const changed=!!appliedSettings&&JSON.stringify(draftSettings())!==JSON.stringify(appliedSettings),missing=$('wikiStrategy').value==='root'&&(!graphUniverse?.articles?.length||graphUniverse.ticker!==current().split(':')[1]);$('wikiApply').hidden=!changed;$('wikiApply').disabled=busy||missing;$('wikiApplyStatus').textContent=changed&&missing?t('請先載入同一股票的新聞圖譜；不需要點選 root。','Load this stock’s News graph first; no root click is required.'):changed?t('套用後，進行中的工作會停止並依新設定接續。','Apply stops active work and continues with these settings.'):'';}
 
  function requestBody(settings=appliedSettings||draftSettings()){const [model,reasoning_effort]=$('wikiModel').value.split('|');const body={...selection(),instrument:current(),model,reasoning_effort,scope:$('wikiScope').value,date_range:range(),operation:$('wikiOperation').value,...settings};if(body.strategy==='root'&&body.graph_universe)delete body.graph_selection;return body;}
- async function preview(){
-  if(panel.hidden||!info?.writable||!$('wikiModel').value||!current()||busy||lastJobs.some(j=>['queued','running'].includes(j.status)))return;
-  const mine=generation,serial=++previewSerial;status(t('正在核對日期範圍與已處理證據…','Checking selected dates and processed evidence…'));
-  try{const value=await api('plan',requestBody());if(mine!==generation||serial!==previewSerial||panel.hidden)return;plan=value;if($('wikiRange').value==='all'&&value.date_bounds){$('wikiStartDate').value=value.date_bounds.start;$('wikiEndDate').value=value.date_bounds.end;sliders();}paintPlan();activity();}
-  catch(e){if(mine===generation&&serial===previewSerial)status(e.message,true);}
- }
  function query(){const p=new URLSearchParams({instrument:current()});if($('wikiVersion').value)p.set('version',$('wikiVersion').value);const dates=range();if(dates){p.set('start',dates.start);p.set('end',dates.end);}return p;}
  function clearStock(){researchRun=null;baseData=null;clearTimeout(revealTimer);root.dispatchEvent(new CustomEvent('atlas-wiki-stock'));invalidate();request++;data=null;lastCoverage=null;lastJobs=[];lastConfig={};selectedDetail=null;detailRequest++;chartWindow=null;focusRoot=null;focusIds=null;fitKey='';treeOpen.clear();versionChoices();$('wikiViewStart').value='';$('wikiViewEnd').value='';$('wikiDetail').replaceChildren();$('wikiCounts').textContent=t('尚未載入此股票 Wiki','This stock Wiki is not loaded');$('wikiVersionInfo').replaceChildren();$('wikiTimeline').replaceChildren();$('wikiInsights').replaceChildren();graph?.graphData({nodes:[],links:[]});activity();}
  function restore(cfg){if(!cfg)return;if(cfg.model){const value=cfg.model+'|'+(cfg.reasoning_effort||'low');if([...$('wikiModel').options].some(o=>o.value===value))$('wikiModel').value=value;}$('wikiLanguages').value=cfg.languages?.length===1?cfg.languages[0]:'both';$('wikiEvidenceSize').value=String([5,10,15,20].includes(cfg.evidence_size)?cfg.evidence_size:5);$('wikiStrategy').value=cfg.strategy||'lexical';$('wikiRange').value=cfg.date_range?'custom':'all';if(cfg.date_range){$('wikiStartDate').value=cfg.date_range.start;$('wikiEndDate').value=cfg.date_range.end;}sliders();if(!rootSelection?.ticker&&cfg.graph_selection?.mode!=='coverage')rootSelection=cfg.graph_selection;if(cfg.graph_universe){graphUniverse=cfg.graph_universe;graphSettings=cfg.graph_settings;}appliedSettings={...draftSettings(),...(cfg.strategy==='root'?{graph_universe:cfg.graph_universe||null,graph_settings:cfg.graph_settings||{}}: {})};strategyNote();}
- async function load(restoreSettings=false){const initialQuery=String(query()),mine=++request;if(!current())return;try{const value=await api('graph?'+query());if(mine!==request||panel.hidden)return;if(data&&data.version!==value.version){selectedDetail=null;$('wikiDetail').replaceChildren(el('p',t('點選此版本的節點查看引用。','Select a node in this version to view its citations.')));}baseData=value;combine();lastJobs=[...(value.jobs||[]),...(value.classification_jobs||[])];lastConfig=value.config||{};lastCoverage=value.coverage;if(restoreSettings){restore(lastConfig);if(String(query())!==initialQuery){await load();schedulePreview();return;}}savedChoices();versionChoices();classificationChoices();activity();if(focusRoot&&!data.nodes.some(n=>n.id===focusRoot)){focusRoot=null;focusIds=null;}render();if(focusRoot&&data.nodes.some(n=>n.id===focusRoot))focusGalaxy(focusRoot,false);if(restoreSettings)schedulePreview();}catch(e){if(mine===request)status(e.message,true);}}
+ async function load(restoreSettings=false){
+  const mine=++request;if(!current())return false;loading++;status(t('正在讀取已保存的 Wiki 圖譜…','Loading saved Wiki graph…'),false,true);activity();
+  try{
+   // Restore the saved range from lightweight state before loading the graph.
+   // This avoids building a graph for the default month only to discard it.
+   if(restoreSettings){const meta=await api('jobs?'+new URLSearchParams({instrument:current()}));if(mine!==request||panel.hidden)return false;restore(meta.config||{});}
+   const key=String(query());
+   if(!graphRequests.has(key)){const work=api('graph?'+key).finally(()=>graphRequests.delete(key));graphRequests.set(key,work);}
+   const value=await graphRequests.get(key);if(mine!==request||panel.hidden)return false;
+   if(data&&data.version!==value.version){selectedDetail=null;$('wikiDetail').replaceChildren(el('p',t('點選此版本的節點查看引用。','Select a node in this version to view its citations.')));}
+   baseData=value;combine();lastJobs=[...(value.jobs||[]),...(value.classification_jobs||[])];lastConfig=value.config||{};lastCoverage=value.coverage;
+   classStamp=JSON.stringify((value.classification_jobs||[]).map(j=>[j.status,j.updated_at]));
+   savedChoices();versionChoices();classificationChoices();activity();
+   if(focusRoot&&!data.nodes.some(n=>n.id===focusRoot)){focusRoot=null;focusIds=null;}
+   render();if(focusRoot&&data.nodes.some(n=>n.id===focusRoot))focusGalaxy(focusRoot,false);
+   if(restoreSettings)schedulePreview();if(!busy)status('');return true;
+  }catch(e){if(mine===request)status(e.message,true);return false;}
+  finally{loading--;if(!loading&&!busy){$('wikiStatus').classList.remove('wiki-working');$('wikiStatus').setAttribute('aria-busy','false');}activity();}
+ }
  async function refreshCatalog(force=false){
   if(panel.hidden)return;if(catalogPending)return catalogPending;if(!force&&Date.now()-catalogAt<5000)return;
   catalogAt=Date.now();catalogPending=(async()=>{try{const value=await api('status');if(panel.hidden)return;const changed=JSON.stringify(value.instruments)!==JSON.stringify(info?.instruments);info=value;if(changed)savedChoices(true);}catch{}finally{catalogPending=null;}})();return catalogPending;
  }
- async function poll(){if(panel.hidden)return;await refreshCatalog();if(panel.hidden||!current()||!data)return;const ident=current(),mine=request;try{const value=await api('jobs?'+new URLSearchParams({instrument:ident}));if(panel.hidden||current()!==ident||mine!==request)return;const was=lastJobs.some(j=>['queued','running'].includes(j.status));lastJobs=[...(value.jobs||[]),...(value.classification_jobs||[])];lastConfig=value.config||{};lastCoverage=value.coverage;activity();const nextStamp=JSON.stringify((value.classification_jobs||[]).map(j=>[j.status,j.updated_at]));if(!$('wikiVersion').value&&(data.version!==value.version||classStamp!==nextStamp)){classStamp=nextStamp;await load();}if(was&&!lastJobs.some(j=>['queued','running'].includes(j.status)))schedulePreview();}catch(e){$('wikiLive').dataset.state='offline';$('wikiLive').replaceChildren(el('strong',t('連線中斷；無法確認模型狀態','Connection lost; model status unknown')));status(e.message,true);}}
+ async function poll(){if(panel.hidden||polling)return;polling=true;try{await refreshCatalog();if(panel.hidden||!current()||!data)return;const ident=current(),mine=request;try{const value=await api('jobs?'+new URLSearchParams({instrument:ident}));if(panel.hidden||current()!==ident||mine!==request)return;if(pollError&&$('wikiStatus').textContent===pollError&&!busy&&!loading)status('');pollError=null;const was=lastJobs.some(j=>['queued','running'].includes(j.status));lastJobs=[...(value.jobs||[]),...(value.classification_jobs||[])];lastConfig=value.config||{};lastCoverage=value.coverage;activity();const nextStamp=JSON.stringify((value.classification_jobs||[]).map(j=>[j.status,j.updated_at]));if(!$('wikiVersion').value&&(data.version!==value.version||classStamp!==nextStamp)){classStamp=nextStamp;await load();}if(was&&!lastJobs.some(j=>['queued','running'].includes(j.status)))schedulePreview();}catch(e){if(panel.hidden||current()!==ident||mine!==request)return;pollError=e.message;$('wikiLive').dataset.state='offline';$('wikiLive').replaceChildren(el('strong',t('連線中斷；無法確認模型狀態','Connection lost; model status unknown')));status(e.message,true);}}finally{polling=false;}}
  const termColor=n=>data?.taxonomy?.terms.find(t=>(n.classification_terms||[]).includes(t.id))?.color;
  const nodeColor=n=>n.wikiDim?'#1a293a':termColor(n)||(n.id===focusRoot?'#ffe0a0':n.wikiContext?'#687b8e':({ArticleRevision:'#78b7e7',Claim:'#83dfbf',Event:'#e6bc76',Thesis:'#c3a2ee',CustomerOpinion:'#f1b4df'})[n.kind]);
  const nodeSize=n=>n.wikiContext?2:n.kind==='ArticleRevision'?3:6;
@@ -268,25 +281,26 @@
  }
  function saveRuntime(){if(!initialized||restoringUI)return;const controls=Object.fromEntries(runtimeKeys.map(id=>[id,$(id).type==='checkbox'?$(id).checked:$(id).value]));const c=graph?.cameraPosition();const value={instrument:current(),controls,layout:layout.state(),root_selection:rootSelection,graph_universe:graphUniverse,graph_settings:graphSettings,root:focusRoot,selected:selectedDetail?.id||null,...(c?{camera:{x:c.x,y:c.y,z:c.z}}:{})};try{localStorage.setItem('stocknexus.wikiRuntime',JSON.stringify(value));}catch{}root.AtlasWorkspace?.save('wiki',value);}
  function restoreRuntime(saved){if(!saved)return;restoringUI=true;try{layout.restore(saved.layout);if(saved.instrument)$('wikiInstrument').value=saved.instrument;for(const [id,value] of Object.entries(saved.controls||{}))if(runtimeKeys.includes(id)&&id!=='wikiRangeStart'&&id!=='wikiRangeEnd'){$(id).type==='checkbox'?$(id).checked=!!value:$(id).value=value;}sliders();for(const id of ['wikiRangeStart','wikiRangeEnd'])if(saved.controls?.[id]!==undefined)$(id).value=saved.controls[id];rootSelection=saved.root_selection||rootSelection;graphUniverse=saved.graph_universe||graphUniverse;graphSettings=saved.graph_settings||graphSettings;focusRoot=saved.root||null;sliderLabel();strategyNote();}finally{restoringUI=false;}}
- async function show(){
+ function show(){if(showPending)return showPending;showPending=openWiki().finally(()=>{showPending=null;});return showPending;}
+ async function openWiki(){
+  panel.hidden=false;layout.refresh();hooks.visible(true);status(t('正在載入 Wiki 狀態…','Loading Wiki status…'),false,true);
   await root.AtlasWorkspace?.ready;
   const selected=hooks.selection('global').graph_selection;if(selected?.trees?.length)rootSelection=selected;
   panel.hidden=false;layout.refresh();hooks.visible(true);graph?.resumeAnimation();translate();
   try{
-   info=await api('status');catalogAt=Date.now();
-   if(!initialized){
-    const catalog=await api('models');models=catalog.models;modelChoices();
+   const [nextInfo,catalog]=await Promise.all([api('status'),initialized?Promise.resolve(null):api('models')]);info=nextInfo;catalogAt=Date.now();
+   if(!initialized){models=catalog.models;modelChoices();
     const saved=root.AtlasWorkspace?.state.wiki||JSON.parse(localStorage.getItem('stocknexus.wikiRuntime')||'null');
     if(saved?.instrument)$('wikiInstrument').value=saved.instrument;
     else if(!current()){const id=hooks.selection('global').search?.instrument;const existing=info.instruments.find(x=>x.instrument===id)||info.instruments.filter(x=>x.version>0).sort((a,b)=>b.version-a.version)[0];if(existing)$('wikiInstrument').value=existing.instrument;}
     savedChoices();
     if(info.instruments.some(x=>x.instrument===current()))await load(true);
-    if(saved&&Object.keys(saved.controls||{}).length){restoreRuntime(saved);if(info.instruments.some(x=>x.instrument===current()))await load();if(saved.selected){const n=data?.nodes.find(n=>n.id===saved.selected);if(n){details(n);if(n.kind!=='ArticleRevision'&&n.layer!=='L2')await openViewpoint(n);}}if(saved.camera){fitPending=false;graph?.cameraPosition(saved.camera);}}
+    if(saved&&Object.keys(saved.controls||{}).length){const before=String(query());restoreRuntime(saved);if(String(query())!==before&&info.instruments.some(x=>x.instrument===current()))await load();else render();if(saved.selected){const n=data?.nodes.find(n=>n.id===saved.selected);if(n){details(n);if(n.kind!=='ArticleRevision'&&n.layer!=='L2')await openViewpoint(n);}}if(saved.camera){fitPending=false;graph?.cameraPosition(saved.camera);}}
     else if(!data){const preferred=catalog.default_model+'|low';if([...$('wikiModel').options].some(o=>o.value===preferred))$('wikiModel').value=preferred;}
     initialized=true;
-   }else{savedChoices();if(data)await load();}
+   }else{savedChoices();if(data)poll();else if(info.instruments.some(x=>x.instrument===current()))await load();}
    if(selected?.trees?.length)rootSelection=selected;syncGraphUniverse();strategyNote();schedulePreview();saveRuntime();
-   if(!info.bridge_ready)status(t('模型橋接尚未就緒；啟動前請檢查 Chat 服務。','Model bridge is not ready; check the Chat service before starting.'),true);
+   if(info.bridge_ready&&!$('wikiStatus').classList.contains('error'))status('');if(!info.bridge_ready)status(t('模型橋接尚未就緒；啟動前請檢查 Chat 服務。','Model bridge is not ready; check the Chat service before starting.'),true);
   }catch(e){status(e.message,true);}
   clearInterval(pollTimer);pollTimer=setInterval(poll,2000);$('wikiBack').focus();
  }
@@ -303,8 +317,16 @@
  for(const id of ['wikiKind','wikiRelation','wikiBudget','wikiAssessment'])$(id).onchange=render;
  function selectVersion(){researchRun=null;clearTimeout(revealTimer);$('wikiLayer').value='L1';render();root.dispatchEvent(new CustomEvent('atlas-wiki-research-clear'));return load();}
  for(const id of ['wikiVersion','wikiViewStart','wikiViewEnd'])$(id).onchange=()=>id==='wikiVersion'?selectVersion():load();
- $('wikiStart').onclick=async()=>{if(busy||!plan||!plan.pending)return;busy=true;const mine=generation;$('wikiStart').disabled=true;try{const value=await api('jobs',{plan_id:plan.plan_id,continuous:$('wikiContinuous').checked});if(mine!==generation)return;invalidate();status(value.status==='noop'?value.message:t('工作已排入佇列，可隨時停止。','Work queued. Stop at any time.'));$('wikiVersion').value='';await load();}catch(e){status(e.message,true);schedulePreview();}finally{busy=false;activity();}};
- $('wikiResume').onclick=async()=>{if(busy||$('wikiResume').disabled)return;busy=true;invalidate();try{await api('resume',{instrument:current()});await load(true);}catch(e){status(e.message,true);}finally{busy=false;activity();}};
+ $('wikiStart').onclick=async()=>{
+  if(busy||$('wikiStart').disabled)return;busy=true;const mine=generation,ident=current();activity();
+  status(t('正在核對快取中的新聞範圍與已完成證據…','Checking cached news and completed evidence…'),false,true);
+  try{
+   const value=await api('plan',requestBody());if(mine!==generation||ident!==current()||panel.hidden)return;plan=value;
+   status(t('正在排入尚未完成的整理工作…','Queuing remaining work…'),false,true);
+   const job=await api('jobs',{plan_id:value.plan_id,continuous:$('wikiContinuous').checked,classify_missing:true});if(mine!==generation||ident!==current()||panel.hidden)return;
+   invalidate();$('wikiVersion').value='';await load();status(job.status==='noop'?job.message:t('工作已排入佇列，可隨時停止。','Work queued. Stop at any time.'));
+  }catch(e){if(mine===generation)status(e.message,true);}finally{busy=false;$('wikiStatus').classList.remove('wiki-working');$('wikiStatus').setAttribute('aria-busy','false');activity();}
+ };
  $('wikiPause').onclick=async()=>{try{await api('configure',{instrument:current(),enabled:false});await poll();}catch(e){status(e.message,true);}};
  $('wikiExport').onclick=async()=>{if(!data)return;try{const result=await api('markdown?'+new URLSearchParams({instrument:data.instrument,version:data.version}));const url=URL.createObjectURL(new Blob([result.markdown],{type:'text/markdown;charset=utf-8'})),a=el('a');a.href=url;a.download=data.instrument.replace(':','-')+'-wiki.md';a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);}catch(e){status(e.message,true);}};
  let tipTimer;const hideTip=()=>{clearTimeout(tipTimer);$('wikiStartTip').hidden=true;$('wikiStart').removeAttribute('aria-describedby');};for(const event of ['mouseenter','focus'])$('wikiStart').addEventListener(event,()=>{clearTimeout(tipTimer);tipTimer=setTimeout(()=>{$('wikiStartTip').hidden=false;$('wikiStart').setAttribute('aria-describedby','wikiStartTip');},550);});for(const event of ['mouseleave','blur'])$('wikiStart').addEventListener(event,hideTip);$('wikiStart').addEventListener('keydown',e=>{if(e.key==='Escape')hideTip();});

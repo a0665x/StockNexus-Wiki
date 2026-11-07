@@ -1,5 +1,6 @@
 """Bounded incremental compiler; the LLM can propose JSON, never write the DB."""
 import json
+import copy
 import datetime as dt
 import threading
 import time
@@ -19,6 +20,7 @@ class WikiService:
     def __init__(self,news,runner=None,start_worker=True):
         self.news=news;self.data_root=getattr(news,'data_root',news.path.parent);migrate_legacy(self.data_root);self.root=self.data_root/'llm_wiki'
         self.runner=runner or self.bridge
+        self._coverage_cache={};self._coverage_lock=threading.RLock()
         self.plans={};self.lock=threading.RLock();self.stop=threading.Event();self.wake=threading.Event()
         self.thread=None;self.active=None
         # A crashed model call is not silently retried (it may have consumed quota).
@@ -168,7 +170,7 @@ class WikiService:
         return {'date_bounds':{'start':dated[0],'end':dated[-1]} if dated else None,'graph_selection':options.get('graph_selection'),'grouping_edges':len(options['graph_edges']),'usage':usage_summary(store,(dates or {}).get('start'),(dates or {}).get('end')),**{k:options[k] for k in ('reasoning_effort','languages','evidence_size','strategy')},'daily_used':used,'plan_id':plan['id'],'instrument':store.instrument,'base_version':base,'selected':len(rows),'pending':pending,'next_batch':pending,'reused':len(rows)-len(unseen),'model':model,'date_range':dates,'operation':operation,'watch_sources':subscriptions,'expires_in':600,'note':'只處理本次日期範圍；增量模式跨模型重用既有成果，不受新聞edge設定與渲染數影響。局部校正需另行明確選擇，仍會消耗token。'}
 
     def start(self,body):
-        if not isinstance(body.get('continuous',False),bool): raise ValueError('無效持續維護設定')
+        if not isinstance(body.get('continuous',False),bool) or not isinstance(body.get('classify_missing',False),bool): raise ValueError('無效持續維護設定')
         with self.lock:
             plan=self.plans.get(body.get('plan_id'))
             if not plan or plan['expires']<time.time(): raise ValueError('預覽已失效，請重新預覽')
@@ -179,8 +181,15 @@ class WikiService:
             if base!=plan['base_version']: raise ValueError('Wiki版本已改變，請重新預覽')
             if plan['operation']=='review' and body.get('continuous'):raise ValueError('局部校正僅能手動執行，不可持續重跑')
             pending=store.pending(limit=1,revision_ids=[a['revision_id'] for a in plan['rows']],review=True) if plan['operation']=='review' else store.known(plan['rows'])
+            classification=None
+            if body.get('classify_missing') and plan['operation']=='update':
+                from .classifier import enqueue
+                classification=enqueue(store,plan['model'],plan.get('reasoning_effort','high'))
             if not pending:
                 self.plans.pop(plan['id'],None)
+                if classification and classification.get('job_id'):
+                    self.wake.set()
+                    return {**classification,'instrument':store.instrument}
                 return {'job_id':None,'instrument':store.instrument,'status':'noop','message':'此範圍沒有待辦；未啟動模型，原設定保留。'}
             store.ingest([*plan.get('context_rows',[]),*plan['rows']])
             cfg={**{k:plan[k] for k in OPTION_KEYS if k in plan},'enabled':body.get('continuous',False),'catch_up':plan['operation']=='update','model':plan['model'],'subscriptions':plan['subscriptions'],'date_range':plan['date_range'],'revision_ids':[a['revision_id'] for a in plan['rows']]}
@@ -231,6 +240,27 @@ class WikiService:
         return list(rows.values())
 
     def coverage(self,store):
+        # Key both main files and WAL: publishes, imports and newly acquired news
+        # invalidate immediately; TTL bounds changes on unusual filesystems.
+        def signature():
+            news_path=(self.data_root/'graph'/store.instrument.split(':')[1]/'news-atlas.sqlite3') if hasattr(self.news,'for_ticker') else self.news.path
+            files=[store.path,news_path]
+            out=[]
+            for path in files:
+                for suffix in ('','-wal'):
+                    try:
+                        st=type(path)(str(path)+suffix).stat();out.append((st.st_dev,st.st_ino,st.st_size,st.st_mtime_ns))
+                    except FileNotFoundError:out.append(None)
+            return tuple(out)+(now()[:10],)
+        with self._coverage_lock:
+            key=signature();cached=self._coverage_cache.get(store.instrument)
+            if cached and cached[0]==key and time.monotonic()-cached[1]<5:return copy.deepcopy(cached[2])
+            value=self._coverage(store)
+            if len(self._coverage_cache)>=64:self._coverage_cache.pop(next(iter(self._coverage_cache)))
+            self._coverage_cache[store.instrument]=(signature(),time.monotonic(),value)
+            return copy.deepcopy(value)
+
+    def _coverage(self,store):
         cfg=store.config()
         try:rows=self.scope_rows(store)
         except ValueError as error:return {'unavailable':True,'instrument':store.instrument,'error':str(error)+'；舊 Wiki 仍可閱讀，請縮小日期後重新預覽。'}
@@ -240,7 +270,7 @@ class WikiService:
             extracted=db.execute('SELECT count(DISTINCT revision) FROM extractions').fetchone()[0]
             used=db.execute('SELECT count(*) FROM calls WHERE day=?',(now()[:10],)).fetchone()[0]
             rejected=db.execute('SELECT count(*) FROM rejected_proposals').fetchone()[0]
-        review_pending=len(store.pending(limit=10000,revision_ids=ids,review=True));done=len(rows)-len(missing)
+        done=len(rows)-len(missing)
         with store.connection() as db:
             reviewed=db.execute('SELECT count(*) FROM review_coverage WHERE revision IN (SELECT value FROM json_each(?))',(json.dumps(ids),)).fetchone()[0]
         return {'scope_total':len(rows),'scope_done':done,'scope_pending':len(missing),'scope_percent':round(100*done/len(rows),2) if rows else 0,

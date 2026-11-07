@@ -61,7 +61,7 @@ def main():
                 assert checks[name],name
             js("""(()=>{
               rebuild(initialGraph);window.newsBefore={nodes:graph.graphData().nodes.slice(),edges:JSON.stringify(relations),camera:JSON.stringify(graph.cameraPosition())};
-              const factory=ForceGraph3D;window.ForceGraph3D=(...args)=>{window.fixtureWikiRenderer=factory(...args);return fixtureWikiRenderer;};window.wikiCalls=[];window.planRelease=null;window.deferPlan=false;
+              const factory=ForceGraph3D;window.ForceGraph3D=(...args)=>{window.fixtureWikiRenderer=factory(...args);return fixtureWikiRenderer;};window.wikiCalls=[];window.planRelease=null;window.deferPlan=false;window.failGraph=false;window.deferPoll=false;window.pollRelease=null;
               window.fixtureWiki={instrument:'NASDAQ:TSLA',version:1,versions:[{version:1,created_at:'2026-11-04T00:00:00Z'}],nodes:[{id:'a',kind:'ArticleRevision',title:'Fixture evidence',summary:'Evidence only',url:'https://example.test',status:'source'},{id:'b',kind:'Claim',title:'<img src=x onerror=alert(1)> Claim',scope:'fixture',summary:'待判讀',status:'proposed',citations:[{article_revision_id:'a',field:'title',start:0,end:7,quote:'Fixture'}]}],edges:[{source:{stable_id:'a',kind:'ArticleRevision'},target:{stable_id:'b',kind:'Claim'},relation_type:'SUPPORTS',status:'proposed',rationale:'Fixture',evidence_refs:[]}],total_nodes:2,config:{enabled:false},jobs:[],truncated:false};
               fixtureWiki.coverage={instrument:'NASDAQ:TSLA',scope_total:10,scope_done:2,scope_pending:8,review_done:0,review_total:2,daily_calls:2,daily_limit:20,captured_revisions:10,extracted_revisions:2,storage:'llm_wiki/TSLA/wiki.sqlite3',subscriptions:[],rejected_responses:0,note:'分母為已確認範圍'};
               fixtureWiki.perspectives={categories:{direct:1},theses:[],total_theses:0,note:'模型局部觀點彙整，未以股價驗證'};fixtureWiki.nodes[1].assessment={category:'direct',rationale:'營運線索，未測試股價',status:'unverified'};
@@ -75,20 +75,48 @@ def main():
                   if(deferPlan)await new Promise(r=>{planRelease=r});
                   const body=JSON.parse(options.body);value={plan_id:'plan',instrument:body.instrument,selected:body.articles.length,pending:1,next_batch:1,reused:0,model:body.model,daily_limit:body.daily_limit,watch_sources:[],note:'Fixture'};
                 }
-                else if(url.includes('/graph?'))value=fixtureWiki;
+                else if(url.includes('/graph?')){if(failGraph){failGraph=false;throw Error('Temporary graph 503');}value=fixtureWiki;}
                 else if(url.endsWith('/apply'))value={status:'saved',resumed:false};
                 else if(url.includes('/node?'))value={...fixtureWiki.nodes[1],kind:'Thesis'};
                 else if(url.endsWith('/resume'))value={config:fixtureWiki.config,coverage:fixtureWiki.coverage};
                 else if(url.endsWith('/jobs'))value={job_id:'job',instrument:'NASDAQ:TSLA'};
-                else if(url.includes('/jobs?'))value={jobs:fixtureWiki.jobs,config:fixtureWiki.config,version:1,coverage:fixtureWiki.coverage};
+                else if(url.includes('/jobs?')){if(deferPoll)await new Promise(r=>{pollRelease=r});value={jobs:fixtureWiki.jobs,config:fixtureWiki.config,version:1,coverage:fixtureWiki.coverage};}
                 else if(url.includes('/article?'))value={title:'Fixture source',url:'https://example.test'};
                 else if(url.includes('/markdown?'))value={markdown:'# fixture'};
                 else throw Error('Unhandled Wiki test URL: '+url);
                 return {ok:true,json:async()=>value};
               };
             })()""")
+            scenario=os.environ.get('WIKI_RESPONSIVE_SCENARIO','')
+            if scenario=='retry':js("failGraph=true")
+            if scenario=='restore':
+                js("AtlasWorkspace.state.wiki={instrument:'NASDAQ:TSLA',controls:{wikiKind:'Claim',wikiBudget:'1600',wikiLayer:'L1'}}")
             js("AtlasWiki.show()")
             time.sleep(.5)
+            if scenario=='retry':
+                check('initial graph failure stays explicit',"!AtlasWiki.graph()&&$('wikiStatus').textContent==='Temporary graph 503'")
+                js("$('wikiBack').click();AtlasWiki.show()")
+                check('re-entering retries failed graph without starting work',"!!AtlasWiki.graph()&&wikiCalls.filter(c=>c.url.includes('/graph?')).length===2&&wikiCalls.every(c=>!c.url.endsWith('/plan'))")
+            if scenario=='restore':
+                check('restored filters render cached data without second graph fetch',"$('wikiKind').value==='Claim'&&$('wikiBudget').value==='1600'&&fixtureWikiRenderer.graphData().nodes.length===1&&fixtureWikiRenderer.graphData().nodes[0].kind==='Claim'&&wikiCalls.filter(c=>c.url.includes('/graph?')).length===1")
+                js("$('wikiKind').value='';$('wikiKind').dispatchEvent(new Event('change'))")
+            time.sleep(.6)
+            check('one maintenance button and no automatic planning on entry',"!$('wikiResume')&&!$('wikiStart').disabled&&wikiCalls.every(c=>!c.url.endsWith('/plan'))")
+            js("window.deferPoll=true;window.pollBefore=wikiCalls.filter(c=>c.url.includes('/jobs?')).length")
+            time.sleep(4.4)
+            check('slow status request never overlaps a later poll',"wikiCalls.filter(c=>c.url.includes('/jobs?')).length-pollBefore===1")
+            js("deferPoll=false;pollRelease?.();window.deferPlan=true")
+            click('wikiStart')
+            check('click immediately shows preparation and blocks double submit',"$('wikiStart').disabled&&$('wikiStart').getAttribute('aria-busy')==='true'&&$('wikiStatus').getAttribute('aria-busy')==='true'")
+            click('wikiStart')
+            check('one explicit plan and no model job before it resolves',"wikiCalls.filter(c=>c.url.endsWith('/plan')).length===1&&!wikiCalls.some(c=>c.url.endsWith('/jobs'))")
+            js("deferPlan=false;planRelease()")
+            time.sleep(.35)
+            check('one click queues missing evidence and classifications',"wikiCalls.filter(c=>c.url.endsWith('/jobs')).length===1&&wikiCalls.find(c=>c.url.endsWith('/jobs')).body.classify_missing===true")
+            js("window.beforeReturn=wikiCalls.filter(c=>c.url.includes('/graph?')).length;window.returnGraph=AtlasWiki.graph();$('wikiBack').click();AtlasWiki.show()")
+            time.sleep(.35)
+            check('returning reuses mounted graph without recomputing plan',"AtlasWiki.graph()===returnGraph&&wikiCalls.filter(c=>c.url.includes('/graph?')).length===beforeReturn&&wikiCalls.filter(c=>c.url.endsWith('/plan')).length===1")
+            check('idle action never pretends to be processing',"!$('wikiStart').classList.contains('wiki-working')&&$('wikiStart').getAttribute('aria-busy')==='false'")
             # Collect the precise UI symptoms before changing implementation.
             results={}
             results['header_clear']=js("$('wikiPanel').getBoundingClientRect().top>=document.querySelector('body>header').getBoundingClientRect().bottom")
