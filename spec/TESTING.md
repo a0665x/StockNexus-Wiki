@@ -1,5 +1,39 @@
 # 測試與驗收
 
+## 2026-11-10：整理成果可見性與變更區上邊界
+
+正式唯讀查核時 GOOGL 已有 611 個 nodes 紀錄、v47；主機保存的 Wiki controls 為 L1／最新版本／wikiAssessment=__pending。已有資料不能直接推論畫面可見，尚待分類篩選會隱藏已分類成果。本輪未改工作內容或重送模型。
+
+每段通過驗證並發布後，最新版本讀取仍隨輪詢更新，不等整棵 root coverage 記帳，也不把未驗證串流當正式節點。即時區顯示已發布版本與目前載入節點；空圖區分第一段等待、圖層、分類／節點篩選、歷史版本與日期無成果。提供「查看最新已發布成果」只讀入口：切 L1／最新版本、清除節點／關係／分類篩選，保留日期與模型／工作設定。停止保留已發布節點。
+
+首次 graph GET 失敗後，poll 原本因 data 為空直接返回，造成永久空圖；現在仍輪詢工作並重試 graph GET。暫時讀取失敗保留舊成果，恢復不建立模型工作。
+
+版本變更展開時新增上邊界；向上拖曳時邊界實際上移，與進度區交換高度，各自保留最低 64px，內容可捲動。支援鍵盤、取消及既有工作區高度保存；版本更新保留展開與高度。手機維持無拖曳把手布局。
+
+`tests/browser_wiki_results.py` 隔離 Chrome 11 項檢查通過，包含首次失敗恢復、__pending 空圖、整理中發布、停止保留、真實滑鼠拖曳邊界、鍵盤持久化與語言。`tests/browser_wiki_layout.py` 48 項既有實體交互／手機檢查通過。測試使用合成資料，無正式模型呼叫。更新與先前 root 閱讀入口一起建置待部署；未中斷正式整理。
+
+## 2026-11-09：目前處理樹的閱讀入口
+
+工作狀態提供「查看第 N／總數棵新聞樹」入口；以 job 的凍結 graph_selection 成員回到 News，高亮整樹並優先納入渲染，其餘變暗。只是閱讀，不提交 plan／模型工作、不修改 News 關聯設定。畫面明示「成員為工作快照、連線依目前新聞設定」：舊工作沒有完整樹邊快照，不假冒舊邊精確重播。不同股票或未載入／隱藏來源造成成員缺漏時拒絕跳轉，保留原頁。空白點擊退出，拖動及背景連線刷新保留；點另一新聞恢復一般選取。此暫時高亮不保存為新的 Wiki 工作樹。
+
+已完成 evidence revision 跨模型／方法／篇數／News edge 設定重用，改分組不刪除舊 Wiki 知識，也不自動重新推論舊觀點。新內容版本／新增新聞仍可處理；已完成文章可能再次作脈絡，未完整發布的樹仍可能重做分段。這次不改去重與發布記帳，也不承諾零重複或全域最少 token。
+
+驗證：`tests/browser_wiki_root.py` 隔離瀏覽器直接點 root 入口，覆蓋成員高亮、閱讀不提交工作、錯股票、缺成員、語言與互動；`test_wiki.WikiTests.test_switch_model_and_prompt_does_not_reextract`、`test_wiki_forest`、`test_wiki_root_budget` 共 11 項通過。正式部署狀態另外核對；不可為更新閱讀功能而未告知就中斷在途模型。
+
+## 2026-11-09：medium root 過早逾時
+
+實際 GOOGL 兩次 root 工作均在第一段（12 篇、整樹 36 篇／4 段）約 120 秒後 failed，錯誤為 `The operation was aborted`，不是正常完成。橋接按 reasoning_effort 給 medium 120 秒，與批次結構化輸出負擔不相符；改為所有 Wiki 呼叫共用 600 秒上限，保留 640 秒 socket 邊界，明確區分逾時／取消。不改模型、分段、日期或 coverage，不自動重試。
+
+虛擬時間直接驅動 createWikiCompiler：medium 12 篇跨 120 秒、600 秒終止原因／模型槽釋放兩項先失敗後通過；`node --test tests/chat-wiki.test.mjs tests/chat-service.test.mjs` 共 11 項通過，含取消與晚回覆。未以正式模型重新執行，不保證任意輸入均能在 600 秒內完成。
+
+## 2026-11-09：8285c09 文件核對與空資料起點
+
+- `PYTHONPATH=.:tests python -m unittest test_research test_healthcheck`：24 tests PASS（2.605s）。
+- `PYTHONPATH=.:tests python tests/browser_research.py`：PASS；隔離 HTTP／Chrome 驗證 query、模型 fixture、來源、即時保存、導覽、owner 拒絕、桌面／手機 overflow，以及進度與完成結果 GET 恢復，不建立重複模型工作。
+- 先停止正式服務再按使用者授權清庫；重新啟動 `./run.sh up --non-interactive --tailscale off` 成功。實際 `/api/status` 的 articles／coverage／attempts／snapshots 均 0，`/api/wiki/status` instruments=[]、bridge_ready=true，`/api/workspace`={}，`/api/snapshots` snapshots=[]。
+- 清除 58 個 DB／sidecar（含備份），1,642,643,456 bytes；受保護憑證清理前後雜湊相同。啟動後出現新空 DB 屬正常行為。
+- 以上不代表真實來源搜尋或付費模型內容品質完成驗收，也未清除使用者瀏覽器 localStorage。手動 smoke 路線與冷啟動邊界見 [SMOKE_TEST](SMOKE_TEST.md)。
+
 入口：[PROJECT_MAP.md](PROJECT_MAP.md)。測試使用隔離 fixture／暫存 DB，不應改寫使用者的 data/news-atlas.sqlite3。
 
 ## 2026-11-07：跨步驟互動驗收與可見等待狀態
@@ -442,3 +476,23 @@ PYTHONPATH=.:tests python tests/browser_chat_language.py
 
 
 最終正式 HTTPS 驗收 PASS：`/usr/bin/python3 tests/browser_live_research_availability.py --url https://ubuntu.tail9e662c.ts.net:8765/ --stock NASDAQ:GOOGL --check-l2`；證據 `/tmp/live-l2-final.log`、`/tmp/research-availability-live.json`、`/tmp/research-availability-live.png`。從新瀏覽器設定檔以滑鼠及原生下拉切 GOOGL→L2，現有「動能」run 的 5 個 L2 節點全數渲染、與 API claims 數一致；無 JS 錯誤、零模型動作，3 次工作區偏好寫入已隔離。
+
+## 2026-11-09：低 GPU 預算不截斷工作樹閱讀
+
+Root 連結以完整已載入新聞集合核對成員，不以 graph.graphData 的 GPU 切片判定存在。閱讀時渲染預算暫用 max(使用者預算, 工作樹成員數)，所有成員優先；退出恢復原預算，不改保存設定、工作輸入或覆蓋分母。單樹仍受既有探索深度／分支／maxNodes 規則約束，這些語意選取規則與 GPU 預算不同。Wiki 從已確認 graph_universe 重建完整圖，逐樹涵蓋日期內目標，不拿當前渲染點作全集。真正未載入／隱藏來源的成員仍需補齊資料，不冒充完整樹。
+
+隔離 Chrome：180 篇全局新聞、GPU 預算 100、選中原本未渲染的 root，其樹 120 成員全部顯示，退出回到 100，完整集合維持 180，無 Wiki 寫入；連同既有入口測試共 15 項檢查通過。test_wiki_forest 共 8 項通過，含未渲染與孤立新聞覆蓋。正式容器尚未部署，以免中斷在途整理。
+
+### L2 論證分支（2026-11-10）
+
+`python tests/browser_wiki_arguments.py`：11 項隔離 Chrome 驗證支持／反對實體形狀、分支精確選取、類型及色標、HTML escaping、英文切換、缺失／未知 claim／缺 L1 不造分支、共用 claim 保留雙角色、L2-only 與 L1 隔離、零模型呼叫及 runtime errors。測試用既有成果 fixture，不修改正式 DB。
+
+同輪回歸：`tests/browser_wiki_layout.py` 48 項通過；`tests/browser_research.py` 完整隔離 HTTP／Chrome 流程通過。回歸發現先前發布結果提示改動讓 L2 空畫面未指出研究入口，已補回引導並重新驗證。語法與 `git diff --check` 通過；`docker compose build atlas` 成功，未重啟正式容器。
+
+## 2026-11-10 L1／L2 Chat 與閱讀 BDD
+
+[可重跑案例與實際模型抽查](CHAT_RESEARCH_BDD.md)。13 項 Node Chat tests 通過；新 DB→HTTP→MCP stdio→瀏覽器 BDD 通過（未來時間排除、舊快照／待整理水位、完整引用、表格及 HTML 安全）。英文分類／研究入口原先 FAIL，修正後連同新視窗與跨視窗切換 PASS。既有 Chat 語系生命週期及完整研究 HTTP／Chrome 回歸 PASS。一次真實模型已完成工具讀取與最終回答；修正測試誤選進度文字後重播驗證日期與表格，未再次付費。
+
+部署後追加：正式 8765／Chat 健康與四個 HTTP 資產雜湊 PASS；阻擋偏好與模型寫入的隔離 Chrome 驗證正式英文分類／研究入口、現有 L1 立體圖例及無 runtime error PASS。空 L2 不列圖例，不能把無資料當成圖例故障。39 份 spec 文件連結與必要入口檢查 PASS。
+
+2026-11-10 L2 語系回歸：`python tests/browser_research_locale.py` 使用隔離瀏覽器，完整展開側欄與歷史版本，涵蓋忙碌 tooltip、模型狀態失聯／恢復、排隊／執行／中斷、進度重連及中英往返。保存問題保留原文，其餘介面文字排除漏翻譯；所有模型 POST 必須為零。新視窗／跨頁切換另由 `browser_wiki_reading.py` 驗證。

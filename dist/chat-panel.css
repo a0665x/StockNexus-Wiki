@@ -23,3 +23,5 @@
 .chat-compose{position:relative;flex-shrink:0}.chat-compose textarea{box-sizing:border-box;padding:12px 52px 12px 12px;min-height:84px;margin:0}
 .chat-compose .chat-send{position:absolute;right:6px;bottom:6px;width:36px;height:36px;min-height:36px;padding:8px;border:0;border-radius:8px;display:grid;place-items:center;background:transparent;color:var(--accent);cursor:pointer}
 .chat-send svg{width:22px;height:22px;pointer-events:none}.chat-send:hover:not(:disabled){background:#77e8c324}.chat-send:focus-visible{outline:2px solid var(--accent);outline-offset:0}.chat-send:disabled{opacity:.35;cursor:default}
+
+.chat-message p{margin:0 0 .6em}.chat-message p:last-child{margin-bottom:0}.chat-message table{border-collapse:collapse;width:100%;font-size:12px;white-space:normal}.chat-message th,.chat-message td{border:1px solid #365064;padding:6px;min-width:110px;vertical-align:top;overflow-wrap:anywhere}.chat-message th{background:#1c3041}.chat-table-scroll{max-width:100%;overflow-x:auto;overscroll-behavior-x:contain}.chat-message pre{overflow:auto;max-width:100%;white-space:pre}.chat-message code{font-family:monospace}.chat-message>div{min-width:0;max-width:100%}

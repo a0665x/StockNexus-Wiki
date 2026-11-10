@@ -147,3 +147,25 @@ BDD 邊界（`tests/browser_research.py`）：
 
 
 讀取成本邊界：job、runs、taxonomy GET 只讀已提交 Wiki，不再 observe／ingest 整份新聞；run 與 lenses 仍檢查來源以計算新鮮度，query／refresh 的來源觀察與背景增量維護保持。`test_polling_and_catalog_reads_do_not_reingest_news` 以來源掃描會失敗的情境驗證輕量讀取，並確認 run 仍執行觀察。
+
+## 2026-11-10 L2 論證分支與節點提示
+
+共用圖將已保存 run 的 `support` / `counter` claim IDs 投影為 `ArgumentBranch` 導航節點：青綠八面體（菱形）／橙色方塊。只為實際 claim 且 `derived_from` 命中 bundle L1 的非空分組建立分支；同一 claim 可屬於兩組，仍只保存／顯示一個 claim。`ARGUMENT_MEMBER` 是模型針對研究問題的分組，**不是**新事實、L1 正反關係或證明；`DERIVED_FROM` 仍是原有精確引用。沒有反對論據不補造分支，也不發模型請求、不改 L1／run／snapshot。
+
+點分支只亮起該組 L2、其 L1 與原文來源；其他分支變暗。拖曳／空白點擊沿用既有選取手勢。L2 圖層顯示分支與結論，L1+L2 可見完整引用背景；仍受使用者分類／節點／渲染篩選。Tooltip 及側欄標題包含層級、節點類型、色標與實際主分類（多標籤全部列出）；分支形狀／色彩表示論證角色，一般圓點主色仍取 taxonomy。色彩不表示可信度。中文／英文切換時重新投影 UI 標題，來源文字保持原文。
+
+驗證：`tests/browser_wiki_arguments.py` 11 項隔離 Chrome 檢查，包含實際網格幾何、精確引用選取、缺失／無效分支、共用論據、HTML 轉義、語系與零模型呼叫。這是保存結果的視覺化，不代表本輪重新驗收付費模型的論證品質。前端尚待正式容器更新。
+
+## 2026-11-10 圖例與語系修正
+
+上一節的固定文字形狀圖例已取代：依當下實際渲染節點集合，以相同 mesh／材質色彩生成 WebGL PNG 小圖，配短類別標籤；沒有顯示的角色／分類不列出。英文分類統一經 AtlasI18n.termLabel，內建 canonical ID 對應英文、外部明確英文翻譯優先，未知中文自訂標籤以 stable ID 回退，不修改 DB 或自動付費翻譯。L2 入口及研究常用 UI 文字接語言事件；引用維持原文。整合 Chat 的日期與工具契約見 [CHAT_RESEARCH_BDD](CHAT_RESEARCH_BDD.md)。
+
+## 2026-11-11 研究問題目錄與面向（第一版）
+
+L2 左欄將「已保存的研究」擴充為研究問題目錄：包含本機 owner 的已保存 live/pinned 及已完成但未另保存的 run；保存研究的 history run 不重複列為卡片。問題文字可搜尋，面向可篩選；每張卡片點選只 GET 已有結果，切換共用圖及 Chat 的研究情境。舊版仍在卡片歷史中可讀。一次顯示一份研究，尚未做跨問題全圖合併。
+
+面向是 `lens.research_facets` 的穩定 ID 多標籤（投資回報、需求成長、獲利成本、估值股價、風險監管、競爭優勢、動能趨勢、其他）。`facet_method=question_keywords_v1` 明示規則來源；依問題中英文字詞作瀏覽分類，不由 L1 標籤代替問題意圖，不作模型可信度、不限制 L1 召回、不進 effective input hash。未命中顯示其他，不宣稱完整語意解析；目前沒有手動改標籤 UI。新研究隨 lens/snapshot 保存；舊研究 GET 時投影補足，不改寫原快照、不發模型、不要求 migration。
+
+`GET research/runs` 現回傳所有本機 owner 完成結果的問題條件、建立時間與 claim_count，無原本最近 20 筆上限，讓目錄能找到舊結果。圖上方及 L2 節點 tooltip/詳情顯示所屬研究問題；問題原文保持原語言，介面面向支援中英。面向數量是卡片數，同一問題可命中多面向，不能相加當唯一總數。
+
+測試：test_research.py（24 項）包含面向多標籤、目錄與讀取零模型呼叫；browser_research_locale.py 包含已保存／未另保存／歷史去重、面向搜尋與英文往返；browser_research.py 實際 HTTP 切換結果及問題標示；browser_wiki_arguments.py 回歸支持反證來源鏈。

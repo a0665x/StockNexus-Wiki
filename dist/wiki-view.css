@@ -95,3 +95,14 @@
 
 /* During L2 work the graph reports actual progress instead of inviting a duplicate query. */
 .wiki-canvas-area:has(#wikiResearchStatus[aria-busy="true"]) #wikiEmpty{display:none}
+
+.wiki-root-progress{display:grid;gap:4px;margin:6px 0}.wiki-root-link{justify-self:start;padding:0;border:0;background:transparent;color:var(--accent,#7de3bd);text-decoration:underline;text-underline-offset:3px;cursor:pointer;text-align:left}.wiki-root-link:disabled{opacity:.55;cursor:default}
+
+#wikiVersionInfo[open]{box-sizing:border-box;height:var(--wiki-changes,170px);max-height:var(--wiki-changes,170px);flex-shrink:0;overflow:auto}#wikiResizeChanges[hidden]{display:none}.wiki-empty button{pointer-events:auto}.wiki-published-result{margin-top:8px}.wiki-published-result button{margin-top:4px}
+
+.wiki-node-heading{display:grid;gap:5px;margin-bottom:8px}.wiki-node-swatch{display:inline-block;width:10px;height:10px;border:1px solid #bacbd4;margin-right:6px;vertical-align:middle}.wiki-node-tooltip{max-width:340px;white-space:normal;text-align:left;padding:8px;line-height:1.5}
+
+.wiki-shape-legend{display:flex;flex-wrap:wrap;gap:4px 12px}.wiki-shape-entry{display:inline-flex;align-items:center;font-size:11px;gap:2px}.wiki-shape-entry img{object-fit:contain;flex:none}
+
+.research-facets{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 12px}.research-facets button{font-size:12px}.research-facets button[aria-pressed="true"]{border-color:#73ddca;color:#73ddca;background:#17343c}#researchSearch{width:100%;box-sizing:border-box;margin-bottom:12px}#researchSaved>section{padding:10px;border:1px solid #2b4355;border-radius:8px;margin:8px 0}#researchSaved>section.research-current{border-color:#73ddca}#researchSaved .research-source{overflow-wrap:anywhere;text-align:left}#researchSaved small{display:block;margin:6px 0;color:#9db2c4}.wiki-research-question{flex-basis:100%;overflow-wrap:anywhere;font-size:13px;color:#d8eeeb}
+.research-facets button small{display:inline;margin:0}.wiki-research-question{display:block;margin:8px 0 4px}

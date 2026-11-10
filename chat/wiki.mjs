@@ -40,7 +40,10 @@ export function createWikiCompiler(makeThread,{validateModel}={}){
    if(typeof b.job_id!=='string'||!/^[a-f0-9]{32}$/.test(b.job_id)||typeof b.model!=='string'||!b.model||b.model.length>100||typeof b.instrument!=='string'||!b.article||!Array.isArray(b.context)||b.context.length>12||JSON.stringify(b).length>200000)throw Object.assign(Error('Invalid Wiki compiler input'),{status:400});
    if(active.size)throw Object.assign(Error('Wiki compiler is busy; retry the job later'),{status:409});
    const controller=new AbortController();active.set(b.job_id,controller);
-   const timer=setTimeout(()=>controller.abort(),['high','xhigh','max','ultra','persistent'].includes(b.reasoning_effort)?600000:120000);
+   // Batch extraction/classification cost is not bounded by reasoning depth.
+   // Keep this below the Python compiler's 640-second socket deadline.
+   let timedOut=false;
+   const timer=setTimeout(()=>{if(!controller.signal.aborted){timedOut=true;controller.abort();}},600000);
    try{
     if(validateModel)await validateModel(b.model,b.reasoning_effort);
     if(controller.signal.aborted)throw Error('Wiki compilation cancelled or timed out');
@@ -50,6 +53,9 @@ export function createWikiCompiler(makeThread,{validateModel}={}){
     if((result.items||[]).some(i=>!['agent_message','reasoning'].includes(i.type)))throw Error('Unexpected tool use; Wiki proposal rejected');
     if(typeof result.finalResponse!=='string'||result.finalResponse.length>500000)throw Error('Wiki response exceeds output limit');
     return {proposal:JSON.parse(result.finalResponse),usage:result.usage||{}};
+   }catch(error){
+    if(controller.signal.aborted)throw Error(timedOut?'Wiki compilation timed out after 600 seconds; completed batches are preserved.':'Wiki compilation cancelled');
+    throw error;
    }finally{clearTimeout(timer);active.delete(b.job_id);}
   }
  };

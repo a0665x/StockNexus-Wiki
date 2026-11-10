@@ -44,6 +44,23 @@ class ResearchTests(unittest.TestCase):
     def save(self,mode='live'):
         run=self.complete();return self.research.save({'run_id':run,'mode':mode})
 
+    def test_question_facets_catalog_is_read_only_and_keeps_legacy_results(self):
+        from news_atlas.wiki.research import research_facets
+        self.assertEqual(research_facets({'query':'AI 投資回報與獲利成長'}), ['investment','growth','profitability'])
+        self.assertEqual(research_facets({'query':'Valuation risk and competitive moat'}), ['valuation','risk','competition'])
+        self.assertEqual(research_facets({'query':'未指定面向'}), ['general'])
+        ident=self.complete(query='需求成長與成本')
+        calls=len(self.calls)
+        before=self.research.read('run',ident)
+        catalog=self.research.read('runs')['runs']
+        self.assertEqual(catalog[0]['id'], ident)
+        self.assertEqual(catalog[0]['lens']['research_facets'], ['growth','profitability'])
+        self.assertEqual(catalog[0]['claim_count'], len(before['result']['claims']))
+        saved=self.research.save({'run_id':ident,'mode':'pinned'})
+        self.assertEqual(self.research.read('lenses')['lenses'][0]['lens']['research_facets'], ['growth','profitability'])
+        self.assertEqual(self.research.read('run',ident), before)
+        self.assertEqual(len(self.calls), calls)
+
     def test_vertical_l1_classification_lens_fusion_source_chain(self):
         ident=self.complete();r=self.research.read('run',ident)
         self.assertTrue(r['result']['claims']);self.assertEqual(r['result']['price_momentum']['status'],'unavailable')

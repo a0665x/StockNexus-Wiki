@@ -74,3 +74,29 @@ test('research fusion shares model lock and has a distinct claim registry schema
  }}));
  await compiler.run({...input,operation:'research_fusion',reasoning_effort:'high',article:{research_bundle:{opinions:[]}}});assert.ok(seen);
 });
+
+test('medium root segment can finish after two minutes without being aborted',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ let release,signal;
+ const compiler=createWikiCompiler(()=>({run:(_,options)=>{signal=options.signal;return new Promise(r=>{release=r;});}}));
+ const pending=compiler.run({...input,reasoning_effort:'medium',article:{_evidence:Array.from({length:12},()=>({title:'Example'}))}});
+ t.mock.timers.tick(120001);
+ const aborted=signal.aborted;
+ release({items:[],finalResponse:'{"nodes":[],"relations":[]}'});
+ const outcome=await pending.then(()=>null,e=>e);
+ assert.equal(aborted,false,'a medium 12-article root segment must not inherit the short interactive timeout');
+ assert.equal(outcome,null);
+});
+
+test('Wiki deadline reports timeout distinctly and releases the model slot',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ let calls=0;
+ const compiler=createWikiCompiler(()=>({run:(_,options)=>{
+  if(calls++)return Promise.resolve({items:[],finalResponse:'{}'});
+  return new Promise((resolve,reject)=>options.signal.addEventListener('abort',()=>reject(Error('The operation was aborted')),{once:true}));
+ }}));
+ const pending=compiler.run({...input,reasoning_effort:'medium'});
+ const rejected=assert.rejects(pending,/Wiki compilation timed out after 600 seconds/);
+ t.mock.timers.tick(600000);await rejected;
+ await compiler.run(input);
+});

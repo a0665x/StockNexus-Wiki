@@ -98,6 +98,7 @@ def main():
      wait("$('wikiResearchStatus').textContent.includes('尚未建立')")
      choose('wikiLayer',0)
      js('holdRuns=true;releaseRuns=null');choose('wikiLayer',1);wait('releaseRuns!==null')
+     js('holdRuns=false')  # Keep the old layer response pending; allow the new catalog read.
      click('researchOpen');wait("!$('researchStatus').classList.contains('research-working')")
      assert js("$('wikiResearchStatus').hidden"), 'entering research must clear superseded layer loading state'
      js('holdRuns=false;releaseRuns()');choose('wikiLayer',0);click('researchBack')
@@ -159,7 +160,7 @@ def main():
      assert js("!!$('researchResult').querySelector('blockquote')&&!!$('researchResult').querySelector('a[href^=\"https://\"]')")
      js("[...$('researchResult').querySelectorAll('button')].find(n=>n.textContent==='持續追蹤').id='fixtureSave'")
      measure('fixtureSave')
-     wait("$('researchSaved').textContent.includes('動能')")
+     wait("[...$('researchSaved').querySelectorAll('button')].some(n=>n.textContent==='更新')")
      js("[...$('researchSaved').querySelectorAll('button')].find(n=>n.textContent==='更新').id='fixtureRefresh'")
      measure('fixtureRefresh')
      wait("$('researchStatus').textContent.includes('證據未變')")
@@ -170,6 +171,8 @@ def main():
      assert js("fetch('/api/wiki/research/lenses?instrument=NASDAQ:TSLA&owner=other').then(r=>r.status)")==400
      wait("AtlasWiki.graph().graphData().nodes.some(n=>n.layer==='L2')")
      assert js("AtlasWiki.graph()===sharedWikiGraph")
+     assert js("document.querySelector('.wiki-research-question').textContent.includes('動能')")
+     assert js("!!document.querySelector('#researchFacets [data-facet=momentum]')")
      js("window.l2Node=sharedWikiGraph.graphData().nodes.find(n=>n.layer==='L2');AtlasWiki.selectNode(l2Node.id)")
      assert js("AtlasWiki.runtime.state().selected_node.layer==='L2'&&AtlasWiki.runtime.data().edges.some(e=>e.relation_type==='DERIVED_FROM')")
      assert js("sharedWikiGraph.nodeLabel()({title:'<img src=x onerror=alert(1)>',layer:'L2'}).includes('&lt;img')")

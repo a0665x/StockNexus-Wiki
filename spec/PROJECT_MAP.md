@@ -1,10 +1,12 @@
 # StockNexus-Wiki — 專案入口
 
-全圖原始碼查核：2026-11-06；Wiki 延續性入口與文件路由更新：2026-11-07（不是全庫重新查核）。這是目前工作目錄的實作地圖，不代表 GitHub main 或正在執行的 server 已同步。
+全圖原始碼查核：2026-11-06；2026-11-09 對 `8285c09` 核對 Wiki 分組／分類統計、研究恢復與空資料啟動契約（不是全庫重新查核）。這是目前工作目錄的實作地圖，不代表 GitHub main 或正在執行的 server 已同步。
 
 真實新聞搜尋與可解釋關聯圖：Google RSS、Yahoo 地區新聞（經 Google RSS）、Massive → 標準化／規則關聯 → SQLite 快取 → 3D 星系及時間軸。Python 標準函式庫後端、原生 JavaScript 前端，支援 Docker／Compose、無前端建置程序。
 
 展示名稱 **StockNexus-Wiki**；GitHub slug **stocknexus-wiki**。現有 runtime／DB／偏好識別沿用，改名邊界見 [WORKFLOWS.md](WORKFLOWS.md)。
+
+空資料驗收入口：[SMOKE_TEST.md](SMOKE_TEST.md)。先核對 CURRENT_STATE 的最新本機交接；歷史主機與舊工作數字不是目前資料。
 
 ## 新 session 的最短閱讀路徑
 
@@ -75,3 +77,5 @@
 - [TOOL_DOCK.md](TOOL_DOCK.md)：右側工具停靠、可調整分隔線、版面保存與拖曳邊界。
 
 - [RESEARCH_LAYERS.md](RESEARCH_LAYERS.md)：L1／分類／Lens／L2 垂直流程、BDD 邊界、API、遷移與限制。
+
+Chat L1／L2 證據整合與日期、MCP、表格驗收：[CHAT_RESEARCH_BDD.md](CHAT_RESEARCH_BDD.md)。

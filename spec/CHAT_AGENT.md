@@ -129,3 +129,7 @@ acknowledgement must not overwrite a completed/stopped stream status.
 
 Regression: [browser_chat_language.py](../tests/browser_chat_language.py);
 causes and test boundaries: [language runtime incident](references/lesson-20261106-language-runtime.md).
+
+## 2026-11-10 研究讀取與格式
+
+工具現在包含 get_state/read_news/read_edges/read_wiki/**read_research**/act（早期四／五工具描述已被此清單取代）。read_research 透過瀏覽器唯讀 ack 取得 DB 保存快照，獨立於 GPU 範圍；使用者選取或股票改變時拒絕晚回應。日期、來源去重、舊快照及模型驗證限制見 [BDD](CHAT_RESEARCH_BDD.md)。Chat Markdown 以安全 DOM 支援表格／粗體／標題／清單／程式碼／HTTP(S) 連結，表格在聊天欄內橫向捲動，來源 HTML 不執行。

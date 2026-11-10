@@ -122,6 +122,20 @@ def allowed(ast,text,labels):
     if op=='not':return not allowed(ast['arg'],text,labels)
     return (all if op=='and' else any)(allowed(a,text,labels) for a in ast['args'])
 
+# Browsing metadata only: never a retrieval constraint or model confidence.
+RESEARCH_FACETS = (
+    ('investment', r'投資|資本支出|回報|capex|investment|return on'),
+    ('growth', r'需求|成長|增長|營收|銷售|demand|growth|revenue|sales'),
+    ('profitability', r'獲利|盈利|利潤|毛利|成本|profit|margin|cost|earnings'),
+    ('valuation', r'估值|股價|目標價|看漲|看跌|valuation|price|bullish|bearish'),
+    ('risk', r'風險|監管|法規|訴訟|risk|regulat|litigation'),
+    ('competition', r'競爭|護城河|市占|competition|competitive|moat|market share'),
+    ('momentum', r'動能|趨勢|momentum|trend'),
+)
+
+def research_facets(lens):
+    return [key for key, pattern in RESEARCH_FACETS if re.search(pattern, lens.get('query',''), re.I)] or ['general']
+
 def parse_lens(body,stock,tax,clock=None):
     if 'owner' in body or 'owner_id' in body:raise ValueError('owner 由服務端決定')
     q=body.get('query','').strip()
@@ -143,7 +157,7 @@ def parse_lens(body,stock,tax,clock=None):
     if exclusions:ast={'op':'and','args':[ast,*[{'op':'not','arg':{'op':'text','value':x}} for x in exclusions]]}
     soft=[t['id'] for t in tax['terms'] if any(matches(q,a) for a in [t['label'],*t['aliases']])]
     momentum=bool(re.search(r'動能|momentum',q,re.I))
-    return {'schema':SCHEMA,'instrument':stock,'query':q,'normalized_question':q,'filter_ast':ast,'soft_terms':soft,
+    return {'schema':SCHEMA,'instrument':stock,'query':q,'normalized_question':q,'research_facets':research_facets({'query':q}),'facet_method':'question_keywords_v1','filter_ast':ast,'soft_terms':soft,
             'dimensions':['analysis.narrative_momentum','analysis.price_momentum'] if momentum else ['analysis.fundamentals'],
             'time_policy':{'lookback_days':days,'cutoff_mode':'fixed' if body.get('as_of') else 'rolling_now','fixed_as_of':body.get('as_of'),'window_basis':'published_at','horizon_sessions':20},
             'time_spec':{'start':(cutoff-dt.timedelta(days=days)).isoformat(),'end':cutoff.isoformat(),'as_of':cutoff.isoformat(),'temporal_mode':'as_known','timezone':'UTC'},
@@ -349,7 +363,11 @@ class Research:
     def read(self,kind,ident=None):
         with self.store.connection() as db:
             if kind=='runs':
-                return {'runs':[{'id':r['id'],'created_at':r['created_at']} for r in db.execute("SELECT id,created_at FROM research_objects WHERE kind='run' AND owner=? ORDER BY created_at DESC LIMIT 20",(OWNER,))]}
+                runs=[]
+                for row in db.execute("SELECT id,created_at,payload FROM research_objects WHERE kind='run' AND owner=? ORDER BY created_at DESC,id DESC",(OWNER,)):
+                    run=json.loads(row['payload']);snapshot=obj(db,run['snapshot'],'snapshot');lens=snapshot['lens']
+                    runs.append({'id':row['id'],'created_at':row['created_at'],'lens':{**lens,'research_facets':lens.get('research_facets') or research_facets(lens)},'claim_count':len(run['result']['claims'])})
+                return {'runs':runs}
             if kind=='run':
                 r=obj(db,ident,'run');b=obj(db,r['snapshot'],'snapshot')
                 return {**r,'bundle':b,'current_epochs':epochs(db)}
@@ -364,7 +382,7 @@ class Research:
             if kind=='lenses':
                 state=epochs(db);out=[]
                 for r in db.execute('SELECT payload FROM research_lenses WHERE owner=? ORDER BY updated_at DESC',(OWNER,)):
-                    s=json.loads(r[0]);stale=s['checked_epochs']!=state or instant(s['checked_at']).date()!=instant(now()).date() or bool(state['pending'])
+                    s=json.loads(r[0]);s['lens']['research_facets']=s['lens'].get('research_facets') or research_facets(s['lens']);stale=s['checked_epochs']!=state or instant(s['checked_at']).date()!=instant(now()).date() or bool(state['pending'])
                     s['refresh_state']='pinned' if s['mode']=='pinned' else 'failed' if s.get('last_error') else 'stale' if stale else 'fresh';out.append(s)
                 return {'lenses':out,'epochs':state}
         raise ValueError('未知研究讀取操作')

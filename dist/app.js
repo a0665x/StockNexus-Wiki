@@ -13,6 +13,7 @@ let renderBudget=800,renderedCount=0,renderedEdges=0,articleListPage=0;
 const focusTraceCache=AtlasView.createTraceCache(),previewTraceCache=AtlasView.createTraceCache();
 let graphFailure=null,webglCreationReason='',graphRetryBusy=false;
 let relationActivity={busy:false},searchPhase='',searchStarted=0,operationNotice='',pendingSearchMeta=null,searchClock=null;
+let wikiRootPreview=null;
 let highlightMode='root',graphChannel='',categoryTrace={nodes:new Map(),edges:new Set(),roots:[]};
 let basePayload = {articles:[],relations:[]}, currentView = {articles:[],relations:[]}, sourceStates = {}, saving = false, restoredPositions = new Map();
 const providers = ['google','yahoo','massive'];
@@ -138,7 +139,7 @@ function syncHighlightUI(){
   $('highlightStatus').textContent=AtlasI18n.t(category?(viewMode!=='network'?'分類亮光僅套用 3D；root 選取保留。':!graphChannel?'選擇分類；點擊新聞只查看詳情。':categoryTrace.nodes.size?'分類模式：點擊只查看新聞，不改 root。':'此分類在目前來源沒有新聞。'):'點擊新聞或搜尋 roots');
   if(category&&viewMode==='network'&&graphChannel)$('highlightStatus').textContent+=' '+categoryTrace.nodes.size;
 }
-function setHighlightMode(mode){highlightMode=mode;hovered=null;interaction?.clear();idleFocus?.stop();refreshCategory();syncHighlightUI();renderNetwork();refreshFocus();if(mode==='root')touchFocus();}
+function setHighlightMode(mode){wikiRootPreview=null;highlightMode=mode;hovered=null;interaction?.clear();idleFocus?.stop();refreshCategory();syncHighlightUI();renderNetwork();refreshFocus();if(mode==='root')touchFocus();}
 function clearGraphSelection(){if(highlightMode==='category'&&viewMode==='network'){graphChannel='';$('graphChannel').value='';refreshCategory();syncHighlightUI();refreshFocus();}else clearFocus();}
 $('highlightModeSwitch').onchange=()=>setHighlightMode($('highlightModeSwitch').checked?'category':'root');
 $('graphChannel').onchange=()=>{graphChannel=$('graphChannel').value;refreshCategory();syncHighlightUI();renderNetwork();refreshFocus();};
@@ -148,10 +149,10 @@ function linkColor(l){if(!graphHasHighlight())return l.scope==='cross'?'rgba(244
 function edgeStyle(l){if(!graphHasHighlight())return {color:l.scope==='cross'?'#f4cd84':'#82c8d2',opacity:l.scope==='cross'?.45:.4};return graphTrace().edges.has(AtlasView.identity(l))?{color:'#8cffdc',opacity:Math.max(.05,edgeLight(l))}:{color:'#789bb4',opacity:glowConfig.background*.25};}
 function acquireRoot(n){if(!n||lockedRoots.length||highlightMode==='category'&&viewMode==='network')return;lockedRoots=[n.id];pinnedRoot=n.id;keywordLocked=false;rootSearchState=null;$('rootResults').replaceChildren();refreshFocus();}
 function setHovered(n){const id=n?.id||null;if(hovered!==id){hovered=id;refreshFocus();}touchFocus();showPreview(n);}
-function clearFocus(){rootSearchTicket++;idleFocus?.stop();interaction?.clear();lockedRoots=[];keywordLocked=false;rootSearchState=null;pinnedRoot=null;hovered=null;$('rootResults').replaceChildren();refreshFocus();showPreview(null);if(viewMode==='timeline')renderTimeline();}
+function clearFocus(){const hadWikiPreview=!!wikiRootPreview;wikiRootPreview=null;rootSearchTicket++;idleFocus?.stop();interaction?.clear();lockedRoots=[];keywordLocked=false;rootSearchState=null;pinnedRoot=null;hovered=null;$('rootResults').replaceChildren();refreshFocus();showPreview(null);if(hadWikiPreview&&viewMode==='network')renderNetwork();if(viewMode==='timeline')renderTimeline();}
 function touchFocus(){if(highlightMode!=='category'&&focusRoot()!==null&&!keywordLocked&&!rootSearchBusy)idleFocus?.touch();}
-function refreshFocus(){pinnedRoot=focusRoot();activeTrace=focusTraceCache(focusView.relations,lockedRoots,exploration);candidateTrace=previewTraceCache(relations,!pinnedRoot&&hovered?[hovered]:[],exploration);showTrace(pinnedRoot,activeTrace);if(highlightMode==='category'&&viewMode==='network')$('traceStatus').textContent='';else if(!pinnedRoot&&hovered)$('traceStatus').textContent=AtlasI18n.t('候選 tree 預覽 · 點一下確認 root')+' · '+candidateTrace.nodes.size;glowLayer?.refresh();}
-function showTrace(id,trace){$('traceStatus').textContent=id?`延伸 ${trace.nodes.size-(trace.roots?.length||1)} 個節點 · 最多 ${exploration.depth} 層 · 每節點 ${exploration.branchLimit} 分支`+(trace.truncated?' · 已達顯示上限':''):'';}
+function refreshFocus(){pinnedRoot=focusRoot();activeTrace=wikiRootPreview?wikiPreviewTrace():focusTraceCache(focusView.relations,lockedRoots,exploration);candidateTrace=previewTraceCache(relations,!pinnedRoot&&hovered?[hovered]:[],exploration);showTrace(pinnedRoot,activeTrace);if(highlightMode==='category'&&viewMode==='network')$('traceStatus').textContent='';else if(!pinnedRoot&&hovered)$('traceStatus').textContent=AtlasI18n.t('候選 tree 預覽 · 點一下確認 root')+' · '+candidateTrace.nodes.size;glowLayer?.refresh();}
+function showTrace(id,trace){if(wikiRootPreview){$('traceStatus').textContent=AtlasI18n.language()==='en'?`Wiki tree ${wikiRootPreview.group}/${wikiRootPreview.groups}: ${trace.nodes.size} frozen members · edges use current News settings · click background to exit`:`Wiki 第 ${wikiRootPreview.group}/${wikiRootPreview.groups} 棵樹：${trace.nodes.size} 個工作快照成員 · 連線依目前新聞設定 · 點空白處退出`;return;}$('traceStatus').textContent=id?`延伸 ${trace.nodes.size-(trace.roots?.length||1)} 個節點 · 最多 ${exploration.depth} 層 · 每節點 ${exploration.branchLimit} 分支`+(trace.truncated?' · 已達顯示上限':''):'';}
 function showPreview(n) { const box = $('preview'); box.replaceChildren(); box.hidden = !n; if (!n) return;if(!focusRoot())box.append(el('div',AtlasI18n.t('預覽中 · 點一下進入星系'),'meta')); box.append(el('div', (n.source.publisher || n.source.provider) + ' · ' + (n.display_sources || [n.source.provider]).map(p=>sourceNames[p]).join('／'), 'meta'), el('strong', n.title,'raw'), el('div', date(n.published_at), 'muted')); }
 $('graph').addEventListener('pointermove', e => { const box = $('preview'), r = $('stage').getBoundingClientRect(); if (!box.hidden) { box.style.left = Math.max(8, Math.min(r.width - box.offsetWidth - 8, e.clientX - r.left + 18)) + 'px'; box.style.top = Math.max(8, Math.min(r.height - box.offsetHeight - 8, e.clientY - r.top + 18)) + 'px'; } });
 function evidenceText(edge) {
@@ -159,6 +160,7 @@ function evidenceText(edge) {
   return (edge.evidence || []).map(e => e.entity ? `${e.entity}：${e.source.method === 'provider_ticker' ? AtlasI18n.t('來源標註') : AtlasI18n.t('文章文字')}「${e.source.evidence}」↔ ${e.target.method === 'provider_ticker' ? AtlasI18n.t('來源標註') : AtlasI18n.t('文章文字')}「${e.target.evidence}」` : `共同詞：${(e.title_terms || []).join('、')}；標題相似度 ${e.title_similarity}`).join('；');
 }
 function showArticle(n,pin=true) {
+  if(pin&&wikiRootPreview){wikiRootPreview=null;lockedRoots=[];keywordLocked=false;}
   if(pin)globalThis.AtlasRuntime?.record('article',n.id);
   selected = n.id;if(pin){priceLens?.select(n);if(AtlasTimeline.day(n.published_at)!==null){timeFocus.date=new Date(AtlasTimeline.day(n.published_at)).toISOString().slice(0,10);syncTimeFocus();AtlasUI.write('timeFocus',timeFocus);}acquireRoot(n);touchFocus();if(graph&&viewMode==='network'&&!graph.graphData().nodes.some(a=>a.id===n.id))renderNetwork();}
   const root = $('article'); root.replaceChildren(); const card = el('div', null, 'card selected-news');card.append(el('div',AtlasI18n.t('目前選取新聞'),'selected-news-label'));
@@ -188,12 +190,12 @@ function rebuild(payload,relationUpdate=false) {
   rootSearchTicket++;
   interaction?.clear();
   const previousCount = articles.length;
-  if (payload) {globalThis.scheduleNewsWorkspace?.();basePayload = payload;classificationEpoch++;if(!relationUpdate){viewRevision++;viewRequestedSettings=null;completedRelationViews.clear();if(!restoringRelations){restoredRelationSeed=null;restoredRelationViews=[];}}}
+  if (payload) {if(!relationUpdate)wikiRootPreview=null;globalThis.scheduleNewsWorkspace?.();basePayload = payload;classificationEpoch++;if(!relationUpdate){viewRevision++;viewRequestedSettings=null;completedRelationViews.clear();if(!restoringRelations){restoredRelationSeed=null;restoredRelationViews=[];}}}
   if(basePayload.channel_definitions)channelDefinitions=basePayload.channel_definitions;
   renderChannelFilter();
   currentView = AtlasView.select(basePayload, viewSources(), isSeparate());
   currentView.relations=AtlasView.filterEdges(currentView.relations,exploration);
-  focusView=currentView;refreshCategory();syncHighlightUI();
+  focusView=currentView;if(wikiRootPreview&&[...wikiRootPreview.ids].some(id=>!focusView.articles.some(a=>a.id===id)))wikiRootPreview=null;refreshCategory();syncHighlightUI();
   syncTimelineRange(currentView.articles);
   syncTimeFocus();
   if(viewMode==='timeline') currentView=AtlasTimeline.filter(currentView,channelFilter,timelineCutoff);
@@ -216,12 +218,14 @@ function rebuild(payload,relationUpdate=false) {
 function renderArticleList(page=articleListPage){
   AtlasUI.pagedRows($('list'),articles,a=>{const b=el('button');b.setAttribute('data-article-id',a.id);b.append(el('div',(a.display_sources||[]).map(p=>sourceNames[p]).join('／')+' · '+date(a.published_at),'meta'),el('div',a.title,'raw'));b.addEventListener('click',()=>showArticle(a));return b;},{page,onPage:value=>{articleListPage=value;}});
 }
+// A job-tree reading overlay may temporarily need more slots than the saved GPU budget.
+function readingRenderBudget(){return wikiRootPreview?Math.max(renderBudget,wikiRootPreview.ids.size):renderBudget;}
 function renderNetwork(){
   scheduleViewRelations();
   if (graph && viewMode==='network') {
    try {
     const priority=viewPriority();
-    const slice=AtlasView.renderSlice(currentView,renderBudget,priority);
+    const slice=AtlasView.renderSlice(currentView,readingRenderBudget(),priority);
     renderedCount=slice.articles.length;renderedEdges=slice.relations.length;
     $('viewLimit').textContent=`3D ${renderedCount}/${currentView.articles.length} · ${AtlasI18n.t('連線')} ${renderedEdges}/${currentView.relations.length}`;
     const same=(a,b)=>a.length===b.length&&a.every((item,i)=>item===b[i]);
@@ -434,7 +438,7 @@ $('cancel').onclick=()=>{
   relationUI?.setSearchBusy(false);$('submit').disabled=false;$('cancel').hidden=true;$('saveDB').disabled=!focusView.articles.length||saving;
   operationNotice=AtlasI18n.t('已停止等待；已載入資料保留，伺服器可能繼續處理。');updateGraphMessage();
 };
-$('export').onclick = () => { const data = { schema_version: '2.0', search: exportMeta, articles:focusView.articles, relations:focusView.relations, view: {sources:viewSources(),separate:isSeparate(),mode:viewMode,channel_filter:channelFilter,cutoff:timelineCutoff,timeline_style:timelineStyle,exploration,glow:glowConfig,time_focus:timeFocus,price_focus:priceLens?.snapshot(),relation_settings:basePayload.relation_settings||relationUI?.applied(),focus:{mode:lockedRoots.length?(keywordLocked?'keyword':'single'):'overview',root_ids:lockedRoots,query:keywordLocked?rootSearchState?.query||'':'',limit:rootSearchState?.limit||3},channel_definitions:channelDefinitions}, relation_scope:basePayload.relation_scope||'complete',relation_scope_ids:basePayload.relation_scope_ids||null,relations_pending:basePayload.relation_scope==='view'?viewRelationState.phase!=='ready':!!basePayload.relations_pending, relation_note: '關聯來自明確代碼、文字實體、主題與標題相似規則；分數不是機率，連線不是因果。' }; const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })); const a = el('a'); a.href = url; a.download = 'news-atlas.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 10000); };
+$('export').onclick = () => { const data = { schema_version: '2.0', search: exportMeta, articles:focusView.articles, relations:focusView.relations, view: {sources:viewSources(),separate:isSeparate(),mode:viewMode,channel_filter:channelFilter,cutoff:timelineCutoff,timeline_style:timelineStyle,exploration,glow:glowConfig,time_focus:timeFocus,price_focus:priceLens?.snapshot(),relation_settings:basePayload.relation_settings||relationUI?.applied(),focus:{mode:lockedRoots.length?(keywordLocked?'keyword':'single'):'overview',root_ids:wikiRootPreview?[]:lockedRoots,query:keywordLocked?rootSearchState?.query||'':'',limit:rootSearchState?.limit||3},channel_definitions:channelDefinitions}, relation_scope:basePayload.relation_scope||'complete',relation_scope_ids:basePayload.relation_scope_ids||null,relations_pending:basePayload.relation_scope==='view'?viewRelationState.phase!=='ready':!!basePayload.relations_pending, relation_note: '關聯來自明確代碼、文字實體、主題與標題相似規則；分數不是機率，連線不是因果。' }; const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })); const a = el('a'); a.href = url; a.download = 'news-atlas.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 10000); };
 $('fit').onclick = () => {if(viewMode==='timeline'){$('timelineZoom').value=1;$('timeline').scrollLeft=0;renderTimeline();}else graph?.zoomToFit(reducedMotion ? 0 : 600, 60);};
 $('openSearch').onclick = () => $('searchPanel').classList.add('open'); $('closeSearch').onclick = () => $('searchPanel').classList.remove('open'); $('closeDetail').onclick = () => $('detail').classList.remove('open'); $('openResults').onclick = () => $('detail').classList.add('open');
 fetch('/api/status').then(r => r.json()).then(info => { updateDB(info.db); if (info.massive_configured){$('key').placeholder = '伺服器已設定 key，可留白';if(!$('key').value)$('keyStatus').textContent='主機已有金鑰，搜尋會自動沿用。';} }).catch(() => {});
@@ -720,12 +724,12 @@ if(globalThis.AtlasPrice)priceLens=AtlasPrice.init($,{articles:()=>focusView.art
 globalThis.addEventListener?.('atlas-dock',layoutTimeBar);
 
 function viewPriority(){
-  return [selected,...lockedRoots,...(highlightMode==='category'?categoryTrace.nodes.keys():basePayload.relation_scope==='view'?[]:focusTraceCache(focusView.relations,lockedRoots,exploration).nodes.keys())].filter(Boolean);
+  return [selected,...lockedRoots,...(wikiRootPreview?wikiRootPreview.ids:[]),...(highlightMode==='category'?categoryTrace.nodes.keys():basePayload.relation_scope==='view'?[]:focusTraceCache(focusView.relations,lockedRoots,exploration).nodes.keys())].filter(Boolean);
 }
 function scheduleViewRelations(){
   if(!viewRelationJob||restoringRelations)return;
   if(basePayload.relation_scope!=='view'||!currentView.articles.length){viewRelationJob.schedule(null);return;}
-  const slice=AtlasView.renderSlice(currentView,renderBudget,viewPriority());
+  const slice=AtlasView.renderSlice(currentView,readingRenderBudget(),viewPriority());
   const byProvider=new Map();
   for(const row of slice.articles)for(const p of row.display_sources||[row.source.provider]){
     if(!byProvider.has(p))byProvider.set(p,new Set());byProvider.get(p).add(row.article_id||row.id);
@@ -780,8 +784,28 @@ $('viewRelationsRetry').onclick=()=>viewRelationJob.retry();$('viewRelationsStop
 AtlasViewRelations.tooltip($('activityCounters'));updateViewCounters();
 }
 
+function wikiPreviewTrace(){
+  const nodes=new Map([...wikiRootPreview.ids].map(id=>[id,{depth:id===wikiRootPreview.root?0:1,strength:1,parent:null,memberships:[wikiRootPreview.root]}]));
+  const edges=new Set(focusView.relations.filter(e=>nodes.has(AtlasView.endpoint(e.source))&&nodes.has(AtlasView.endpoint(e.target))).map(AtlasView.identity));
+  return {nodes,edges,roots:[wikiRootPreview.root],trees:[],truncated:false};
+}
+function showWikiRoot({instrument,tree,group,groups:total}){
+  const en=AtlasI18n.language()==='en',fail=(zh,english)=>{throw Error(en?english:zh);};
+  if(String(exportMeta.ticker||'').toUpperCase()!==instrument.split(':').at(-1))fail('請先在新聞圖譜載入同一股票；不會自動搜尋或覆蓋目前資料。','Load the same stock in News first; this link does not search or replace your data.');
+  if(!tree?.root_id||!Array.isArray(tree.articles)||!tree.articles.length)fail('此工作沒有可讀取的樹快照。','This job has no readable tree snapshot.');
+  const ids=new Set();
+  for(const ref of tree.articles){const row=focusView.articles.find(a=>(a.article_id||a.id.split('::').at(-1))===ref.id&&(a.display_sources||[a.source.provider]).includes(ref.provider));if(!row)fail('此樹部分新聞不在目前載入／勾選來源內；請先載入該股票完整新聞並勾選來源。','Some tree members are not loaded or their sources are hidden. Load the stock news and enable its sources first.');ids.add(row.id);}
+  const sourceRoot=tree.root_id.split('::').at(-1),provider=tree.root_id.includes('::')?tree.root_id.split('::')[0]:null;
+  const rootId=[...ids].find(id=>id.split('::').at(-1)===sourceRoot&&(!provider||!isSeparate()||id.startsWith(provider+'::')));
+  if(!rootId)fail('工作樹的起點不在目前新聞圖譜。','The job root is not in the current News graph.');
+  rootSearchTicket++;idleFocus?.stop();interaction?.clear();hovered=null;highlightMode='root';lockedRoots=[rootId];pinnedRoot=rootId;keywordLocked=true;rootSearchState=null;
+  wikiRootPreview={ids,root:rootId,group,groups:total};viewMode='network';applyMode();syncHighlightUI();refreshFocus();renderNetwork();showArticle(focusView.articles.find(a=>a.id===rootId),false);refreshFocus();
+  $('rootResults').replaceChildren();
+}
+
 // Wiki uses an independent renderer/store; opening it never rebuilds News Graph.
 globalThis.AtlasWikiContext={
+  showRoot:showWikiRoot,
   selection(mode){
     const groups=AtlasView.groups(basePayload),visibleSources=mode==='global'?providers:viewSources();
     const focus=new Set([selected,...lockedRoots,...graphTrace().nodes.keys()].filter(Boolean));
