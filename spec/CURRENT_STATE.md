@@ -1,5 +1,11 @@
 # 目前狀態
 
+## 最新本機交接：年度資料與研究（2026-11-14）
+
+本次新授權更新既存有效股票與指定研究名單，共 14 個：NVDA、AMD、AAPL、TSLA、SpaceX/SPCX、META、VIX、QQQ、ASML、AMZN、RDW、SNDK、GOOGL、TSM。固定 UTC 2025-11-14→2026-11-13，行情至美國 11/12 完整交易日；gpt-6.1-sol/high、Graph root、增量 update。保留既有資料與 revisions，不恢復舊七股 heartbeat。先讀 `data/private/annual-research-20261114/l1-batch.json` 與取得紀錄；不要依舊進度重送工作。
+
+Git 已從 8285c09 fast-forward 到 f63e896 並部署，24 Python + 12 Node 測試通過，HTTP 靜態資產核對成功。AMD 已實際由 v27 發布到 v28；14 股來源取得與有界補抓已完成一輪（仍有來源缺口）；年度 L1 尚在處理，不宣稱全部完成。市場研究、來源身分、BDD 邊界、報告與續作見 [本輪交接](references/annual-research-batch-20261114.md)。以下「待部署」與其他主機的空庫觀察是歷史狀態，不能覆蓋此處的本輪實測；下次仍須查即時 runtime。
+
 ## 最新待部署修正（2026-11-10）
 
 已補上已發布成果入口、被篩選隱藏的空圖說明、首次載入失敗後恢復，以及版本變更上邊界拖曳。正式查核時 GOOGL 有 611 個節點紀錄／v47，工作 running，保存的分類篩選為 __pending；沒有清庫或重送模型。隔離 Chrome 11 項新檢查與 48 項既有布局檢查通過；連同下方 root 閱讀功能建置待部署，目前正式服務仍未重啟。
