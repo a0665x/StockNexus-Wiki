@@ -1,3 +1,9 @@
+# 最新交接：2026-11-14 DB context API
+
+新增 `/api/context/catalog|news|related|prices|l1|l2` 與 Chat `read_database`；獨立技能在 [stocknexus-research-api](../skills/stocknexus-research-api/SKILL.md)。查詢重用既有 DB，不啟動模型／抓新聞／初始化空庫。L1 使用既有 as-known EvidenceBundle；價格為目前快取 vintage；L2 保存快照與當期新聞不可混淆。
+
+驗證：35 Python context/research 測試、7 Chat proxy 安全測試、14 Node Chat 測試通過；真 Chromium `browser_chat_database.py` 驗證空圖仍能讀 DB 並回傳工具結果。正式 NVDA 以新 Handler 隔離埠做唯讀 HTTP 驗證；不重啟、不消耗模型。技能驗證與 spec links 通過。部署狀態稍後在此補記；年度 L1 仍執行中，不把測試 server 當成 8765 已更新。
+
 # 目前狀態
 
 ## 已部署：Tailscale Chat（2026-11-14）

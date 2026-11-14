@@ -159,3 +159,6 @@ approval for that interruption or deploy after those jobs finish; do not bypass.
 ## 2026-11-14：使用者批准後已部署
 
 使用者明確同意暫停 L1 後重啟。0b069a5 已部署，私有 .env 設定指定 HTTPS origin 與 Tailscale 登入身分；沒有把帳號設定提交 Git。正式 Chromium 透過 https://ubuntu.tail9e662c.ts.net:8765 開啟 Chat Agent，session 與情境同步成功，顯示「已連線 · 使用本機登入」。此驗證未送出付費模型問題，使用者自行測試回覆。原年度 L1 以部署前保存的工作／範圍紀錄接續 medium，保留發布成果。上一節自動審核拒絕是歷史狀態，已由這次使用者明確授權解除。
+
+### Database context tool
+`read_database` exposes catalog/news/related/prices/l1/l2 through `/api/context/*` using the authenticated session command/ack path. Unlike read_news/read_wiki it does not depend on loaded graph data. Only GET resources are allowed. Server validates stock/owner/time; the bridge rejects a response if the browser stock changed. Read-only existing research is allowed while L1 owns the model slot. See [API](API.md) and the [skill](../skills/stocknexus-research-api/SKILL.md).

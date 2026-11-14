@@ -496,3 +496,6 @@ Root 連結以完整已載入新聞集合核對成員，不以 graph.graphData �
 部署後追加：正式 8765／Chat 健康與四個 HTTP 資產雜湊 PASS；阻擋偏好與模型寫入的隔離 Chrome 驗證正式英文分類／研究入口、現有 L1 立體圖例及無 runtime error PASS。空 L2 不列圖例，不能把無資料當成圖例故障。39 份 spec 文件連結與必要入口檢查 PASS。
 
 2026-11-10 L2 語系回歸：`python tests/browser_research_locale.py` 使用隔離瀏覽器，完整展開側欄與歷史版本，涵蓋忙碌 tooltip、模型狀態失聯／恢復、排隊／執行／中斷、進度重連及中英往返。保存問題保留原文，其餘介面文字排除漏翻譯；所有模型 POST 必須為零。新視窗／跨頁切換另由 `browser_wiki_reading.py` 驗證。
+
+## DB context 情境邊界（2026-11-14）
+Given DB 有資料而畫面未載入，When 查新聞／L1／L2，Then 直接讀持久資料且不啟動模型。`test_context_api` 驗證分頁、end exclusive、未知股票不建庫、交易所不混用、related 證據、無行情不偽造零報酬、行情 ticker 隔離、非法日期／owner 拒絕、L1 精確引用且不寫入、L2 owner 隔離與固定 snapshot、缺 taxonomy 不初始化。Chat tool 的 session 與股票切換由 `chat-database.test.mjs` 驗證。正式行情覆蓋、付費模型答覆品質不由 fixture 測試證明。

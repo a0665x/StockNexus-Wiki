@@ -69,6 +69,19 @@ def specification():
         if request: op['requestBody']={'required':True,'content':{'application/json':{'schema':request}}};op['responses']['415']={'description':'Content-Type must be application/json'}
         if parameters:op['parameters']=parameters
         paths.setdefault(path,{})[method]=op
+    for resource in ('catalog','news','related','prices','l1','l2'):
+        parameters=[{'name':name,'in':'query','required':name=='instrument' and resource!='catalog','schema':schema} for name,schema in {
+            'instrument':string(40),'days':{'type':'integer','minimum':1,'maximum':3660,'default':7},
+            'end':{'type':'string','format':'date-time'},'query':string(2000),'id':string(200),
+            'limit':{'type':'integer','minimum':1,'maximum':100,'default':20},'offset':{'type':'integer','minimum':0,'maximum':100000,'default':0}}.items()]
+        names={'catalog':set(),'news':{'instrument','days','end','query','limit','offset'},'related':{'instrument','days','end','query','limit','offset','id'},'prices':{'instrument','days','end'},'l1':{'instrument','days','end','query'},'l2':{'instrument','days','end','query','limit','offset','id'}}[resource]
+        parameters=[x for x in parameters if x['name'] in names]
+        for parameter in parameters:
+            if resource=='related' and parameter['name']=='id': parameter['required']=True
+        operation('/api/context/'+resource,'get','read_database_'+resource,'Read cached '+resource,'Research context',parameters=parameters,
+            description='Allowed same-origin host required. Read-only, no network/model jobs. Independent of rendered graph. end exclusive; news uses publication time, L1 uses as-known evidence, L2 list uses run creation time; L2 id returns fixed snapshot. Prices use latest cached adjusted close vintage and full completed date buckets. Related uses shared entities/topics, not saved edges. L1 has a bounded 24-opinion retrieval and reports truncation; limit/offset apply to news, related and L2 lists.')
+        paths['/api/context/'+resource]['get']['responses']['403']={'description':'Origin is not allowed'}
+        paths['/api/context/'+resource]['get']['responses']['503']={'description':'Database temporarily unavailable'}
     def param(name):return [{'name':name,'in':'path','required':True,'schema':string()}]
     operation('/api/status','get','get_status','服務與 DB 狀態','System',response=obj({'schema_version':string(),'db':ref('DatabaseStats'),'massive_configured':{'type':'boolean'}}))
     operation('/api/settings/massive-key','post','remember_massive_key','保存本機 Massive 金鑰','System',obj({'key':{'type':'string','minLength':1,'maxLength':512,'format':'password','writeOnly':True}},['key']),obj({'configured':{'type':'boolean'}}),description='Explicit opt-in: save the last key in a private host file (0600), outside SQLite and exports. Never returns the key. Reused across server restarts and ports on this host.',writes=True)

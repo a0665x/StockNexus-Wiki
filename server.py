@@ -131,6 +131,9 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_GET(self):
+        if self.path.startswith('/api/context/'):
+            from news_atlas.context_api import handle
+            handle(self);return
         if self.path=='/api/workspace':
             from news_atlas.workspace import handle
             handle(self);return

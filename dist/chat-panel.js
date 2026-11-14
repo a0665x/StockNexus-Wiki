@@ -45,7 +45,7 @@
  async function sync(){if(!session||syncing)return;syncing=true;try{
   let p=payload(),result=await(await request('sync',p)).json();if(p.graph)lastData=p.context.dataset;
   let commands=result.commands;
-  while(commands?.length){const next=[];for(const cmd of commands){let ack={id:cmd.commandId};try{if(stopping)throw Error('已停止操作');const value=await runtime.act(cmd);if(cmd.kind==='read_research')ack.result=value;}catch(e){ack.error=e.message;}p=payload(ack);result=await(await request('sync',p)).json();if(p.graph)lastData=p.context.dataset;next.push(...result.commands);}commands=next;}
+  while(commands?.length){const next=[];for(const cmd of commands){let ack={id:cmd.commandId};try{if(stopping)throw Error('已停止操作');let value;if(cmd.kind==='read_database'){const {resource,...params}=cmd.params||{};if(!['catalog','news','related','prices','l1','l2'].includes(resource))throw Error('Unknown database resource');const response=await fetch('/api/context/'+resource+'?'+new URLSearchParams(params),{signal:AbortSignal.timeout(18000)});value=await response.json();if(!response.ok)throw Error(value.error||'Database read failed');}else value=await runtime.act(cmd);if(['read_research','read_database'].includes(cmd.kind))ack.result=value;}catch(e){ack.error=e.message;}p=payload(ack);result=await(await request('sync',p)).json();if(p.graph)lastData=p.context.dataset;next.push(...result.commands);}commands=next;}
  }catch(e){showError(e);}finally{syncing=false;}}
  timer=setInterval(()=>{if(visible||busy)sync();},700);
  function message(text,role){const node=make('div',null,'chat-message raw '+role),content=make('div');renderMarkdown(content,text);node.append(content);messages.append(node);messages.scrollTop=messages.scrollHeight;return node;}

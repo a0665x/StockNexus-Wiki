@@ -55,3 +55,6 @@ Chat 同源代理：GET `/api/chat/status`；POST `/api/chat/session|sync|turn|c
 `GET /api/wiki/status` 新增 `news_databases: [{instrument,ticker,articles}]`。`POST /api/wiki/plan` 與 `/apply` 支援 `news_db:true`（global scope），以已存在的對應股票新聞 DB 為唯一輸入，遵守 date_range 與 10,000 篇界限。此路徑不擷取外部新聞。
 
 `POST /api/wiki/configure` 可在沒有活動 extraction/classification 工作時保存 `model`／`reasoning_effort`，保留日期、凍結範圍與成果，不重新建立 plan；有活動工作時拒絕。
+
+## 情境式唯讀查詢（2026-11-14）
+新增 `/api/context/catalog|news|related|prices|l1|l2`，不受畫面節點預算限制、不外連、不建立 DB／研究工作。實作 [context_api.py](../news_atlas/context_api.py)；完整使用契約與情境路由在 [獨立 Skill](../skills/stocknexus-research-api/SKILL.md) 及其 [API 表](../skills/stocknexus-research-api/references/routes.md)。Chat 新增 `read_database` 經原 session/tool capability 與瀏覽器同源取用；回應時股票切換會拒絕過期結果。既有文章／graph／Wiki 路由保留。操作總數以實際 OpenAPI 為準，本文歷史 29 個數字不代表目前總數。
