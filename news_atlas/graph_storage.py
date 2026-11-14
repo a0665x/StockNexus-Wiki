@@ -150,6 +150,12 @@ class GraphRepository:
     def for_query(self,request):
         store=self.for_ticker(request.get('ticker',''))
         if store.path==self.catalog.path:return store
+        if request.get('instrument'):
+            from .wiki.store import instrument
+            ident=instrument(request['instrument'])
+            if ident.split(':')[1]!=request.get('ticker'):raise ValueError('股票識別不一致')
+            with store.connection() as db:
+                db.execute("INSERT OR REPLACE INTO graph_metadata VALUES ('instrument',?)",(ident,))
         from .search import query_key
         # A newly explicit ticker can reuse matching previously-unassigned searches.
         # The user's current query authorizes this association; never infer it from a title.

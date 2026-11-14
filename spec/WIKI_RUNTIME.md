@@ -1,5 +1,15 @@
 # LLM Wiki 執行與維護
 
+## 2026-11-14：股票選擇與既有新聞 DB
+
+- 「已建立的 Wiki」選定後，股票下拉唯讀且綁定該 instrument；讀圖、維護與研究都使用此唯一識別。輸入事件不能改成另一股。
+- 選「建立新的股票 Wiki」立即清除舊圖、研究、分組、引用與待回應世代，開放股票 DB 下拉；過期回應不能還原舊圖。選到已有 Wiki 的股票則直接開啟既有成果。
+- 下拉來自 `/api/wiki/status.news_databases`：只列非空、可確認完整 instrument 的新聞 DB；排除 `_unassigned` 與空庫。不猜交易所，舊庫先重用既有 Wiki／快照識別；新搜尋將 instrument 存於 graph_metadata。
+- 新建 plan 傳 `news_db:true`，伺服器以 instrument 對應 DB 及日期選新聞，忽略主頁別股的 articles/search。Graph root 使用該範圍完整新聞引用，不用 3D 顯示預算裁切。超過 10,000 篇要求縮小範圍。
+- 無 DB schema migration；沿用 graph_metadata key/value 表。既有 Wiki 及新聞不刪除。
+- BDD：既有股鎖定、新建即時清空、只列可用 DB、別股主頁隔離、晚回應隔離、日期限制、空庫／不明識別排除。測試：`tests/test_wiki_news_catalog.py`、`tests/browser_wiki_identity.py`。
+
+
 ## 2026-11-10：整理成果可見性與變更區上邊界
 
 正式唯讀查核時 GOOGL 已有 611 個 nodes 紀錄、v47；主機保存的 Wiki controls 為 L1／最新版本／wikiAssessment=__pending。已有資料不能直接推論畫面可見，尚待分類篩選會隱藏已分類成果。本輪未改工作內容或重送模型。

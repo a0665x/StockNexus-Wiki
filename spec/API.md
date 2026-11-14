@@ -49,3 +49,9 @@ Chat 同源代理：GET `/api/chat/status`；POST `/api/chat/session|sync|turn|c
 新增 `POST /api/graph/preview`（NDJSON、最多2400不同節點），搜尋可指定 `defer_relations:true`。範圍、配對計數及局部快照契約見 [視圖關聯流程](references/view-first-relations-20261104.md)。
 
 `POST /api/graph/preview` 新增 `include_cross`（預設true）；分組畫面送false。progress/result的 `pairs_computed`／`pairs_reused` 區分新評分與快取命中，`pairs_checked`仍是掃描數。快照view新增 `render_budget`、`relation_cache_version`、`relation_scope_sources`、`relation_views`（最多12組）；細節見OpenAPI及[增量重用說明](references/view-first-relations-20261104.md)。
+
+
+### Wiki 新建股票來源（2026-11-14）
+`GET /api/wiki/status` 新增 `news_databases: [{instrument,ticker,articles}]`。`POST /api/wiki/plan` 與 `/apply` 支援 `news_db:true`（global scope），以已存在的對應股票新聞 DB 為唯一輸入，遵守 date_range 與 10,000 篇界限。此路徑不擷取外部新聞。
+
+`POST /api/wiki/configure` 可在沒有活動 extraction/classification 工作時保存 `model`／`reasoning_effort`，保留日期、凍結範圍與成果，不重新建立 plan；有活動工作時拒絕。

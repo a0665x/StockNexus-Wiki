@@ -1,5 +1,14 @@
 # 目前狀態
 
+## 最新交接：股票身分綁定（2026-11-14）
+
+既有 Wiki 股票鎖定；新建改由非空新聞 DB 下拉選取。伺服器 news_db 模式不使用主頁別股輸入；過期／錯股 graph 回應不得覆寫選取。見 WIKI_RUNTIME、API。新增 configure 閒置模型設定路徑避免單改 reasoning 重建全年圖譜；有活動 extraction/classification 時拒絕。
+
+本輪驗證：87 項 Wiki Python、9 項 Graph storage、9 項 Chromium 身分切換檢查通過；新增資料範圍、快照身分、空庫與模型設定邊界測試。舊 browser_wiki.py 因假設自動預覽而在 planRelease 步驟失敗，未宣稱全套舊 UI 驗收通過。本輪以 browser_wiki_identity.py 測實際 DOM 互動、即時回饋及晚回應。
+
+正式確認 14 個非空新聞 DB；一年來源取得仍有供應商缺口。年度批次於 2026-11-13T17:20Z 因模型用量上限停止，既有成果保留；本次使用者指定後續 gpt-6.1-sol/medium，取代下方 high 歷史設定。即時結果以 private l1-batch.json 為準，不依歷史行列重送工作。程式修正準備部署，部署結果另記本批 references。
+
+
 ## 最新本機交接：年度資料與研究（2026-11-14）
 
 本次新授權更新既存有效股票與指定研究名單，共 14 個：NVDA、AMD、AAPL、TSLA、SpaceX/SPCX、META、VIX、QQQ、ASML、AMZN、RDW、SNDK、GOOGL、TSM。固定 UTC 2025-11-14→2026-11-13，行情至美國 11/12 完整交易日；gpt-6.1-sol/high、Graph root、增量 update。保留既有資料與 revisions，不恢復舊七股 heartbeat。先讀 `data/private/annual-research-20261114/l1-batch.json` 與取得紀錄；不要依舊進度重送工作。

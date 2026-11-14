@@ -65,6 +65,31 @@ class WikiService:
     def bridge(self,store,job,article,context):
         return self.bridge_request('/wiki/compile',{'job_id':job['id'],'instrument':store.instrument,'model':job['payload']['model'],'article':{k:v for k,v in article.items() if k!='_covered_articles'},'context':context,'operation':job['payload'].get('operation','update'),'repair':job.get('repair'),**{k:job['payload'].get(k) for k in ('reasoning_effort','languages')}},timeout=640)
 
+    def news_catalog(self):
+        """Only nonempty, explicitly identified news DBs; never guess exchanges."""
+        if not hasattr(self.news,'stores'):return []
+        known={s.instrument.split(':')[1]:s.instrument for s in self.stores()}
+        result=[]
+        for news in self.news.stores():
+            ticker=news.path.parent.name
+            if ticker=='_unassigned':continue
+            with news.connection() as db:
+                count=db.execute('SELECT count(*) FROM articles').fetchone()[0]
+                if not count:continue
+                ident=known.get(ticker)
+                if db.execute("SELECT 1 FROM sqlite_master WHERE name='graph_metadata'").fetchone():
+                    meta=db.execute("SELECT value FROM graph_metadata WHERE key='instrument'").fetchone()
+                    if meta:ident=meta[0]
+                if not ident:
+                    for row in db.execute('SELECT search_json FROM snapshots ORDER BY created_at DESC'):
+                        value=json.loads(row[0]).get('instrument')
+                        if value and value.split(':')[-1]==ticker:ident=value;break
+            try:valid=bool(ident and instrument(ident).split(':')[1]==ticker)
+            except ValueError:valid=False
+            if valid:
+                result.append({'instrument':ident,'ticker':ticker,'articles':count})
+        return result
+
     def info(self):
         try: bridge=self.bridge_request('/status',timeout=2)
         except RuntimeError: bridge={'ready':False}
@@ -74,7 +99,7 @@ class WikiService:
                 version=db.execute('SELECT COALESCE(max(version),0) FROM versions').fetchone()[0]
                 total=db.execute('SELECT count(*) FROM nodes').fetchone()[0]
             stocks.append({'instrument':store.instrument,'version':version,'nodes':total,'enabled':store.config()['enabled']})
-        return {'instruments':stocks,'bridge_ready':bridge.get('wiki_ready',False),'default_model':bridge.get('wiki_model',''),'storage':'llm_wiki/<ticker>/wiki.sqlite3','prompt_version':PROMPT_VERSION}
+        return {'instruments':stocks,'news_databases':self.news_catalog(),'bridge_ready':bridge.get('wiki_ready',False),'default_model':bridge.get('wiki_model',''),'storage':'llm_wiki/<ticker>/wiki.sqlite3','prompt_version':PROMPT_VERSION}
 
     @staticmethod
     def options(body):
@@ -118,6 +143,18 @@ class WikiService:
         operation=body.get('operation','update')
         if operation not in ('update','review'):raise ValueError('無效維護方式')
         dates=self.date_range(body)
+        if body.get('news_db'):
+            if body.get('scope','global')!='global':raise ValueError('新聞 DB 模式使用全局範圍')
+            available={x['instrument'] for x in self.news_catalog()}
+            if store.instrument not in available:raise ValueError('此股票沒有可用新聞 DB')
+            news=self.news.for_ticker(store.instrument.split(':')[1])
+            with news.connection() as db:
+                raw=db.execute("SELECT payload FROM articles WHERE (? IS NULL OR date(published_at) BETWEEN ? AND ?) ORDER BY published_at DESC LIMIT 10001",(None if not dates else 1,(dates or {}).get('start'),(dates or {}).get('end'))).fetchall()
+            if len(raw)>10000:raise ValueError('查詢超過10000篇，請縮小日期範圍')
+            articles=[json.loads(x[0]) for x in raw]
+            body={**body,'articles':articles,'sources':[],'search':{'ticker':store.instrument.split(':')[1]}}
+            if options['strategy']=='root':
+                body['graph_universe']={'ticker':store.instrument.split(':')[1],'separate':False,'articles':[{'provider':a['source']['provider'],'id':a['id']} for a in articles]}
         rows=body.get('articles',[])
         if not isinstance(rows,list) or len(rows)>10000: raise ValueError('最多選取10000篇')
         rows=list(map(capture,rows))
@@ -302,6 +339,15 @@ class WikiService:
         store=self.store(body.get('instrument'));cfg=store.config()
         enabled=body.get('enabled')
         if not isinstance(enabled,bool): raise ValueError('enabled必須是boolean')
+        if 'model' in body or 'reasoning_effort' in body:
+            with store.connection() as db:
+                classification=db.execute("SELECT 1 FROM research_jobs WHERE status IN ('queued','running') AND json_extract(payload,'$.operation')='classify_l1' LIMIT 1").fetchone()
+            if classification or any(j['status'] in ('queued','running') for j in store.jobs()):
+                raise ValueError('請先停止現有工作再更換模型設定')
+            changed={**cfg,**{k:body[k] for k in ('model','reasoning_effort') if k in body}}
+            self.options(changed);settings(changed)
+            changed['settings_version']=int(cfg.get('settings_version',0))+1
+            cfg=changed
         if enabled: self.options(cfg)
         cfg['enabled']=enabled;cfg['catch_up']=False;store.configure(cfg);self.wake.set()
         return cfg
