@@ -2,7 +2,7 @@
 
 新增 `/api/context/catalog|news|related|prices|l1|l2` 與 Chat `read_database`；獨立技能在 [stocknexus-research-api](../skills/stocknexus-research-api/SKILL.md)。查詢重用既有 DB，不啟動模型／抓新聞／初始化空庫。L1 使用既有 as-known EvidenceBundle；價格為目前快取 vintage；L2 保存快照與當期新聞不可混淆。
 
-驗證：35 Python context/research 測試、7 Chat proxy 安全測試、14 Node Chat 測試通過；真 Chromium `browser_chat_database.py` 驗證空圖仍能讀 DB 並回傳工具結果。正式 NVDA 以新 Handler 隔離埠做唯讀 HTTP 驗證；不重啟、不消耗模型。技能驗證與 spec links 通過。程式已推送 `5826c59`；正式 8765 尚未部署。自動審核拒絕再次中斷年度 L1，理由為先前重啟授權只涵蓋前次 Chat 部署；已向使用者詢問本次部署許可。工作沒有被停止，不可把隔離測試 server 當成正式 8765 已更新。後續收到明確許可才部署並按原凍結設定接續。
+驗證：35 Python context/research 測試、7 Chat proxy 安全測試、14 Node Chat 測試通過；真 Chromium `browser_chat_database.py` 驗證空圖仍能讀 DB 並回傳工具結果。正式 NVDA 以新 Handler 隔離埠做唯讀 HTTP 驗證；不重啟、不消耗模型。技能驗證與 spec links 通過。使用者明確授權本次部署後，已重建正式 8765（程式 `5826c59`、建置來源 `7994d7e`），並重啟 host Chat bridge。正式 catalog/news/prices/l1/l2 均 HTTP 200，NVDA 查詢約 0.05–0.65 秒。真 Chromium 經 Tailscale 驗證 Chat 已連線、context/news 同源 GET 200。年度 L1 以原 universe hash、2025-11-14 至 2026-11-13、gpt-6.1-sol/medium 接續；持久恢復紀錄在原 private ledger，沒有清除 revisions 或擴大日期。未送真實付費 Chat 問題，模型回答品質仍由使用者測試。
 
 # 目前狀態
 
