@@ -1,8 +1,8 @@
 # 目前狀態
 
-## 待部署：Tailscale Chat（2026-11-14）
+## 已部署：Tailscale Chat（2026-11-14）
 
-已實作 exact HTTPS Origin＋Tailscale Serve 使用者 allowlist，以及提問旁失敗提示。7 Python／13 Node／Chromium 拒絕連線測試通過；見 CHAT_AGENT。正式服務尚未更新，.env 未修改。自動審核拒絕會取消年度 L1 的部署方案；需要使用者明確同意中斷後接續，或等活動工作完成。保持現有批次運行，不自動重送／取消。下方 04f79b8 是目前已部署功能，不能將本段未部署修改說成已上線。
+0b069a5 已在使用者明確同意暫停 L1 後部署。exact HTTPS Origin＋Tailscale Serve 使用者 allowlist 已啟用；正式 Chromium 經 Tailscale 顯示已連線並完成情境同步，未發送付費模型提問。7 Python／13 Node／Chromium 拒絕連線測試先前通過，見 CHAT_AGENT。年度 L1 保留成果，依部署前工作紀錄接續 medium；即時進度以 private ledger 為準。
 
 
 ## 最新交接：股票身分綁定（2026-11-14）
