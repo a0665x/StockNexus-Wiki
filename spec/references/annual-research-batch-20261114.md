@@ -54,3 +54,12 @@ Git 從乾淨 `8285c09` fast-forward 到 `f63e896`。執行 `./run.sh chat start
 本批有限控制腳本保存於 private 批次目錄的 `scripts/stocknexus_annual_update.py` 與 `scripts/stocknexus_annual_l1.py`；有 file lock 與持久進度，不能再建立第二套批次。重啟前先看正在執行的程序與 ledger。
 
 本輪未完成全市場 13F 彙總、帶身分的即時大戶交易、付費新聞全文、全年事件回測或可校準長期股價模型。這些與來源取得及 L1 pending 分開說明。報告保存在使用者 Documents/Codex 的 `StockNexus-Research-2026-11-14` 資料夾，不上傳私人新聞／模型成果到 GitHub。
+
+
+## 2026-11-14 05:20 UTC：使用者指定 medium 與股票身分 UI
+
+- 應用程式 04f79b8 已部署／推送，靜態 JS hash 相符；正式 Chromium 驗證既有 SNDK 唯讀股票與新建 14 個非空 DB 選項。
+- 87 Wiki Python、9 Graph storage、9 專項 Chromium 檢查通過；40 spec 文件檢查通過。舊 browser_wiki.py 自動預覽假設失效，不列為本次全套通過。
+- 上輪 2026-11-13T17:20Z 因 quota 停止，並非資料庫未建立。此輪 14 股 configure 已保存 gpt-6.1-sol/medium；固定日期／凍結引用與已發布 revisions 保留。閒置更換模型走 configure，避免 apply 重建全年度圖譜。
+- 使用者新的「開始 medium」要求在原 quota 訊息重試時間之後；一次接續記錄保存在 private ledger 的 resumptions，舊失敗和工作 ID 留於 attempt_history。先 NVDA 驗證真實發布，再放行其餘；若供應商再次拒絕則 controller 停止，不自行循環重試。
+- NVDA extraction 7c3831fe40c049ce942c86711e50d95f、classification 078ad271fab44daa946252db2aa85ef5 已確認 payload 為 medium，初始 API 顯示 queued；8,472 篇範圍／8,138 待補，並非完成。controller PID 與 hash 見 private/controller-process.json；後續以即時 API／ledger 為準。

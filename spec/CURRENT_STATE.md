@@ -6,7 +6,7 @@
 
 本輪驗證：87 項 Wiki Python、9 項 Graph storage、9 項 Chromium 身分切換檢查通過；新增資料範圍、快照身分、空庫與模型設定邊界測試。舊 browser_wiki.py 因假設自動預覽而在 planRelease 步驟失敗，未宣稱全套舊 UI 驗收通過。本輪以 browser_wiki_identity.py 測實際 DOM 互動、即時回饋及晚回應。
 
-正式確認 14 個非空新聞 DB；一年來源取得仍有供應商缺口。年度批次於 2026-11-13T17:20Z 因模型用量上限停止，既有成果保留；本次使用者指定後續 gpt-6.1-sol/medium，取代下方 high 歷史設定。即時結果以 private l1-batch.json 為準，不依歷史行列重送工作。程式修正準備部署，部署結果另記本批 references。
+正式確認 14 個非空新聞 DB；一年來源取得仍有供應商缺口。年度批次於 2026-11-13T17:20Z 因模型用量上限停止，既有成果保留；本次使用者指定後續 gpt-6.1-sol/medium，取代下方 high 歷史設定。即時結果以 private l1-batch.json 為準，不依歷史行列重送工作。程式 04f79b8 已部署並推送 llm_wiki；HTTP JS SHA256 相符。正式 Chromium 切換 SNDK 鎖定與新建 14 DB 選項通過。14 股 medium 設定已由公開 API 保存；使用者再次要求啟動且舊額度重試時間已過後，執行一次有界接續，先 NVDA、成功新發布後放行其餘，並保留之前失敗歷史；詳見本批 references。
 
 
 ## 最新本機交接：年度資料與研究（2026-11-14）
