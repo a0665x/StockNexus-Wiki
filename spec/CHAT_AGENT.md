@@ -25,8 +25,17 @@ Install Node.js 20+ and run `npm ci`. Authenticate with the host Codex account f
 `./run.sh chat start|stop|status` controls the bridge; `./run.sh up` starts it when
 installed and `down` stops it. Without dependencies, news still works and the
 launcher reports the missing chat prerequisite. `data/private/chat.log` contains
-service diagnostics. Chat is currently for `http://127.0.0.1:8765` or localhost;
-LAN/Tailscale chat needs an explicit authentication design before being enabled.
+service diagnostics. Chat defaults to `http://127.0.0.1:8765` or localhost.
+Optional Tailscale Serve access requires both `NEWS_ATLAS_CHAT_ORIGINS` (exact HTTPS
+origins) and `NEWS_ATLAS_CHAT_TAILSCALE_USERS` (explicit login identities). Requests
+must arrive through the trusted local proxy, match Host and Origin, and carry the
+Serve-supplied `Tailscale-User-Login`; cross-site and arbitrary remote peers remain
+rejected. Keep the backend loopback-bound and the Serve endpoint private, without
+Funnel. See [Tailscale Serve identity headers](https://tailscale.com/docs/features/tailscale-serve).
+This uses existing browser session capabilities; MCP routes remain inaccessible.
+
+A failed submitted message displays its error beside the question, restores the
+prompt for retry, and clears busy state. No silent retry of model turns.
 
 The bridge has an isolated configuration/work directory under
 `~/.local/state/stocknexus-wiki/chat`. Its auth.json links to the existing host
@@ -133,3 +142,15 @@ causes and test boundaries: [language runtime incident](references/lesson-202611
 ## 2026-11-10 研究讀取與格式
 
 工具現在包含 get_state/read_news/read_edges/read_wiki/**read_research**/act（早期四／五工具描述已被此清單取代）。read_research 透過瀏覽器唯讀 ack 取得 DB 保存快照，獨立於 GPU 範圍；使用者選取或股票改變時拒絕晚回應。日期、來源去重、舊快照及模型驗證限制見 [BDD](CHAT_RESEARCH_BDD.md)。Chat Markdown 以安全 DOM 支援表格／粗體／標題／清單／程式碼／HTTP(S) 連結，表格在聊天欄內橫向捲動，來源 HTML 不執行。
+
+
+## 2026-11-14 validation / deployment boundary
+
+7 Python proxy-origin/identity tests and 13 Node Chat tests passed. Chromium
+`browser_chat_failure.py` verified the actual rejected-session flow: adjacent
+error, retained prompt and cleared busy state. Tailscale 8765 Serve configuration
+was inspected and is private (no Funnel on that endpoint). Production HTTPS
+session/turn verification is pending deployment. Automatic review rejected the
+proposed deployment because it would cancel active annual L1 jobs; neither job
+cancellation nor .env changes nor service restart were executed. Request explicit
+approval for that interruption or deploy after those jobs finish; do not bypass.

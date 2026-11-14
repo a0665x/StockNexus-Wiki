@@ -1,4 +1,5 @@
-"""Local-only HTTP facade for the host SDK bridge over a private Unix socket."""
+"""Local / authenticated Tailscale HTTP facade for the host SDK bridge over a private Unix socket."""
+import os
 import http.client
 import socket
 import urllib.parse
@@ -27,9 +28,15 @@ def handle(handler):
     path=urllib.parse.urlsplit(handler.path).path.removeprefix('/api/chat/')
     host=handler.headers.get('Host','')
     origin=handler.headers.get('Origin','')
-    # Deliberately local only; do not expose a signed-in account through LAN/Tailscale.
-    if not local_peer(handler.client_address[0]) or host not in ('127.0.0.1:8765','localhost:8765') or handler.headers.get('Sec-Fetch-Site')=='cross-site' or (origin and origin!='http://'+host) or (handler.command=='POST' and origin!='http://'+host):
-        handler.json_response(403,{'error':'Chat 僅開放本機 http://127.0.0.1:8765，請從該頁面操作。'});return
+    # Trust identity only from the local Tailscale Serve proxy. The backend
+    # must remain loopback-bound; do not trust forwarded headers from LAN peers.
+    allowed={x.strip() for x in os.environ.get('NEWS_ATLAS_CHAT_ORIGINS','').split(',') if x.strip().startswith('https://')}
+    users={x.strip() for x in os.environ.get('NEWS_ATLAS_CHAT_TAILSCALE_USERS','').split(',') if x.strip()}
+    local=host in ('127.0.0.1:8765','localhost:8765')
+    expected='http://'+host if local else 'https://'+host
+    authenticated=local or (expected in allowed and handler.headers.get('Tailscale-User-Login','') in users)
+    if not local_peer(handler.client_address[0]) or not authenticated or handler.headers.get('Sec-Fetch-Site')=='cross-site' or (origin and origin!=expected) or (handler.command=='POST' and origin!=expected):
+        handler.json_response(403,{'error':'Chat 連線未獲授權；請使用本機頁面或已授權的 Tailscale 帳號與網址。'});return
     if path not in PATHS or (handler.command=='GET')!=(path=='status'):
         handler.json_response(404,{'error':'Unknown chat endpoint'});return
     data=None

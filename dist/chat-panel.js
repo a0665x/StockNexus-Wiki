@@ -50,11 +50,11 @@
  timer=setInterval(()=>{if(visible||busy)sync();},700);
  function message(text,role){const node=make('div',null,'chat-message raw '+role),content=make('div');renderMarkdown(content,text);node.append(content);messages.append(node);messages.scrollTop=messages.scrollHeight;return node;}
 
- form.onsubmit=async e=>{e.preventDefault();if(busy||!input.value.trim())return;const text=input.value.trim();busy=true;stopping=false;send.disabled=true;stop.disabled=false;fresh.disabled=true;input.value='';message(text,'user');setStatus('正在連線…');
+ form.onsubmit=async e=>{e.preventDefault();if(busy||!input.value.trim())return;const text=input.value.trim();busy=true;stopping=false;send.disabled=true;stop.disabled=false;fresh.disabled=true;input.value='';const submitted=message(text,'user');form.setAttribute('aria-busy','true');setStatus('正在連線…');
   try{await connect();while(syncing)await new Promise(r=>setTimeout(r,30));await sync();if(stopping)throw Error('已停止回覆。');const response=await request('turn',{message:text}),reader=response.body.getReader(),decoder=new TextDecoder();let buffer='',ended=false;
    while(true){const {done,value}=await reader.read();buffer+=decoder.decode(value||new Uint8Array(),{stream:!done});let i;while((i=buffer.indexOf('\n'))>=0){const line=buffer.slice(0,i);buffer=buffer.slice(i+1);if(!line.trim())continue;const event=JSON.parse(line);if(event.type==='message')message(event.text,'assistant');if(event.type==='status')setStatus(event.message);if(event.type==='error'){ended=true;throw Error(event.message);}if(event.type==='done'){ended=true;setStatus(event.cancelled?'已停止回覆':'回覆完成');}}if(done)break;}
    if(!ended)throw Error('連線中斷，回覆可能未完成。');
-  }catch(e){showError(e);}finally{busy=false;send.disabled=!input.value.trim();stop.disabled=true;fresh.disabled=false;}
+  }catch(e){showError(e);submitted.classList.add('failed');const failure=make('div',status.textContent,'chat-send-error');failure.setAttribute('role','alert');submitted.append(failure);if(!input.value)input.value=text;}finally{form.setAttribute('aria-busy','false');busy=false;send.disabled=!input.value.trim();stop.disabled=true;fresh.disabled=false;}
  };
  input.oninput=()=>{send.disabled=busy||!input.value.trim();};
  input.onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();form.requestSubmit();}e.stopPropagation();};

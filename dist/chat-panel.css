@@ -25,3 +25,5 @@
 .chat-send svg{width:22px;height:22px;pointer-events:none}.chat-send:hover:not(:disabled){background:#77e8c324}.chat-send:focus-visible{outline:2px solid var(--accent);outline-offset:0}.chat-send:disabled{opacity:.35;cursor:default}
 
 .chat-message p{margin:0 0 .6em}.chat-message p:last-child{margin-bottom:0}.chat-message table{border-collapse:collapse;width:100%;font-size:12px;white-space:normal}.chat-message th,.chat-message td{border:1px solid #365064;padding:6px;min-width:110px;vertical-align:top;overflow-wrap:anywhere}.chat-message th{background:#1c3041}.chat-table-scroll{max-width:100%;overflow-x:auto;overscroll-behavior-x:contain}.chat-message pre{overflow:auto;max-width:100%;white-space:pre}.chat-message code{font-family:monospace}.chat-message>div{min-width:0;max-width:100%}
+
+.chat-send-error{margin-top:8px;padding-top:8px;border-top:1px solid currentColor;color:#ffb4a2;font-size:.85em}.chat-compose[aria-busy=true]{opacity:.85}

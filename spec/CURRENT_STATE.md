@@ -1,5 +1,10 @@
 # 目前狀態
 
+## 待部署：Tailscale Chat（2026-11-14）
+
+已實作 exact HTTPS Origin＋Tailscale Serve 使用者 allowlist，以及提問旁失敗提示。7 Python／13 Node／Chromium 拒絕連線測試通過；見 CHAT_AGENT。正式服務尚未更新，.env 未修改。自動審核拒絕會取消年度 L1 的部署方案；需要使用者明確同意中斷後接續，或等活動工作完成。保持現有批次運行，不自動重送／取消。下方 04f79b8 是目前已部署功能，不能將本段未部署修改說成已上線。
+
+
 ## 最新交接：股票身分綁定（2026-11-14）
 
 既有 Wiki 股票鎖定；新建改由非空新聞 DB 下拉選取。伺服器 news_db 模式不使用主頁別股輸入；過期／錯股 graph 回應不得覆寫選取。見 WIKI_RUNTIME、API。新增 configure 閒置模型設定路徑避免單改 reasoning 重建全年圖譜；有活動 extraction/classification 時拒絕。
