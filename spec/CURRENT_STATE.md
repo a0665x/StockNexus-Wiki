@@ -1,3 +1,7 @@
+# 最新交接：2026-11-16 保存／續跑核對
+
+程式與既有部署紀錄已在 `llm_wiki`，本次只補文件，不重啟、不更動年度工作。L1／L2 完成結果會自動提交；立即取消可能丟棄尚未提交推論，大樹中斷仍可能重算未完成樹的已發布分段。安全暫停與持久分段 checkpoint 尚未實作；詳細邊界與後續 BDD 見 [WIKI_RUNTIME](WIKI_RUNTIME.md)「保存與中斷邊界」。下方 11/14 執行與測試是歷史驗證，本次沒有重新宣稱批次即時進度。
+
 # 最新交接：2026-11-14 DB context API
 
 新增 `/api/context/catalog|news|related|prices|l1|l2` 與 Chat `read_database`；獨立技能在 [stocknexus-research-api](../skills/stocknexus-research-api/SKILL.md)。查詢重用既有 DB，不啟動模型／抓新聞／初始化空庫。L1 使用既有 as-known EvidenceBundle；價格為目前快取 vintage；L2 保存快照與當期新聞不可混淆。

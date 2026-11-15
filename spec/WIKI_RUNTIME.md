@@ -168,3 +168,14 @@ Root 的輸入字數上限不足以限制模型輸出工作量：44 篇短新聞
 Root 連結以完整已載入新聞集合核對成員，不以 graph.graphData 的 GPU 切片判定存在。閱讀時渲染預算暫用 max(使用者預算, 工作樹成員數)，所有成員優先；退出恢復原預算，不改保存設定、工作輸入或覆蓋分母。單樹仍受既有探索深度／分支／maxNodes 規則約束，這些語意選取規則與 GPU 預算不同。Wiki 從已確認 graph_universe 重建完整圖，逐樹涵蓋日期內目標，不拿當前渲染點作全集。真正未載入／隱藏來源的成員仍需補齊資料，不冒充完整樹。
 
 隔離 Chrome：180 篇全局新聞、GPU 預算 100、選中原本未渲染的 root，其樹 120 成員全部顯示，退出回到 100，完整集合維持 180，無 Wiki 寫入；連同既有入口測試共 15 項檢查通過。test_wiki_forest 共 8 項通過，含未渲染與孤立新聞覆蓋。正式容器尚未部署，以免中斷在途整理。
+
+
+## 保存與中斷邊界（2026-11-16 核對）
+
+L1 的 `WikiStore.publish` 在單一交易中保存版本、節點、連線、分類及已完成 extraction；增量 update 透過 `known`／extractions 跳過已完成來源 revision。L2 在驗證通過後，以單一交易保存 run、snapshot 引用、SavedLens 更新及 completed 狀態；「保存研究」是另存追蹤規則，不是一次查詢結果第一次落庫。
+
+目前停止是立即取消模型工作，不是等待當前段完成後才停止。已提交成果保留；未提交推論可能需要重跑。Graph coverage 大樹各段可發布觀點，但只有末段成功才標記整樹目標 coverage；中途停止後，未完成樹的先前分段仍可能重算。L2 未完成的新 run 不對外取代最後完整結果；重新發起時可能重新推論。不得宣稱「中斷後完全零重算」。
+
+使用者期望完成當前段再停、下次從下一段接續。安全暫停與持久分段 checkpoint 尚未實作，本次只記錄經核對的現況，不改執行中的工作。後續若實作，BDD 必須驗證：已提交段不再呼叫模型、checkpoint 與發布同交易、末段前不提前記 coverage、停止期間不排下一段、重啟與重試不重複提交，並保留既有 L2 完整結果。
+
+原始碼定位：[store.py](../news_atlas/wiki/store.py) `publish`、[compiler.py](../news_atlas/wiki/compiler.py) `process/_cancel`、[forest.py](../news_atlas/wiki/forest.py) `groups`、[research.py](../news_atlas/wiki/research.py) `query/process`。
