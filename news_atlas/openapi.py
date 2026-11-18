@@ -32,7 +32,7 @@ def specification():
     schemas['GraphPayload']=obj({'relations_pending':{'type':'boolean'},'relation_settings':ref('relation_settings'),'schema_version':{'const':'2.0'},'articles':arr(ref('article')),'relations':arr(ref('GraphEdge')),'source_graphs':{'type':'object','additionalProperties':ref('Graph')},'cross_relations':arr(ref('GraphEdge')),'channel_definitions':ref('ChannelDefinitions'),'channel_version':string(),'total_articles':{'type':'integer'},'display_limit':{'type':'null'}})
     schemas['Error']=obj({'error':string()},['error'])
     schemas['SearchRequest']=obj({'defer_relations':{'type':'boolean','default':False,'description':'Return news without computing a complete graph; UI computes a bounded view via /api/graph/preview.'},'relation_settings':ref('relation_settings'),'rss_region':region,'query':string(200),'ticker':string(40),'instrument':string(40),'sources':{**arr(provider,3),'minItems':1,'uniqueItems':True},'start':date,'end':date,'force_refresh':{'type':'boolean','default':False},'massive_key':{'type':'string','format':'password','maxLength':512,'writeOnly':True,'description':'Optional request override; otherwise uses a separately remembered host key, then MASSIVE_API_KEY. Never returned or stored in the news DB.'}},['sources'])
-    schemas['SearchRequest']['description']='Web UI requires EXCHANGE:SYMBOL; instrument accepts this identity and ticker stays the provider symbol. Legacy API bare tickers remain supported. Explicit ticker selects data/graph/<ticker>; missing ticker uses _unassigned. Inclusive UTC dates, maximum 366 days. Massive requires explicit ticker; Google/Yahoo require query or ticker. Missing dates default to the last 7 days.'
+    schemas['SearchRequest']['description']='Web UI requires EXCHANGE:SYMBOL; instrument accepts this identity and ticker stays the provider symbol. Legacy API bare tickers remain supported. Explicit ticker selects data/graph/<ticker>; missing ticker uses _unassigned. Inclusive UTC dates, up to one inclusive calendar year. Massive requires explicit ticker; Google/Yahoo require query or ticker. Missing dates default to the last 7 days.'
     schemas['SearchResult']=obj({'graph':ref('GraphPayload'),'sources':arr({'type':'object'}),'db':{'type':'object'},'elapsed':{'type':'number'},'partial':{'type':'boolean'}})
     schemas['StreamEvent']=obj({'type':{'enum':['cache','status','source','heartbeat','phase','graph','graph_error','done']},'graph':ref('GraphPayload'),'source':provider,'articles':arr(ref('article')),'error':{'type':['string','null']},'cache':{'type':'object'},'counts':{'type':'object'},'message':string(),'phase':string(),'elapsed':{'type':'number'},'db':{'type':'object'}},['type'])
     schemas['ChannelInput']=obj({'id':string(60),'name':{**string(40),'minLength':1},'keywords':{**arr({**string(60),'minLength':1},30),'minItems':1},'match':{'enum':['any','all'],'default':'any'},'color':{'type':'string','pattern':'^#[a-fA-F0-9]{6}$'}},['name','keywords'])
@@ -116,18 +116,19 @@ def specification():
     chat_description='Local browser integration only. Requires loopback Host and same-origin Origin on POST; bridge runs on host via private Unix socket. Maximum body 32 MiB. Tokens are ephemeral, not Codex credentials. Not a general remote automation API.'
     for name,method,request,response,media in [
         ('status','get',None,obj({'ready':{'type':'boolean'}}),'application/json'),
+        ('models','get',None,{'type':'object'},'application/json'),
         ('session','post',obj({}),obj({'token':string()},['token']),'application/json'),
         ('sync','post',ref('ChatSync'),obj({'commands':arr({'type':'object'})}),'application/json'),
-        ('turn','post',obj({'message':{**string(24000),'minLength':1}},['message']),ref('ChatEvent'),'application/x-ndjson'),
+        ('turn','post',obj({'model':string(100),'message':{**string(24000),'minLength':1}},['message']),ref('ChatEvent'),'application/x-ndjson'),
         ('cancel','post',obj({}),obj({'ok':{'type':'boolean'}}),'application/json'),
         ('reset','post',obj({}),obj({'ok':{'type':'boolean'}}),'application/json')]:
         operation('/api/chat/'+name,method,'chat_'+name,'Chat '+name,'Chat',request,response,description=chat_description,writes=method=='post',network=name=='turn',media=media)
         op=paths['/api/chat/'+name][method]
         for status,label in [('401','Expired session'),('403','Not a local same-origin request'),('409','Busy or missing context'),('413','Context too large'),('503','Host chat bridge unavailable')]:op['responses'][status]={'description':label,'content':{'application/json':{'schema':ref('Error')}}}
-        if name not in ('session','status'):op['security']=[{'ChatSession':[]}]
+        if name not in ('session','status','models'):op['security']=[{'ChatSession':[]}]
         if method=='post':op['parameters']=[{'name':'Origin','in':'header','required':True,'schema':{'type':'string','enum':['http://127.0.0.1:8765','http://localhost:8765']}}]
     wiki_description='Separate per-instrument SQLite Wiki. Writes require matching Origin/Host and local peer; remote origin must be explicitly listed in NEWS_ATLAS_WIKI_ORIGINS. Preview is model-free; start consumes a 10-minute plan. Bounded evidence batches, bilingual proposals, retrieved dependent viewpoint reassessment, immutable version history; no forecasts or exhaustive whole-graph reasoning.'
-    for name,method in [('status','get'),('models','get'),('graph','get'),('jobs','get'),('article','get'),('node','get'),('markdown','get'),('plan','post'),('apply','post'),('jobs','post'),('configure','post'),('cancel','post'),('resume','post')]:
+    for name,method in [('status','get'),('models','get'),('graph','get'),('jobs','get'),('article','get'),('node','get'),('markdown','get'),('plan','post'),('apply','post'),('jobs','post'),('configure','post'),('cancel','post'),('stop','post'),('resume','post')]:
         operation('/api/wiki/'+name,method,'wiki_'+method+'_'+name,'Wiki '+name,'Wiki',request={'type':'object'} if method=='post' else None,description=wiki_description,writes=method=='post',network=method=='post' and name in ('jobs','resume','apply'),code='202' if method=='post' and name=='jobs' else '200')
         op=paths['/api/wiki/'+name][method]
         if method=='get' and name not in ('status','models'):
@@ -141,4 +142,55 @@ def specification():
         if method=='post':op['parameters']=[{'name':'Origin','in':'header','required':True,'schema':string()}]
         op['responses']['403']={'description':'Origin or peer not authorized'}
         op['responses']['503']={'description':'Wiki or model bridge unavailable'}
-    return {'openapi':'3.1.0','info':{'title':'StockNexus-Wiki API','version':'1.1.0','description':'Local/trusted-network GraphNews service. News REST operations are independent of the browser. Local Chat has a session-scoped stdio MCP bridge for runtime context and acknowledged UI controls.'},'servers':[{'url':'/'}],'paths':paths,'components':{'schemas':schemas,'securitySchemes':{'ChatSession':{'type':'http','scheme':'bearer','description':'Ephemeral browser session token from /api/chat/session; never a model login credential.'}}}}
+    graph_params={'instrument':string(40),'version':{'type':'integer','minimum':0},
+                  'collection':{'enum':['nodes','edges']},'id':string(),'offset':{'type':'integer','minimum':0},
+                  'limit':{'type':'integer','minimum':1,'maximum':100}}
+    operation('/api/context/graph','get','read_versioned_graph','逐頁檢視完整 L1 節點、支持、反證與修訂','Research context',
+              parameters=[{'in':'query','name':k,'required':k=='instrument','schema':v} for k,v in graph_params.items()],
+              description='Pin the returned version and follow next_offset until null for each collection. id selects a node or incident edges in either direction. Retains historical revisions.')
+    maintenance={'instrument':string(40),'model':string(100),'news_db':{'type':'boolean'},
+                 'scope':{'enum':['global','loaded','focus']},'operation':{'enum':['update','review']},
+                 'date_range':obj({'start':date,'end':date},['start','end']),
+                 'reasoning_effort':string(),'continuous':{'type':'boolean'}}
+    for action in ('plan','apply'):
+        payload=paths['/api/wiki/'+action]['post']['requestBody']['content']['application/json']
+        payload['schema']=obj(maintenance,['instrument','model'])
+        payload['example']={'instrument':'NASDAQ:GOOGL','model':'gpt-6.1-sol','scope':'global','news_db':True,'operation':'update'}
+    paths['/api/wiki/jobs']['post']['requestBody']['content']['application/json']['schema']=obj(
+        {'plan_id':string(),'continuous':{'type':'boolean'},'classify_missing':{'type':'boolean'}},['plan_id'])
+    stop=paths['/api/wiki/stop']['post']
+    stop['description']='Stop all queued or running L1 compilation and classification for this instrument and disable automatic catch-up and watching. Idempotent. Published versions and separate L2 research are retained.'
+    stop['requestBody']['content']['application/json']['schema']=obj({'instrument':string(40)},['instrument'])
+    prefix='/api/wiki/research/'
+    operation(prefix+'compare','post','compare_saved_viewpoints','Compare two exact L1/L2 viewpoints','L2 research',
+              request=obj({'instrument':string(),'refs':{'type':'array','items':string(),'minItems':2,'maxItems':2,'uniqueItems':True},
+                           'model':string(),'reasoning_effort':string()},['instrument','refs','model']),
+              writes=True,network=True,code='202',description='Explicit model review. Reuses matching work. Poll research/job, then read comparison using payload.comparison_id. Originals are retained.')
+    paths[prefix+'compare']['post']['responses']['200']=paths[prefix+'compare']['post']['responses']['202']
+    for name in ('comparison-candidates','comparisons','comparison'):
+        params=[{'name':'instrument','in':'query','required':True,'schema':string()}]
+        if name=='comparison':params.append({'name':'id','in':'query','required':True,'schema':string()})
+        else:params.append({'name':'offset','in':'query','schema':{'type':'integer','minimum':0}})
+        if name=='comparison-candidates':params.append({'name':'q','in':'query','schema':string()})
+        operation(prefix+name,'get','read_'+name.replace('-','_'),name,'L2 research',parameters=params)
+    for name in ('availability','job','runs','run','lenses','taxonomy'):
+        keys=['instrument','id'] if name in ('job','run') else ['instrument']
+        operation(prefix+name,'get','read_research_'+name,'L2 '+name,'L2 research',
+                  parameters=[{'name':key,'in':'query','required':True,'schema':string()} for key in keys])
+    fields={'query':string(2000),'model':string(100),'lookback_days':{'type':'integer','minimum':1,'maximum':3660},
+            'reasoning_effort':string(),'mode':{'enum':['live','pinned']},'terms':arr({'type':'object'}),
+            'status':{'enum':['active','corrected','retracted']}}
+    for name,required,optional in [
+            ('query',['query'],['model','reasoning_effort','lookback_days']),
+            ('refresh',['lens_id','expected_revision'],[]),('save',['run_id','mode'],[]),
+            ('source-status',['revision_id','status','reason'],[]),
+            ('candidate',['text','facet'],[]),('taxonomy',['expected_revision','terms'],[])]:
+        keys=['instrument',*required]
+        operation(prefix+name,'post','write_research_'+name,'L2 '+name,'L2 research',
+                  request=obj({k:fields.get(k,string()) for k in keys+optional},keys),
+                  writes=True,network=name in ('query','refresh'),
+                  description='Supply matching Origin and Host. Poll job with the returned job_id. Completed results reference an immutable run.')
+        if name in ('query','refresh'):
+            responses=paths[prefix+name]['post']['responses']
+            responses['202']={'description':'Queued. Poll research/job with instrument and id.'}
+    return {'openapi':'3.1.0','info':{'title':'StockNexus-Wiki API','version':'1.1.0','description':'Agent workflow: GET /api/context/catalog for news counts, L1 version and L2 run counts. POST /api/cache/graph with instrument, sources and inclusive dates; inspect coverage per source. For gaps POST the same request to /api/search, consume NDJSON status/heartbeat/source/done, then check coverage again. To maintain L1 choose a model from /api/wiki/models, plan with news_db and global scope, start with plan_id, poll /api/wiki/jobs. For L2 check research/availability, submit research/query, poll research/job, read research/run using payload.run_id. Browse /api/context/graph for all published L1 revisions and relations. Local Chat has a session-scoped stdio MCP bridge for runtime context and acknowledged UI controls.'},'servers':[{'url':'/'}],'paths':paths,'components':{'schemas':schemas,'securitySchemes':{'ChatSession':{'type':'http','scheme':'bearer','description':'Ephemeral browser session token from /api/chat/session; never a model login credential.'}}}}

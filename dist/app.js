@@ -204,7 +204,7 @@ function rebuild(payload,relationUpdate=false) {
   hovered = null;activeTrace=AtlasView.trace([],null);showTrace(null,activeTrace); showPreview(null);
   $('count').textContent = articles.length; $('edges').textContent = relations.length;
   updateGraphMessage(); $('export').disabled = !focusView.articles.length;
-  $('saveDB').disabled = !focusView.articles.length || !!controller || saving;
+  syncSnapshotButton();
   const groups = AtlasView.groups(basePayload);
   for (const p of providers) $('view-count-'+p).textContent = groups[p]?.articles.length || 0;
   const total = viewSources().reduce((n,p)=>n+(groups[p]?.total_articles ?? groups[p]?.articles.length ?? 0),0);
@@ -400,7 +400,7 @@ $('timeBellEditor').open=AtlasUI.read('timeCurveOpen',true);$('timeBellEditor').
 $('timeSizeEnabled').onchange=updateTimeFocus;$('timeFocusSlider').oninput=updateTimeFocus;syncTimeFocus();
 $('form').addEventListener('submit', async e => {
   if(e.target&&e.target!==$('form'))return;
-  e.preventDefault(); if (controller) return;dateRange.refresh();persistSearchDraft();
+  e.preventDefault(); if (controller || saving) return;dateRange.refresh();if(!$('form').reportValidity())return;persistSearchDraft();
   const sources = [...document.querySelectorAll('.sources input:checked')].map(x => x.value);
   const query = $('query').value.trim(), instrument = $('ticker').value.trim().toUpperCase(), ticker = instrument.split(':').at(-1), key = $('key').value.trim()||($('rememberKey').checked?AtlasUI.read('massiveKey',''):'');
   persistKey();
@@ -417,6 +417,7 @@ $('form').addEventListener('submit', async e => {
   $('elapsed').textContent = '正在檢查本地日期覆蓋…';
   for (const s of sources) sourceStates[s]={cached:0,new:0,total:0,phase:'等待中'};
   paintProgress();
+  let completed=false;
   const abortTimer = setTimeout(() => searchController.abort(), 600000);
   try {
     const response = await fetch('/api/search', { method: 'POST', signal: searchController.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(searchBody) });
@@ -430,12 +431,26 @@ $('form').addEventListener('submit', async e => {
     }
     if (!finished) throw new Error('搜尋連線提早中斷；已載入資料仍保留');
     if(pendingSearchMeta)acceptSearchGraph({articles:[],relations:[],relation_settings:preferred},true);
+    completed=true;
   } catch(err){if(request===currentSearch){operationNotice=AtlasI18n.t(err.name==='AbortError'?'已停止等待；已載入資料保留，伺服器可能繼續處理。':'搜尋失敗；目前圖譜保留。')+(err.name==='AbortError'?'':' '+err.message);status.append(el('p',operationNotice,'error'));}}
-  finally{clearTimeout(abortTimer);if(request===currentSearch){controller=null;pendingSearchMeta=null;clearInterval(searchClock);relationUI?.setSearchBusy(false);$('submit').disabled=false;$('cancel').hidden=true;$('saveDB').disabled=!focusView.articles.length||saving;updateGraphMessage();}}
+  finally{
+    clearTimeout(abortTimer);
+    if(request===currentSearch){
+      controller=null;
+      pendingSearchMeta=null;
+      clearInterval(searchClock);
+      relationUI?.setSearchBusy(false);
+      $('submit').disabled=false;
+      $('cancel').hidden=true;
+      syncSnapshotButton();
+      updateGraphMessage();
+      if(completed && $('autoSnapshot').checked && focusView.articles.length)await saveSnapshot();
+    }
+  }
 });
 $('cancel').onclick=()=>{
   if(!controller)return;const previous=controller;controller=null;currentSearch++;previous.abort();pendingSearchMeta=null;clearInterval(searchClock);
-  relationUI?.setSearchBusy(false);$('submit').disabled=false;$('cancel').hidden=true;$('saveDB').disabled=!focusView.articles.length||saving;
+  relationUI?.setSearchBusy(false);$('submit').disabled=false;$('cancel').hidden=true;syncSnapshotButton();
   operationNotice=AtlasI18n.t('已停止等待；已載入資料保留，伺服器可能繼續處理。');updateGraphMessage();
 };
 $('export').onclick = () => { const data = { schema_version: '2.0', search: exportMeta, articles:focusView.articles, relations:focusView.relations, view: {sources:viewSources(),separate:isSeparate(),mode:viewMode,channel_filter:channelFilter,cutoff:timelineCutoff,timeline_style:timelineStyle,exploration,glow:glowConfig,time_focus:timeFocus,price_focus:priceLens?.snapshot(),relation_settings:basePayload.relation_settings||relationUI?.applied(),focus:{mode:lockedRoots.length?(keywordLocked?'keyword':'single'):'overview',root_ids:wikiRootPreview?[]:lockedRoots,query:keywordLocked?rootSearchState?.query||'':'',limit:rootSearchState?.limit||3},channel_definitions:channelDefinitions}, relation_scope:basePayload.relation_scope||'complete',relation_scope_ids:basePayload.relation_scope_ids||null,relations_pending:basePayload.relation_scope==='view'?viewRelationState.phase!=='ready':!!basePayload.relations_pending, relation_note: '關聯來自明確代碼、文字實體、主題與標題相似規則；分數不是機率，連線不是因果。' }; const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })); const a = el('a'); a.href = url; a.download = 'news-atlas.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 10000); };
@@ -454,13 +469,51 @@ function savedPayload() {
   payload.view.relation_views=[...restoredRelationViews,...completedRelationViews.values()].filter(v=>v.sources.every(p=>sources.has(p))).slice(-12);
   return payload;
 }
-$('saveDB').onclick = async () => {
-  if (saving || controller || !focusView.articles.length) return;
-  const payload=savedPayload(); saving=true; $('saveDB').disabled=true; $('saveStatus').textContent='儲存中…';
-  try {const response=await fetch('/api/snapshots',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const saved=await response.json();if(!response.ok)throw new Error(saved.error || '儲存失敗');$('saveStatus').textContent=`已儲存「${saved.name}」· ${payload.view.sources.map(p=>sourceNames[p]).join('／')} 分開保存`;updateDB(saved.db);await loadSnapshots();}
-  catch(error){$('saveStatus').textContent='儲存失敗：'+error.message;}
-  finally{saving=false;$('saveDB').disabled=!focusView.articles.length || !!controller;}
+function syncSnapshotButton(){
+  $('saveDB').disabled=$('autoSnapshot').checked || saving || !!controller || !focusView.articles.length;
+}
+$('autoSnapshot').checked=AtlasUI.read('autoSnapshot',true);
+$('autoSnapshot').onchange=()=>{
+  AtlasUI.write('autoSnapshot',$('autoSnapshot').checked);
+  syncSnapshotButton();
 };
+$('saveDB').onclick=saveSnapshot;
+async function saveSnapshot(){
+  if (saving || controller || !focusView.articles.length) return;
+  const payload=savedPayload();
+  snapshotLoadTicket++;
+  saving=true;
+  $('submit').disabled=true;
+  syncSnapshotButton();
+  $('saveStatus').textContent='儲存中…';
+  try{
+    const response=await fetch('/api/snapshots',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const saved=await response.json();
+    if(!response.ok || !saved.id)throw Error(saved.error || '儲存失敗');
+    $('saveStatus').textContent=`已儲存「${saved.name}」· ${payload.view.sources.map(p=>sourceNames[p]).join('／')} 分開保存`;
+    for(const [provider,state] of Object.entries(sourceStates)){
+      if(!state.done)continue;
+      // Completed source results were read back from the news DB, including hidden sources.
+      state.cached=state.total;
+      state.new=0;
+      const group=payload.source_graphs[provider];
+      if(!state.error && group?.articles.length===state.total)state.phase='已存圖譜';
+    }
+    paintProgress();
+    updateDB(saved.db);
+    await loadSnapshots();
+  }catch(error){
+    $('saveStatus').textContent='儲存失敗：'+error.message;
+    const retry=el('button',AtlasI18n.t('重試'));
+    retry.type='button';
+    retry.onclick=saveSnapshot;
+    $('saveStatus').append(retry);
+  }finally{
+    saving=false;
+    $('submit').disabled=!!controller;
+    syncSnapshotButton();
+  }
+}
 async function loadSnapshots() {
   try {const response=await fetch('/api/snapshots');if(!response.ok)return;const data=await response.json();const root=$('snapshots');root.replaceChildren();for(const saved of data.snapshots || []){const button=el('button',`${saved.name} · ${date(saved.created_at)}`,'raw');button.addEventListener('click',async()=>{if(button.disabled)return;const label=button.textContent;button.disabled=true;button.setAttribute('aria-busy','true');button.textContent=AtlasI18n.t('正在載入圖譜快照…');try{await restoreSnapshot(saved.id);}finally{button.disabled=false;button.setAttribute('aria-busy','false');button.textContent=label;}});root.append(button);}if(!data.snapshots?.length)root.append(el('p','尚無已儲存圖譜','muted'));} catch {}
 }
@@ -659,8 +712,8 @@ syncSourceColors();
 // Public, redacted runtime contract shared by Chat and its MCP UI adapter.
 (() => {
   if(typeof document.addEventListener!=='function')return;
-  const clickIds=['modeNetwork','modeTimeline','fit','clearRoot','resetGlow','resetRelations','rootSearchSubmit','relationOpen','relationClose','relationApply','relationCancel','cancelOperation','retryGraph','priceLoad','sourcePanelToggle','sourcePanelReset','timePanelToggle','timePanelReset','timeBellUndo','timeBellReset','timelineZoomIn','timelineZoomOut','submit','cancel','dateCustom','dateQuick','months-3','months-6','months-9','months-12'];
-  const setIds=['language','query','ticker','start','end','rssRegion','source-google','source-yahoo','source-massive','view-google','view-yahoo','view-massive','rootQuery','rootLimit','renderBudget','highlightModeSwitch','graphChannel','separateSources','channelFilter','timelineZoom','timelineCutoff','stickyStrength','timeSizeEnabled','timeFocusSlider','priceMix','priceHorizon','glow-enabled',...['brightness','radius','decay','background'].map(k=>'glow-'+k),...['internalMin','crossMin','depth','branchLimit','pathMin'].map(k=>'rel-'+k),...['adaptive','entity','entity_days','topic','topic_days','topic_similarity','title','title_days','title_similarity','title_terms_min','half_life','internal_neighbors','cross_neighbors','coverage_first'].map(k=>'relation-'+k)];
+  const clickIds=['modeNetwork','modeTimeline','fit','clearRoot','resetGlow','resetRelations','rootSearchSubmit','relationOpen','relationClose','relationApply','relationCancel','cancelOperation','retryGraph','priceLoad','sourcePanelToggle','sourcePanelReset','timePanelToggle','timePanelReset','timeBellUndo','timeBellReset','timelineZoomIn','timelineZoomOut','submit','cancel','saveDB','dateCustom','dateQuick','months-3','months-6','months-9','months-12'];
+  const setIds=['autoSnapshot','language','query','ticker','start','end','rssRegion','source-google','source-yahoo','source-massive','view-google','view-yahoo','view-massive','rootQuery','rootLimit','renderBudget','highlightModeSwitch','graphChannel','separateSources','channelFilter','timelineZoom','timelineCutoff','stickyStrength','timeSizeEnabled','timeFocusSlider','priceMix','priceHorizon','glow-enabled',...['brightness','radius','decay','background'].map(k=>'glow-'+k),...['internalMin','crossMin','depth','branchLimit','pathMin'].map(k=>'rel-'+k),...['adaptive','entity','entity_days','topic','topic_days','topic_similarity','title','title_days','title_similarity','title_terms_min','half_life','internal_neighbors','cross_neighbors','coverage_first'].map(k=>'relation-'+k)];
   let revision=0,previous='',dataset=0,lastArticles=null,lastEdges=null;const recent=[];
   const note=(type,id)=>{recent.push({type,id,at:new Date().toISOString()});if(recent.length>12)recent.shift();};
   document.addEventListener('click',e=>{const node=e.target.closest?.('[id], [data-article-id]');if(clickIds.includes(node?.id))note('click',node.id);});
@@ -669,7 +722,7 @@ syncSourceColors();
   function state(){
     if(lastArticles!==focusView.articles||lastEdges!==focusView.relations){dataset++;lastArticles=focusView.articles;lastEdges=focusView.relations;}
     const scope=highlightMode==='category'&&viewMode==='network'?Array.from(categoryTrace.nodes.keys()):lockedRoots.length?Array.from(new Set([...lockedRoots,...activeTrace.nodes.keys()])):selected?[selected]:currentView.articles.map(a=>a.id);
-    const state={dataset,language:AtlasI18n.language(),view_mode:viewMode,highlight_mode:highlightMode,selected_article:selected,root_ids:[...lockedRoots],category:graphChannel,channel_filter:channelFilter,scope_ids:scope,scope_kind:highlightMode==='category'&&viewMode==='network'?'category':lockedRoots.length?'roots_and_relations':selected?'article':'visible_results',visible_ids:currentView.articles.map(a=>a.id),counts:{loaded:focusView.articles.length,visible:currentView.articles.length,scope:scope.length,edges:focusView.relations.length,rendered:renderedCount},sources:viewSources(),search:{query:exportMeta.query||'',ticker:exportMeta.ticker||'',start:exportMeta.start||'',end:exportMeta.end||''},cutoff:timelineCutoff,render_budget:renderBudget,exploration:{...exploration},glow:{...glowConfig},time_focus:{...timeFocus},price_focus:priceLens?.state(),tool_dock:globalThis.AtlasDock?.state(),relation_settings:basePayload.relation_settings||{},busy:{search:!!controller,relations:!!relationActivity.busy,root_search:rootSearchBusy},graph_error:graphFailure?.message||null,controls:[...clickIds.map(id=>control(id,'click')),...setIds.map(id=>control(id,'set'))].filter(Boolean),recent_actions:recent.slice()};
+    const state={dataset,language:AtlasI18n.language(),view_mode:viewMode,highlight_mode:highlightMode,selected_article:selected,root_ids:[...lockedRoots],category:graphChannel,channel_filter:channelFilter,scope_ids:scope,scope_kind:highlightMode==='category'&&viewMode==='network'?'category':lockedRoots.length?'roots_and_relations':selected?'article':'visible_results',visible_ids:currentView.articles.map(a=>a.id),counts:{loaded:focusView.articles.length,visible:currentView.articles.length,scope:scope.length,edges:focusView.relations.length,rendered:renderedCount},sources:viewSources(),search:{query:exportMeta.query||'',ticker:exportMeta.ticker||'',start:exportMeta.start||'',end:exportMeta.end||''},cutoff:timelineCutoff,render_budget:renderBudget,exploration:{...exploration},glow:{...glowConfig},time_focus:{...timeFocus},price_focus:priceLens?.state(),tool_dock:globalThis.AtlasDock?.state(),relation_settings:basePayload.relation_settings||{},search_progress:sourceStates,busy:{search:!!controller,saving,relations:!!relationActivity.busy,root_search:rootSearchBusy},graph_error:graphFailure?.message||null,controls:[...clickIds.map(id=>control(id,'click')),...setIds.map(id=>control(id,'set'))].filter(Boolean),recent_actions:recent.slice()};
     const fingerprint=JSON.stringify(state);if(fingerprint!==previous){previous=fingerprint;revision++;}return {...state,revision};
   }
   function data(){return {articles:focusView.articles.map(a=>({id:a.id,title:a.title,summary:a.summary||'',url:a.url,published_at:a.published_at,source:{provider:a.source?.provider,publisher:a.source?.publisher},channels:a.channels,entities:a.entities})),edges:focusView.relations.map(e=>({id:AtlasView.identity(e),source:AtlasView.endpoint(e.source),target:AtlasView.endpoint(e.target),type:e.type,score:e.score,evidence:e.evidence}))};}

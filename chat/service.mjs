@@ -23,7 +23,9 @@ export function researchEvidence(run,days=7,clock=Date.now()){
 async function body(req){let size=0,chunks=[];for await(const c of req){size+=c.length;if(size>32*1024*1024)throw fail('Context too large',413);chunks.push(c);}try{return JSON.parse(Buffer.concat(chunks));}catch{throw fail('Invalid JSON');}}
 function send(res,status,data){res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(data));}
 export function createService({makeThread,makeWikiThread,wikiModel=WIKI_DEFAULT_MODEL,listModels}={}){
- const wiki=createWikiCompiler(makeWikiThread,{validateModel:listModels?async (model,effort)=>{const m=(await listModels()).models.find(m=>m.id===model);if(!m)throw fail('Selected model is not in the Codex catalog',400);if(effort&&m.reasoning?.length&&!m.reasoning.some(r=>(r.reasoningEffort||r.effort||r)===effort))throw fail('Unsupported reasoning effort for selected model',400);}:null});
+ // Wiki batches use the lightweight families advertised by the installed catalog.
+ const lightweight=m=>/(?:^|[-_.])(sol|luna|mini|nano)(?:[-_.]|$)/i.test(m.id);
+ const wiki=createWikiCompiler(makeWikiThread,{validateModel:listModels?async (model,effort)=>{const m=(await listModels()).models.find(m=>m.id===model);if(!m||!lightweight(m))throw fail('Selected model is not in the Codex catalog',400);if(effort&&m.reasoning?.length&&!m.reasoning.some(r=>(r.reasoningEffort||r.effort||r)===effort))throw fail('Unsupported reasoning effort for selected model',400);}:null});
  const sessions=new Map();
  const pending=new Map();
  function compact(state){const {scope_ids,visible_ids,...rest}=state;return {...rest,scope_sample:(scope_ids||[]).slice(0,10),note:'Use read_news/read_wiki for paginated data and read_research for the DB-backed L2 snapshot with exact L1 citations and temporal coverage; ID samples are not the full scope.'};}
@@ -31,7 +33,11 @@ export function createService({makeThread,makeWikiThread,wikiModel=WIKI_DEFAULT_
  function askBrowser(s,action){return new Promise((resolve,reject)=>{const id=randomUUID();const timer=setTimeout(()=>{pending.delete(id);s.queue=s.queue.filter(c=>c.commandId!==id);reject(fail('Browser unavailable or action timed out. No success confirmed.',409));},18000);pending.set(id,{session:s,resolve,reject,timer,kind:action.kind});s.queue.push({...action,commandId:id});});}
  const server=http.createServer(async(req,res)=>{try{
   const path=req.url;
-  if(path==='/wiki/models'&&req.method==='GET'){if(!listModels)throw fail('Model catalog unavailable',503);return send(res,200,await listModels());}
+  if(['/models','/wiki/models'].includes(path)&&req.method==='GET'){
+   if(!listModels)throw fail('Model catalog unavailable',503);
+   const catalog=await listModels();
+   return send(res,200,path==='/models'?catalog:{...catalog,models:catalog.models.filter(lightweight)});
+  }
   if(path==='/status'&&req.method==='GET')return send(res,200,{ready:true,wiki_ready:!!makeWikiThread,wiki_model:wikiModel});
   if(req.method!=='POST')throw fail('Not found',404);
   const b=await body(req);
@@ -64,7 +70,7 @@ export function createService({makeThread,makeWikiThread,wikiModel=WIKI_DEFAULT_
     return send(res,200,await askBrowser(s,a));
    }
    if(b.name==='read_database'){
-    if(!['catalog','news','related','prices','l1','l2'].includes(a.resource))throw fail('Unknown database resource');
+    if(!['catalog','news','related','prices','l1','l2','graph'].includes(a.resource))throw fail('Unknown database resource');
     const before=s.context?.instrument;
     const {result}=await askBrowser(s,{kind:'read_database',params:a});
     if(s.context?.instrument!==before)throw fail('Stock selection changed; refresh state',409);
@@ -103,7 +109,13 @@ export function createService({makeThread,makeWikiThread,wikiModel=WIKI_DEFAULT_
   if(s.busy)throw fail('Reply already running',409);
   if(typeof b.message!=='string'||!b.message.trim()||b.message.length>24000)throw fail('Message must contain 1–24000 characters');
   if(!s.context)throw fail('Waiting for browser context',409);
-  if(!s.thread)s.thread=makeThread(s.toolToken);
+  const model=b.model||undefined;
+  if(model && (!listModels || !(await listModels()).models.some(m=>m.id===model)))throw fail('Unknown Chat model',400);
+  if(s.busy)throw fail('Reply already running',409);
+  if(!s.thread || model!==s.model){
+   s.thread=makeThread(s.toolToken,model,s.thread?.id);
+   s.model=model;
+  }
   s.busy=true;s.controller=new AbortController();
   res.writeHead(200,{'Content-Type':'application/x-ndjson','Cache-Control':'no-store'});
   const emit=x=>{if(!res.destroyed)res.write(JSON.stringify(x)+'\n');};
@@ -141,10 +153,12 @@ async function main(){
   const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>['PATH','HOME','USER','LANG','SSL_CERT_FILE','HTTPS_PROXY','HTTP_PROXY','NO_PROXY'].includes(k)));
   env.CODEX_HOME=home;
   return new Codex({env,config:{features:{shell_tool:false},mcp_servers:{},cli_auth_credentials_store:'file'}}).startThread({model,workingDirectory:join(home,'work'),skipGitRepoCheck:true,sandboxMode:'read-only',approvalPolicy:'never',webSearchMode:'disabled',modelReasoningEffort:effort||'low'});
- },makeThread:toolToken=>{
+ },makeThread:(toolToken,model,threadId)=>{
   const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>['PATH','HOME','USER','LANG','SSL_CERT_FILE','HTTPS_PROXY','HTTP_PROXY','NO_PROXY'].includes(k)));
   env.CODEX_HOME=home;
-  return new Codex({env,config:{features:{shell_tool:false},mcp_servers:{stocknexus:{required:true,enabled_tools:['get_state','read_news','read_edges','read_wiki','read_research','read_database','act'],tools:Object.fromEntries(['get_state','read_news','read_edges','read_wiki','read_research','read_database','act'].map(name=>[name,{approval_mode:'approve'}])),command:process.execPath,args:[join(ROOT,'chat/mcp.mjs')],env:{ATLAS_CHAT_SOCKET:socket,ATLAS_TOOL_TOKEN:toolToken},tool_timeout_sec:25}},cli_auth_credentials_store:'file'}}).startThread({workingDirectory:join(home,'work'),skipGitRepoCheck:true,sandboxMode:'read-only',approvalPolicy:'never',webSearchMode:'disabled',modelReasoningEffort:'low'});
+  const client=new Codex({env,config:{features:{shell_tool:false},mcp_servers:{stocknexus:{required:true,enabled_tools:['get_state','read_news','read_edges','read_wiki','read_research','read_database','act'],tools:Object.fromEntries(['get_state','read_news','read_edges','read_wiki','read_research','read_database','act'].map(name=>[name,{approval_mode:'approve'}])),command:process.execPath,args:[join(ROOT,'chat/mcp.mjs')],env:{ATLAS_CHAT_SOCKET:socket,ATLAS_TOOL_TOKEN:toolToken},tool_timeout_sec:25}},cli_auth_credentials_store:'file'}});
+  const options={model,workingDirectory:join(home,'work'),skipGitRepoCheck:true,sandboxMode:'read-only',approvalPolicy:'never',webSearchMode:'disabled',...(model?{}:{modelReasoningEffort:'low'})};
+  return threadId?client.resumeThread(threadId,options):client.startThread(options);
  }});
  service.listen(socket,async()=>{await chmod(socket,0o600);console.log('StockNexus chat bridge ready');});
  for(const sig of ['SIGINT','SIGTERM'])process.once(sig,()=>{service.shutdown();setTimeout(()=>process.exit(),1500).unref();});

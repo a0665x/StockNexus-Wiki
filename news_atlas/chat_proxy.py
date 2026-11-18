@@ -16,7 +16,7 @@ def local_peer(address):
     except (OSError,ValueError,IndexError):pass
     return False
 
-PATHS={'session','sync','turn','cancel','reset','status'}
+PATHS={'session','sync','turn','cancel','reset','status','models'}
 class UnixConnection(http.client.HTTPConnection):
     def __init__(self,path):
         super().__init__('localhost',timeout=650);self.path=path
@@ -37,7 +37,7 @@ def handle(handler):
     authenticated=local or (expected in allowed and handler.headers.get('Tailscale-User-Login','') in users)
     if not local_peer(handler.client_address[0]) or not authenticated or handler.headers.get('Sec-Fetch-Site')=='cross-site' or (origin and origin!=expected) or (handler.command=='POST' and origin!=expected):
         handler.json_response(403,{'error':'Chat 連線未獲授權；請使用本機頁面或已授權的 Tailscale 帳號與網址。'});return
-    if path not in PATHS or (handler.command=='GET')!=(path=='status'):
+    if path not in PATHS or (handler.command=='GET')!=(path in ('models','status')):
         handler.json_response(404,{'error':'Unknown chat endpoint'});return
     data=None
     if handler.command=='POST':

@@ -352,6 +352,27 @@ class WikiService:
         cfg['enabled']=enabled;cfg['catch_up']=False;store.configure(cfg);self.wake.set()
         return cfg
 
+    def stop_maintenance(self,body):
+        """Stop this instrument's L1 work and watcher in one durable transaction."""
+        with self.lock:
+            store=self.store(body.get('instrument'))
+            with store.connection() as db:
+                db.execute('BEGIN IMMEDIATE')
+                cfg=store.config()
+                cfg.update(enabled=False,catch_up=False)
+                db.execute('INSERT OR REPLACE INTO metadata VALUES (?,?)',('config',json.dumps(cfg)))
+                stamp=now()
+                jobs=db.execute("""UPDATE jobs SET status='cancelled',updated_at=?
+                    WHERE status IN ('queued','running') RETURNING id""",(stamp,)).fetchall()
+                classifiers=db.execute("""UPDATE research_jobs SET status='cancelled',updated_at=?
+                    WHERE status IN ('queued','running') AND json_extract(payload,'$.operation')='classify_l1'
+                    RETURNING id""",(stamp,)).fetchall()
+            ids=[r[0] for r in [*jobs,*classifiers]]
+            for ident in ids:
+                try:self.bridge_request('/wiki/cancel',{'job_id':ident},timeout=2)
+                except RuntimeError:pass
+            return {'instrument':store.instrument,'cancelled_jobs':ids,'enabled':False,'catch_up':False}
+
     def cancel(self,body):
         with self.lock:return self._cancel(body)
 

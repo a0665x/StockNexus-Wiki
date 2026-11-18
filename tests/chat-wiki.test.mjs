@@ -100,3 +100,14 @@ test('Wiki deadline reports timeout distinctly and releases the model slot',asyn
  t.mock.timers.tick(600000);await rejected;
  await compiler.run(input);
 });
+
+test('comparison uses the verdict contract and the selected model',async()=>{
+ const compiler=createWikiCompiler((model,effort)=>({run:async(prompt,{outputSchema})=>{
+  assert.equal(model,'fixture');assert.equal(effort,'medium');
+  assert.match(prompt,/Compare exactly the two/);
+  assert.deepEqual(outputSchema.properties.verdict.enum,['similar','conflicting','different_scope','insufficient']);
+  return {finalResponse:JSON.stringify({verdict:'insufficient',summary:'More evidence needed',reason:'Different periods',citations:[]})};
+ }}));
+ const response=await compiler.run({...input,operation:'compare_viewpoints',reasoning_effort:'medium',article:{viewpoints:[]}});
+ assert.equal(response.proposal.verdict,'insufficient');
+});

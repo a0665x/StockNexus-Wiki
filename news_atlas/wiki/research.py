@@ -455,10 +455,16 @@ class Research:
             db.execute('BEGIN IMMEDIATE')
             r=db.execute("SELECT * FROM research_jobs WHERE status='queued' AND COALESCE(json_extract(payload,'$.operation'),'')!='classify_l1' ORDER BY created_at LIMIT 1").fetchone()
             if not r:return
-            job=dict(r);p=json.loads(job['payload']);b=obj(db,p['snapshot'],'snapshot')
+            job=dict(r);p=json.loads(job['payload'])
+            comparing=p.get('operation')=='compare_viewpoints'
+            if not comparing:b=obj(db,p['snapshot'],'snapshot')
             db.execute("UPDATE research_jobs SET status='running',updated_at=? WHERE id=?",(now(),job['id']))
         service.active=(self.store,job['id'])
         try:
+            if comparing:
+                from .comparison import complete
+                complete(service,self.store,job,p)
+                return
             if not b['opinions']:
                 response={'proposal':{'claims':[],'summary':[],'support':[],'counter':[],'narrative':[],'gaps':['沒有符合硬條件的 L1；未放寬篩選']},'usage':{}}
             else:
@@ -512,17 +518,36 @@ def handle_research(handler,service,path,params,can_write):
     from .store import instrument, folder_name
     stock=instrument(body.get('instrument',''))
     if not (service.root/folder_name(stock)/'wiki.sqlite3').exists():raise ValueError('請先建立此股票的 L1 Wiki')
-    if path in ('query','refresh','availability'):
+    if path in ('query','refresh','compare','availability'):
         active=[s.instrument for s in service.stores() if any(j['status'] in ('queued','running') for j in s.jobs())]
         for s in service.stores():
             with s.connection() as db:
                 if db.execute("SELECT 1 FROM research_jobs WHERE json_extract(payload,'$.operation')='classify_l1' AND status IN ('queued','running')").fetchone() and s.instrument not in active:active.append(s.instrument)
         if path=='availability':
             with service.store(stock).connection() as db:
-                job=db.execute("SELECT id,status FROM research_jobs WHERE owner=? AND coalesce(json_extract(payload,'$.operation'),'')!='classify_l1' AND status IN ('queued','running') ORDER BY created_at LIMIT 1",(OWNER,)).fetchone()
+                job=db.execute("SELECT id,status FROM research_jobs WHERE owner=? AND coalesce(json_extract(payload,'$.operation'),'') NOT IN ('classify_l1','compare_viewpoints') AND status IN ('queued','running') ORDER BY created_at LIMIT 1",(OWNER,)).fetchone()
             handler.json_response(200,{'busy':bool(active),'instruments':active,'active_job':dict(job) if job else None});return
         if active:raise ValueError('請先停止 L1 資料補足，再開始進階觀點分析：'+', '.join(active))
     research=Research(service.store(stock))
+    if path in ('compare','comparison-candidates','comparisons','comparison'):
+        from .comparison import candidates, enqueue
+        with research.store.connection() as db:
+            if path=='compare' and handler.command=='POST':
+                result=enqueue(db,body)
+            elif handler.command=='GET' and path=='comparison-candidates':
+                result=candidates(db,body.get('q',''),int(body.get('offset',0)))
+            elif handler.command=='GET' and path=='comparisons':
+                result={'jobs':[dict(r) for r in db.execute("""SELECT id,status,created_at,error,
+                    json_extract(payload,'$.comparison_id') comparison_id,
+                    json_extract(payload,'$.pair[0].statement') first_statement,
+                    json_extract(payload,'$.pair[1].statement') second_statement
+                    FROM research_jobs WHERE owner=? AND json_extract(payload,'$.operation')='compare_viewpoints'
+                    ORDER BY created_at DESC LIMIT 50 OFFSET ?""",(OWNER,max(0,int(body.get('offset',0)))))]}
+            elif handler.command=='GET' and path=='comparison':
+                result=obj(db,body.get('id'),'viewpoint_comparison')
+            else:raise ValueError('Unsupported comparison request')
+        if path=='compare':service.wake.set()
+        handler.json_response(202 if result.get('status')=='queued' else 200,result);return
     # Progress/catalog reads use committed Wiki data. Reingesting the full news
     # corpus on every poll delays both the UI and the model worker. Result and
     # live-lens reads retain the source observation needed for freshness checks.

@@ -61,14 +61,24 @@ For local Python mode, use `./run.sh local`. See the [runtime guide](spec/RUNTIM
 - News and Wiki data are stored in local SQLite databases by stock, including nodes, relationships, sources and revisions.
 - Persistent graph caches reuse earlier work when you change display budgets, switch sources or reopen the page.
 - Save a news graph snapshot, export JSON, or export Wiki Markdown.
-- Use `merge_data.sh` to merge data from another computer or USB drive. Pause Wiki processing for the target stock, preview the merge, then apply it:
 
-```bash
-./merge_data.sh --from /media/usb/data --to ./data --dry-run
-./merge_data.sh --from /media/usb/data --to ./data
-```
+### Import from another directory
 
-Replace the paths with your actual source and destination. See [data merging and backups](spec/DATA_MERGE.md).
+Choose your source and pause Wiki processing for the target stocks. This example imports all of `../incoming/data` into `./data`. For a single stock, use `../incoming/data/graph/GOOGL` (news graph) or `../incoming/data/llm_wiki/GOOGL` (Wiki) as the source in both steps.
+
+1. **Preview the merge.** Adding `--dry-run` shows the planned changes without writing to the destination database.
+
+   ```bash
+   ./merge_data.sh --from ../incoming/data --to ./data --dry-run
+   ```
+
+2. **Apply the merge.** After checking the preview, keep the same source and destination, remove `--dry-run`, and run the command again to write the changes.
+
+   ```bash
+   ./merge_data.sh --from ../incoming/data --to ./data
+   ```
+
+See [data merging and backups](spec/DATA_MERGE.md) for more examples.
 
 ## Learn more
 

@@ -61,14 +61,24 @@ npx --no-install codex login  # 已登入可略過
 - 新聞與 Wiki 依股票存入本機 SQLite，保留節點、連線、來源與版本。
 - 新聞圖譜使用持久快取；調整顯示數量、切換來源或重開頁面可重用既有成果。
 - 用「儲存圖譜快照」保存新聞探索畫面，或匯出 JSON／Wiki Markdown。
-- 跨電腦或 USB 搬移資料可使用 `merge_data.sh`；先暫停目標股票的 Wiki 整理，再預覽並合併：
 
-```bash
-./merge_data.sh --from /media/usb/data --to ./data --dry-run
-./merge_data.sh --from /media/usb/data --to ./data
-```
+### 從另一份資料夾匯入
 
-來源、目標改成實際路徑；詳見 [資料合併與備份](spec/DATA_MERGE.md)。
+選好來源並暫停目標股票的 Wiki 整理。以下以整份 `../incoming/data` 匯入本機 `./data` 為例。只想匯入單股時，將兩個步驟的來源都換成 `../incoming/data/graph/GOOGL`（新聞圖譜）或 `../incoming/data/llm_wiki/GOOGL`（Wiki）。
+
+1. **先預覽**。加上 `--dry-run` 只會顯示預計合併的內容，不會寫入目標資料庫。
+
+   ```bash
+   ./merge_data.sh --from ../incoming/data --to ./data --dry-run
+   ```
+
+2. **正式合併**。確認預覽符合預期後，保留相同的來源與目標，移除 `--dry-run` 再執行一次，才會寫入資料。
+
+   ```bash
+   ./merge_data.sh --from ../incoming/data --to ./data
+   ```
+
+更多範例見 [資料合併與備份](spec/DATA_MERGE.md)。
 
 ## 深入了解
 

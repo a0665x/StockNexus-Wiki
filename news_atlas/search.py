@@ -1,4 +1,5 @@
 """Search orchestration: reuse covered windows, fetch gaps, commit partial successes."""
+import calendar
 import datetime as dt
 import os
 import threading
@@ -37,8 +38,12 @@ def normalize_request(body, today=None):
         raise ValueError('請在股票代碼欄填寫 Massive 要查詢的代碼')
     start = dt.date.fromisoformat(body.get('start') or (today - dt.timedelta(days=6)).isoformat())
     last = dt.date.fromisoformat(body.get('end') or today.isoformat())
-    if start > last or last > today or (last - start).days > 365:
-        raise ValueError('日期需為過去至今天，且一次不超過 366 天')
+    # A half-open interval ends at the start date's next anniversary.
+    # February 29 advances to March 1 when the following year is not a leap year.
+    year_days = 366 if ((start.month, start.day) <= (2, 29) and calendar.isleap(start.year)
+                        or (start.month, start.day) > (2, 29) and calendar.isleap(start.year + 1)) else 365
+    if start > last or last > today or (last-start).days >= year_days:
+        raise ValueError('日期需為過去至今天，且每次最多一個日曆年')
     if not isinstance(body.get('force_refresh', False), bool):
         raise ValueError('force_refresh 必須是布林值')
     if not isinstance(body.get('defer_relations', False), bool):

@@ -3,6 +3,7 @@ const vm = require('node:vm');
 const fs = require('node:fs');
 class Element {
   constructor() { this.value=''; this.children=[]; this.handlers={}; this.style={}; this.className=''; this.disabled=false; this.classList={add(){},remove(){},toggle(){}}; }
+  reportValidity(){return true}
   setAttribute(name,value){this[name]=value}
   append(...e){this.children.push(...e)} replaceChildren(...e){this.children=e}
   addEventListener(name,cb){this.handlers[name]=cb} getBoundingClientRect(){return {width:900,height:600,left:0,top:0}} click(){}
@@ -22,10 +23,18 @@ vm.createContext(context);vm.runInContext(fs.readFileSync('dist/i18n.js','utf8')
   const pending=get('form').handlers.submit({preventDefault(){}});
   await new Promise(resolve=>setImmediate(resolve));
   assert.equal(data.nodes.length,1,'Massive results must render before the slower Google source finishes');
+  let attempts=0;
+  context.fetch=async()=>{attempts++;return {ok:false,json:async()=>({error:'Snapshot fixture failure'})};};
   finish();await pending;
+  assert.equal(attempts,1,'Completed search automatically saves once');
+  assert(get('autoSnapshot').checked && get('saveDB').disabled);
+  assert.equal(vm.runInContext('sourceStates.massive.new',context),1,'Failed write retains new count');
+  get('autoSnapshot').checked=false;get('autoSnapshot').onchange();
+
   assert.equal(get('saveDB').disabled,false,'Completed results can be saved');
   assert.equal(get('progress').value,1);
   assert.equal(get('composition').children.length,1,'Source composition bar contains newly fetched data');
+  assert.equal(get('composition').children[0].className,'segment new');
   data.nodes[0].x=57;data.nodes[0].y=18;data.nodes[0].z=-5;
   get('view-massive').checked=false;get('view-massive').handlers.change();
   assert.equal(data.nodes.length,0,'Unchecking source immediately removes its nodes');
@@ -50,7 +59,16 @@ vm.createContext(context);vm.runInContext(fs.readFileSync('dist/i18n.js','utf8')
     if(options?.method==='POST'){savedBody=JSON.parse(options.body);return {ok:true,json:async()=>({id:'saved',name:'TSLA',db:{articles:1,snapshots:1}})}}
     return {ok:true,json:async()=>({snapshots:[]})};
   };
+  // A source can have persisted search results while excluded from this snapshot.
+  vm.runInContext("sourceStates.yahoo={done:true,total:2,cached:1,new:1,phase:'完成'}",context);
+  get('view-yahoo').checked=false;get('view-yahoo').handlers.change();
   await get('saveDB').onclick();
+  assert(!savedBody.source_graphs.yahoo);
+  assert.equal(vm.runInContext('sourceStates.yahoo.cached',context),2);
+  assert.equal(vm.runInContext('sourceStates.yahoo.phase',context),'完成');
+  assert.deepEqual(get('composition').children.map(el=>el.className),['segment cached','segment cached']);
+  assert.equal(vm.runInContext('sourceStates.massive.new',context),0);
+  assert.equal(vm.runInContext('sourceStates.massive.cached',context),1);
   assert.equal(savedBody.source_graphs.massive.articles.length,1);
   assert.equal(savedBody.view.separate,false);
   assert.equal(savedBody.source_graphs.massive.articles[0].id,'one');

@@ -15,3 +15,7 @@ now=new Date('2026-10-29T00:00:00Z');$('dateQuick').onclick();assert.equal($('en
 $('dateCustom').onclick();assert.equal($('start').value,'2026-01-01','Custom draft survives mode switches');assert.equal($('end').value,'2026-01-07');assert(!$('start').readOnly);
 $('dateQuick').onclick();$('start').value='2025-09-01';$('end').value='2025-09-30';ui.setCustom();ui.refresh();assert.equal(ui.mode(),'custom');assert.equal($('end').value,'2025-09-30','Snapshot dates remain fixed');
 console.log('PASS: calendar months, leap years, 366-day bound, UTC, mode switching, midnight refresh and snapshot dates');
+
+$('start').value='2024-02-29';$('end').value='2025-02-28';ui.setCustom();
+assert.equal($('start').min,'2024-02-29');assert.equal($('end').max,'2025-02-28');
+$('end').value='2026-10-29';ui.refresh();assert.equal($('start').min,'2025-10-30');

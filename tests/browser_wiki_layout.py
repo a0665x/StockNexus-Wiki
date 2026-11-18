@@ -102,7 +102,7 @@ def main():
                   const body=JSON.parse(options.body);value={plan_id:'plan',instrument:body.instrument,selected:body.articles.length,pending:1,next_batch:1,reused:0,model:body.model,daily_limit:body.daily_limit,watch_sources:[],note:'Fixture'};
                 }
                 else if(url.includes('/graph?')){if(failGraph){failGraph=false;throw Error('Temporary graph 503');}value=fixtureWiki;}
-                else if(url.endsWith('/cancel')){fixtureWiki.jobs=[];value={status:'cancelled'};}
+                else if(url.endsWith('/stop')){value={cancelled_jobs:fixtureWiki.jobs.map(j=>j.id)};fixtureWiki.jobs=[];fixtureWiki.config.enabled=false;fixtureWiki.config.catch_up=false;}
                 else if(url.endsWith('/configure')){fixtureWiki.config.enabled=false;value=fixtureWiki.config;}
                 else if(url.endsWith('/apply'))value={status:'saved',resumed:false};
                 else if(url.includes('/node?'))value={...fixtureWiki.nodes[1],kind:'Thesis'};
@@ -223,18 +223,21 @@ def main():
             slow_action('wikiExport','/markdown?',True)
             check('failed export is retryable and has explicit error',"!$('wikiExport').disabled&&$('wikiExport').getAttribute('aria-busy')==='false'&&$('wikiStatus').textContent==='Controlled slow failure'")
             js("fixtureWiki.config.enabled=true;await AtlasWiki.refresh()")
-            slow_action('wikiPause','/configure')
+            slow_action('wikiPause','/stop')
             check('pause settles with visible completion',"!$('wikiPause').disabled&&$('wikiStatus').textContent.includes('已停止')")
-            js("fixtureWiki.jobs=[{id:'active',status:'running',done:0,payload:{revisions:['a'],model:'fixture',stage:'compiling'}}];await AtlasWiki.refresh()")
-            slow_action('wikiStop','/cancel',True)
+            js("fixtureWiki.jobs=[{id:'active',status:'running',created_at:new Date(Date.now()-60000).toISOString(),done:1,payload:{revisions:['a','b'],model:'fixture',stage:'compiling'}}];await AtlasWiki.refresh()")
+            check('progress counts the fixed job target and reports an ETA',"$('wikiLive').textContent.includes('50.00%')&&$('wikiLive').textContent.includes('約剩')")
+            check('running maintenance fixes date inputs and sliders',"['wikiRange','wikiStartDate','wikiEndDate','wikiRangeStart','wikiRangeEnd'].every(id=>$(id).disabled)&&!$('wikiPause').hidden")
+            slow_action('wikiStop','/stop',True)
             check('failed stop remains retryable with existing graph',"!$('wikiStop').disabled&&$('wikiStatus').textContent==='Controlled slow failure'&&fixtureWikiRenderer.graphData().nodes.length>0")
             js("window.staleRelease=null;window.captureStale=true;const priorPollFetch=fetch;window.fetch=async(u,o)=>{const r=await priorPollFetch(u,o);if(captureStale&&String(u).includes('/jobs?')){captureStale=false;await new Promise(resolve=>staleRelease=resolve);}return r}")
             for _ in range(100):
                 if js('staleRelease!==null'):break
                 time.sleep(.05)
             check('a pre-cancel status response is held in flight',"staleRelease!==null")
-            slow_action('wikiStop','/cancel')
+            slow_action('wikiStop','/stop')
             js('staleRelease()');time.sleep(.25)
+            check('date range unlocks after confirmed stop',"!$('wikiRange').disabled&&$('wikiPause').hidden")
             check('stop retains graph and reports completion',"!$('wikiStop')&&fixtureWikiRenderer.graphData().nodes.length>0&&$('wikiStatus').textContent.includes('已停止')")
             click('relationOpen')
             js("$('wikiStrategy').value='chronological';$('wikiStrategy').dispatchEvent(new Event('input'))")

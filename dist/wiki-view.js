@@ -18,9 +18,9 @@
  <label><span data-ui="dates"></span><select id="wikiRange"><option value="month"></option><option value="quarter"></option><option value="all"></option><option value="custom"></option></select></label>
  <div id="wikiDates"><div class="wiki-pair"><label><span data-ui="start"></span><input id="wikiStartDate" type="date"></label><label><span data-ui="end"></span><input id="wikiEndDate" type="date"></label></div>
  <div class="wiki-dual"><div class="wiki-track"></div><input id="wikiRangeStart" type="range"><input id="wikiRangeEnd" type="range"></div><output id="wikiInterval"></output></div>
- <section id="wikiSelectedCoverage"></section>
+ <small id="wikiDateLock" class="wiki-note" hidden></small><section id="wikiSelectedCoverage"></section>
  <label><span data-ui="operation"></span><select id="wikiOperation"><option value="update"></option><option value="review"></option></select></label>
- <label><span data-ui="model"></span><select id="wikiModel"></select></label><p id="wikiModelNote" class="wiki-note"></p>
+ <button type="button" id="wikiBrowse"></button><button type="button" id="wikiCompare"></button><label><span data-ui="model"></span><select id="wikiModel"></select></label><p id="wikiModelNote" class="wiki-note"></p>
  <label class="wiki-check"><input type="checkbox" id="wikiContinuous"><span data-ui="continuous"></span></label>
 
  <div id="wikiStartTip" class="wiki-tip" role="tooltip" hidden></div></aside>
@@ -55,16 +55,23 @@
  const day=d=>d.toISOString().slice(0,10),stamp=d=>Date.parse(d+'T00:00:00Z')/86400000;
  const option=(name,value)=>new Option(name,value);
  function choices(id,items){const node=$(id),old=node.value;node.replaceChildren(...items.map(([v,n])=>option(n,v)));if([...node.options].some(o=>o.value===old))node.value=old;}
- const ui={layer:['觀點層','Opinion layer'],saved:['已建立的 Wiki','Saved Wikis'],instrument:['股票識別','Instrument'],scope:['來源範圍','Evidence scope'],dates:['整理日期（UTC）','News dates (UTC)'],start:['全局起始日期','Outer start date'],end:['全局結束日期','Outer end date'],operation:['維護方式','Operation'],model:['模型與思考深度','Model and reasoning depth'],continuous:['持續檢查這個日期範圍的新證據','Watch new evidence in this fixed date range'],version:['版本','Version'],viewStart:['版本內新聞起日（UTC）','News from (UTC)'],viewEnd:['版本內新聞迄日（UTC）','News through (UTC)'],kind:['節點','Nodes'],relation:['關係','Relations'],budget:['渲染上限','Render budget'],category:['觀點分類','Classification']};
+ const ui={layer:['觀點層','Opinion layer'],saved:['已建立的 Wiki','Saved Wikis'],instrument:['股票識別','Instrument'],scope:['來源範圍','Evidence scope'],dates:['整理日期（UTC）','News dates (UTC)'],start:['全局起始日期','Outer start date'],end:['全局結束日期','Outer end date'],operation:['維護方式','Operation'],model:['L1／L2 輕量模型與思考深度','L1/L2 lightweight model and reasoning depth'],continuous:['持續檢查這個日期範圍的新證據','Watch new evidence in this fixed date range'],version:['版本','Version'],viewStart:['版本內新聞起日（UTC）','News from (UTC)'],viewEnd:['版本內新聞迄日（UTC）','News through (UTC)'],kind:['節點','Nodes'],relation:['關係','Relations'],budget:['渲染上限','Render budget'],category:['觀點分類','Classification']};
+ const relationLabels={
+  SUPPORTS:['支持','Supports'],CONTRADICTS:['反證','Contradicts'],UPDATES:['修訂','Updates'],
+  DEPENDS_ON:['依賴','Depends on'],RELATED_TO:['相關','Related to'],TEMPORALLY_PRECEDES:['時間先於','Precedes'],
+  DERIVED_FROM:['衍生自 L1','Derived from L1'],ARGUMENT_MEMBER:['論證分組','Argument membership']
+ };
+ const relationName=type=>relationLabels[type]?t(...relationLabels[type]):type;
  function translate(){
   panel.querySelectorAll('[data-ui]').forEach(n=>n.textContent=t(...ui[n.dataset.ui]));
-  const labels={wikiBack:['← 新聞圖譜','← News graph'],wikiExport:['匯出 Markdown','Export Markdown'],wikiStart:['開始整理','Start maintenance'],wikiPause:['停止持續維護','Stop watching'],wikiSettingsTitle:['Wiki 設定','Wiki settings'],wikiLanguageLabel:['生成與保存語系','Generate and store languages'],wikiEvidenceLabel:['每次推論的新聞篇數','Articles per reasoning call'],wikiStrategyLabel:['整理時如何選取證據','How to group evidence'],wikiEvidenceNote:['每組 5／10／15／20 篇；Graph 自動覆蓋模式依整棵樹的篇數。沒有每日上限，可隨時停止。','5 / 10 / 15 / 20 per group; Graph coverage uses each complete tree size. No daily limit; stop any time.']};
+  const labels={wikiCompare:['觀點比對','Compare viewpoints'],wikiBrowse:['檢視完整 L1 圖譜','Browse full L1 graph'],wikiBack:['← 新聞圖譜','← News graph'],wikiExport:['匯出 Markdown','Export Markdown'],wikiStart:['開始整理','Start maintenance'],wikiSettingsTitle:['Wiki 設定','Wiki settings'],wikiLanguageLabel:['生成與保存語系','Generate and store languages'],wikiEvidenceLabel:['每次推論的新聞篇數','Articles per reasoning call'],wikiStrategyLabel:['整理時如何選取證據','How to group evidence'],wikiEvidenceNote:['每組 5／10／15／20 篇；Graph 自動覆蓋模式依整棵樹的篇數。沒有每日上限，可隨時停止。','5 / 10 / 15 / 20 per group; Graph coverage uses each complete tree size. No daily limit; stop any time.']};
   for(const [id,text] of Object.entries(labels))$(id).textContent=t(...text);
+  choices('wikiLayer',[['L1',t('L1 通用觀點','L1 general viewpoints')],['L2',t('L2 客製化觀點','L2 custom viewpoints')],['both','L1 + L2']]);
   choices('wikiScope',[['global',t('全局：目前查詢與 DB','Global: current queries and DB')],['loaded',t('目前已載入新聞','Loaded news')],['focus',t('目前焦點與關聯節點','Focused roots and related nodes')]]);
   choices('wikiRange',[['month',t('最近一個月','Past month')],['quarter',t('最近三個月','Past three months')],['all',t('全部日期','All dates')],['custom',t('自訂範圍','Custom range')]]);
   choices('wikiOperation',[['update',t('補新證據並檢視相依觀點','Add missing evidence and revisit dependents')],['review',t('重新檢視既有觀點','Re-evaluate existing viewpoints')]]);
   choices('wikiKind',[['',t('全部類型','All types')],...Object.entries(kindNames())]);
-  choices('wikiRelation',[['',t('全部關係','All relations')],...['SUPPORTS','CONTRADICTS','UPDATES','DEPENDS_ON','RELATED_TO','TEMPORALLY_PRECEDES'].map(v=>[v,v])]);
+  choices('wikiRelation',[['',t('全部關係','All relations')],...Object.keys(relationLabels).map(v=>[v,relationName(v)])]);
   classificationChoices();
   choices('wikiStrategy',[['lexical',t('詞彙相關','Lexical relevance')],['chronological',t('時間順序','Chronological')],['root',t('Graph 強關聯 root','Graph root neighborhood')],['fusion',t('多來源融合','Multi-source fusion')]]);
   $('wikiLanguages').options[0].textContent=t('繁體中文 ＋ English（預設）','Traditional Chinese + English (default)');
@@ -106,15 +113,73 @@
  function meter(parent,label,value,total){if(!total){parent.append(el('small',t('此範圍沒有新聞','No articles in this range')));return;}const box=el('div',undefined,'wiki-meter');box.append(el('span',`${label} · ${value}/${total} · ${(100*value/total).toFixed(2)}%`));const bar=el('progress');bar.max=total;bar.value=value;bar.setAttribute('aria-label',label);box.append(bar);parent.append(box);}
  function tokenText(usage){return `${usage?.input_tokens||0} ${t('輸入','in')} / ${usage?.output_tokens||0} ${t('輸出','out')}`;}
  function miningIcon(){const span=el('span',undefined,'wiki-worker');span.setAttribute('aria-hidden','true');span.innerHTML=`<svg viewBox="0 0 96 86" focusable="false"><use href="/knowledge-mining.svg#base"/><use class="wiki-scan" href="/knowledge-mining.svg#scan"/><use class="wiki-signal" href="/knowledge-mining.svg#signal"/></svg>`;return span;}
+ const dateControls=['wikiRange','wikiStartDate','wikiEndDate','wikiRangeStart','wikiRangeEnd'];
+ const stoppingStocks=new Set();
+ const isActive=j=>j.status==='queued'||j.status==='running';
+ function lockDates(locked,confirmed){
+  if(confirmed&&Object.hasOwn(lastConfig,'date_range')){
+   const saved=lastConfig.date_range;
+   if(!saved)$('wikiRange').value='all';
+   else if($('wikiRange').value==='all'||range()?.start!==saved.start||range()?.end!==saved.end){
+    $('wikiRange').value='custom';$('wikiStartDate').value=saved.start;$('wikiEndDate').value=saved.end;sliders();
+   }
+   sliderLabel();
+  }
+  for(const id of dateControls)$(id).disabled=locked;
+  $('wikiDateLock').hidden=!locked;
+  $('wikiDateLock').textContent=t('本次整理範圍已固定。停止維護後可更改日期。','Maintenance dates are fixed. Stop maintenance to change them.');
+ }
+ function workUnits(job){
+  const p=job.payload;
+  return {total:p.operation==='classify_l1'?p.total:p.revisions?.length,done:job.done??p.done??0};
+ }
+ function remainingMs(job){
+  const {done,total}=workUnits(job);
+  if(!Number.isFinite(total))return null;
+  if(done>=total)return 0;
+  const elapsed=Date.now()-Date.parse(job.created_at);
+  return done>0&&elapsed>0?elapsed*(total-done)/done:null;
+ }
+ function jobProgress(content,job){
+  const {done,total}=workUnits(job);
+  if(!total)return;
+  meter(content,job.payload.operation==='classify_l1'?t('本次分類觀點','Opinions classified this job'):t('本次已整理新聞','Articles processed this job'),done,total);
+  const estimates=lastJobs.filter(isActive).map(remainingMs);
+  if(estimates.every(value=>value!==null)){
+   const minutes=Math.ceil(estimates.reduce((sum,ms)=>sum+ms,0)/60000);
+   if(minutes>0)content.append(el('small',t(`目前已排定的整理約剩 ${minutes} 分鐘（依平均速度估算）`,`About ${minutes} min left for scheduled maintenance at the observed average rate`)));
+  }else{
+   const ms=remainingMs(job);
+   if(ms>0){
+    const minutes=Math.ceil(ms/60000);
+    content.append(el('small',t(`目前工作約剩 ${minutes} 分鐘，其餘排定工作仍在估算`,`About ${minutes} min for this job. Estimating the rest of the queue`)));
+   }else content.append(el('small',job.status==='queued'?t('排隊中，等待可用的處理速度估算','Queued, waiting for a rate estimate'):t('首批完成後估算剩餘時間','Estimating remaining time after the first batch')));
+  }
+ }
+ async function stopMaintenance(){
+  const ident=current();if(!ident||stoppingStocks.has(ident))return;
+  stoppingStocks.add(ident);activity();status(t('正在停止維護…','Stopping maintenance…'),false,true);
+  try{
+   const result=await api('stop',{instrument:ident});
+   if(ident!==current())return;
+   jobStateEpoch++;request++;
+   lastJobs=lastJobs.map(j=>result.cancelled_jobs.includes(j.id)?{...j,status:'cancelled'}:j);
+   lastConfig={...lastConfig,enabled:false,catch_up:false};$('wikiContinuous').checked=false;
+   schedulePreview();await poll();
+   if(ident===current())status(t('整理與持續監看已停止，已發布版本可繼續檢視。','Maintenance and watching stopped. Published versions are available.'));
+  }catch(error){if(ident===current())status(error.message,true);}
+  finally{stoppingStocks.delete(ident);activity();}
+ }
  function activity(){
-  const active=lastJobs.find(j=>['queued','running'].includes(j.status)),running=active?.status==='running',waiting=!!active||!!(lastConfig.catch_up&&lastCoverage?.scope_pending>0),box=$('wikiLive');box.dataset.state=running?'running':waiting?'queued':lastCoverage?.scope_pending?'idle':'complete';
+  const active=lastJobs.find(j=>j.status==='running')||lastJobs.find(isActive),running=active?.status==='running',waiting=!!active||!!(lastConfig.catch_up&&lastCoverage?.scope_pending>0),box=$('wikiLive');box.dataset.state=running?'running':waiting?'queued':lastCoverage?.scope_pending?'idle':'complete';
   const labels={compiling:t('LLM 正在梳理證據與相依觀點','LLM is analyzing evidence and dependent viewpoints'),repairing:t('正在修正未通過驗證的提案','Repairing a proposal that failed validation'),publishing:t('正在核對引用並保存版本','Checking citations and saving a version')};
   const title=active?.payload.operation==='classify_l1'?t('LLM 正在補足通用觀點分類','LLM is classifying existing L1 opinions'):running?labels[active.payload.stage]||labels.compiling:waiting?t('等待背景整理開始','Waiting for background work'):lastCoverage?.scope_pending?t('尚有新聞待補；模型目前沒有運行','Evidence pending; model is idle'):t('目前沒有進行中的整理','No active work');
   const worker=box.querySelector('.wiki-worker')||miningIcon(),existingStop=box.querySelector('#wikiStop');const retainedStop=existingStop?.dataset.jobId===active?.id?existingStop:null;if(!worker.isConnected)box.append(worker);for(const child of [...box.children])if(child!==worker&&child!==retainedStop)child.remove();const content=el('div');content.append(el('strong',title));
   if(lastCoverage?.scope_total)meter(content,t('已確認範圍覆蓋','Confirmed scope coverage'),lastCoverage.scope_done,lastCoverage.scope_total);
-  if(active){const p=active.payload;content.append(el('small',t('目前方法：','Current method: ')+({lexical:t('詞彙相關','Word overlap'),chronological:t('時間順序','Chronological'),root:t('Graph 全範圍 root 覆蓋','Graph root coverage'),fusion:t('多來源融合','Source fusion')})[p.strategy||'lexical']));content.append(el('small',t(`本次工作 ${active.done??p.done}/${p.revisions?.length??p.total} · ${p.model}`,`Current work ${active.done??p.done}/${p.revisions?.length??p.total} · ${p.model}`)),el('small',(p.operation==='review'?t('↻ 重新檢視觀點','↻ Re-evaluating viewpoints'):t('✧ 新證據與觀點更新','✧ New evidence and viewpoint updates'))+' · '+(p.current_date?.slice(0,10)||'—')),el('p',p.current_title||t('準備證據…','Preparing evidence…'),'wiki-current-title'));if(p.group_info?.groups){const info=p.group_info,tree=p.graph_selection?.trees?.find(x=>x.root_id===info.root_id),line=el('div',undefined,'wiki-root-progress');const link=el('button',t(`查看第 ${info.group}/${info.groups} 棵新聞樹 ↗`,`View news tree ${info.group}/${info.groups} ↗`),'wiki-root-link');link.type='button';link.id='wikiCurrentRoot';link.disabled=!tree||!hooks.showRoot;link.onclick=()=>{try{hooks.showRoot({instrument:current(),tree,group:info.group,groups:info.groups});hide();}catch(error){status(error.message,true);}};line.append(link,el('small',t(`本樹待涵蓋 ${info.targets} 篇目標；整樹含脈絡 ${info.context_articles??tree?.articles.length??'—'} 篇`,`This tree covers ${info.targets} pending targets; ${info.context_articles??tree?.articles.length??'—'} articles including context`)));content.append(line);} if(p.current_size)content.append(el('small',p.current_size+t(' 篇送入本段',' articles in this segment')+(p.group_info?.parts>1?' · '+p.group_info.part+'/'+p.group_info.parts+t(' 段',' parts'):'')));
+  if(active){const p=active.payload;jobProgress(content,active);content.append(el('small',t('目前方法：','Current method: ')+({lexical:t('詞彙相關','Word overlap'),chronological:t('時間順序','Chronological'),root:t('Graph 全範圍 root 覆蓋','Graph root coverage'),fusion:t('多來源融合','Source fusion')})[p.strategy||'lexical']));content.append(el('small',p.model),el('small',(p.operation==='review'?t('↻ 重新檢視觀點','↻ Re-evaluating viewpoints'):t('✧ 新證據與觀點更新','✧ New evidence and viewpoint updates'))+' · '+(p.current_date?.slice(0,10)||'—')),el('p',p.current_title||t('準備證據…','Preparing evidence…'),'wiki-current-title'));if(p.group_info?.groups){const info=p.group_info,tree=p.graph_selection?.trees?.find(x=>x.root_id===info.root_id),line=el('div',undefined,'wiki-root-progress');const link=el('button',t(`查看第 ${info.group}/${info.groups} 棵新聞樹 ↗`,`View news tree ${info.group}/${info.groups} ↗`),'wiki-root-link');link.type='button';link.id='wikiCurrentRoot';link.disabled=!tree||!hooks.showRoot;link.onclick=()=>{try{hooks.showRoot({instrument:current(),tree,group:info.group,groups:info.groups});hide();}catch(error){status(error.message,true);}};line.append(link,el('small',t(`本樹待涵蓋 ${info.targets} 篇目標；整樹含脈絡 ${info.context_articles??tree?.articles.length??'—'} 篇`,`This tree covers ${info.targets} pending targets; ${info.context_articles??tree?.articles.length??'—'} articles including context`)));content.append(line);} if(p.current_size)content.append(el('small',p.current_size+t(' 篇送入本段',' articles in this segment')+(p.group_info?.parts>1?' · '+p.group_info.part+'/'+p.group_info.parts+t(' 段',' parts'):'')));
    content.append(el('small',t('本組 token：等待模型回報','Current batch tokens: awaiting model report')+(p.last_usage?' · '+t('上一組 ','Previous batch ')+tokenText(p.last_usage):'')),el('small',t('本次工作累計 ','Current job total ')+tokenText(active.usage||p.usage)));
-   const stopping=pendingActions.has(current()+':wikiStop'),stop=retainedStop||el('button',stopping?t('正在停止…','Stopping…'):t('停止工作','Stop'));stop.id='wikiStop';stop.dataset.jobId=active.id;stop.textContent=stopping?t('正在停止…','Stopping…'):t('停止工作','Stop');stop.disabled=stopping;stop.classList.toggle('wiki-working',stopping);stop.setAttribute('aria-busy',String(stopping));stop.onclick=()=>{const ident=current();schedulePreview();return buttonAction(stop,t('正在停止…','Stopping…'),async()=>{await api('cancel',{instrument:ident,job_id:active.id});if(ident!==current())return;jobStateEpoch++;request++;lastJobs=lastJobs.map(j=>j.id===active.id?{...j,status:'cancelled'}:j);activity();await poll();},t('工作已停止，既有成果已保留。','Work stopped; published results retained.')).finally(activity);};box.append(stop);
+   const stop=retainedStop||el('button');stop.id='wikiStop';stop.dataset.jobId=active.id;box.append(stop);
+
   }
   if(!active&&lastJobs[0]?.payload.last_usage)content.append(el('small',t('最近一組已回報 token ','Latest reported batch tokens ')+tokenText(lastJobs[0].payload.last_usage)));
   const usage=plan?.usage||lastCoverage?.usage;if(usage){content.append(el('small',t('所選新聞時段累計 ','Selected news interval total ')+tokenText(usage.reported)));if(usage.legacy_jobs_without_attribution)content.append(el('small',t('較早版本沒有逐批用量資料，未納入此區間統計。','Older jobs lack per-batch usage and are excluded from interval totals.')));}
@@ -125,7 +190,17 @@
   box.append(content);
   $('wikiStart').classList.toggle('wiki-working',busy||waiting);$('wikiStart').setAttribute('aria-busy',String(busy||waiting));
   $('wikiStart').textContent=busy?t('準備整理…','Preparing…'):waiting?t('整理中…','Processing…'):lastCoverage?t('繼續整理','Continue processing'):t('開始整理','Start processing');
-  $('wikiStart').disabled=busy||waiting||loading>0||!info?.writable||!$('wikiModel').value||!current();$('wikiPause').hidden=!(lastConfig.enabled||lastConfig.catch_up);
+  $('wikiStart').disabled=busy||waiting||loading>0||!info?.writable||!$('wikiModel').value||!current();const maintained=!!active||!!lastConfig.enabled||!!lastConfig.catch_up;
+  const stopping=stoppingStocks.has(current());
+  $('wikiPause').hidden=!maintained;
+  for(const button of [$('wikiPause'),box.querySelector('#wikiStop')].filter(Boolean)){
+   button.textContent=stopping?t('正在停止…','Stopping…'):t('停止維護','Stop maintenance');
+   button.disabled=stopping||busy;button.classList.toggle('wiki-working',stopping);button.setAttribute('aria-busy',String(stopping));button.onclick=stopMaintenance;
+  }
+  lockDates(busy||maintained||stopping,maintained);
+  $('wikiContinuous').disabled=busy||maintained||stopping||$('wikiOperation').value==='review';
+  if(maintained)$('wikiContinuous').checked=!!lastConfig.enabled;
+  if(maintained||stopping)$('wikiStart').disabled=true;
   const coverage=$('wikiCoverage');coverage.replaceChildren();
   if(lastCoverage){if(lastCoverage.unavailable)coverage.append(el('p',lastCoverage.error));else{meter(coverage,t('已確認新聞','Confirmed evidence'),lastCoverage.scope_done,lastCoverage.scope_total);const store=el('details');store.append(el('summary',t('資料庫','Database')),el('p',lastCoverage.storage,'wiki-storage'));coverage.append(store);}}
  }
@@ -153,6 +228,7 @@
    classStamp=JSON.stringify((value.classification_jobs||[]).map(j=>[j.status,j.updated_at]));
    savedChoices();versionChoices();classificationChoices();activity();
    if(focusRoot&&!data.nodes.some(n=>n.id===focusRoot)){focusRoot=null;focusIds=null;}
+   if(String(query())!==key&&lastJobs.some(isActive))return load();
    render();if(focusRoot&&data.nodes.some(n=>n.id===focusRoot))focusGalaxy(focusRoot,false);
    if(restoreSettings)schedulePreview();if(!busy)status('');return true;
   }catch(e){if(mine===request){graphLoadError=e.message;status(e.message,true);}return false;}
@@ -162,7 +238,7 @@
   if(panel.hidden)return;if(catalogPending)return catalogPending;if(!force&&Date.now()-catalogAt<5000)return;
   catalogAt=Date.now();catalogPending=(async()=>{try{const value=await api('status');if(panel.hidden)return;const changed=JSON.stringify([value.instruments,value.news_databases])!==JSON.stringify([info?.instruments,info?.news_databases]);info=value;if(changed)savedChoices(true);}catch{}finally{catalogPending=null;}})();return catalogPending;
  }
- async function poll(){if(panel.hidden||polling)return;polling=true;try{await refreshCatalog();if(panel.hidden||!current()||!$('wikiSaved').value)return;const ident=current(),mine=request,epoch=jobStateEpoch;try{const value=await api('jobs?'+new URLSearchParams({instrument:ident}));if(panel.hidden||current()!==ident||mine!==request||epoch!==jobStateEpoch)return;if(pollError&&$('wikiStatus').textContent===pollError&&!busy&&!loading)status('');pollError=null;const was=lastJobs.some(j=>['queued','running'].includes(j.status));lastJobs=[...(value.jobs||[]),...(value.classification_jobs||[])];lastConfig=value.config||{};lastCoverage=value.coverage;latestPublishedVersion=Number(value.version)||0;activity();const nextStamp=JSON.stringify((value.classification_jobs||[]).map(j=>[j.status,j.updated_at]));if(!data||graphLoadError||(!$('wikiVersion').value&&(data.version!==value.version||classStamp!==nextStamp))){classStamp=nextStamp;await load();}if(was&&!lastJobs.some(j=>['queued','running'].includes(j.status)))schedulePreview();}catch(e){if(panel.hidden||current()!==ident||mine!==request||epoch!==jobStateEpoch)return;pollError=e.message;$('wikiLive').dataset.state='offline';$('wikiLive').replaceChildren(el('strong',t('連線中斷；無法確認模型狀態','Connection lost; model status unknown')));status(e.message,true);}}finally{polling=false;}}
+ async function poll(){if(panel.hidden||polling)return;polling=true;try{await refreshCatalog();if(panel.hidden||!current()||!$('wikiSaved').value)return;const ident=current(),mine=request,epoch=jobStateEpoch;try{const value=await api('jobs?'+new URLSearchParams({instrument:ident}));if(panel.hidden||current()!==ident||mine!==request||epoch!==jobStateEpoch)return;if(pollError&&$('wikiStatus').textContent===pollError&&!busy&&!loading)status('');pollError=null;const was=lastJobs.some(j=>['queued','running'].includes(j.status));lastJobs=[...(value.jobs||[]),...(value.classification_jobs||[])];lastConfig=value.config||{};lastCoverage=value.coverage;latestPublishedVersion=Number(value.version)||0;const priorQuery=String(query());activity();const nextStamp=JSON.stringify((value.classification_jobs||[]).map(j=>[j.status,j.updated_at]));if(String(query())!==priorQuery||!data||graphLoadError||(!$('wikiVersion').value&&(data.version!==value.version||classStamp!==nextStamp))){classStamp=nextStamp;await load();}if(was&&!lastJobs.some(j=>['queued','running'].includes(j.status)))schedulePreview();}catch(e){if(panel.hidden||current()!==ident||mine!==request||epoch!==jobStateEpoch)return;pollError=e.message;$('wikiLive').dataset.state='offline';$('wikiLive').replaceChildren(el('strong',t('連線中斷；無法確認模型狀態','Connection lost; model status unknown')));status(e.message,true);}}finally{polling=false;}}
  const termColor=n=>data?.taxonomy?.terms.find(t=>(n.classification_terms||[]).includes(t.id))?.color;
  const roleName=role=>role==='support'?t('支持論證','Supporting arguments'):t('反對論證','Counterarguments');
  const roleColor=role=>role==='support'?'#73ddca':'#efa88c';
@@ -195,7 +271,7 @@
   }catch{box.replaceChildren();} // Do not substitute a misleading flat shape when WebGL fails.
  }
  const nodeSize=n=>n.wikiContext?2:n.kind==='ArticleRevision'?3:6;
- const linkColor=l=>l.wikiDim?'#152333':l.edge.argument_role?roleColor(l.edge.argument_role):'#91b4c5',linkWidth=l=>l.wikiDim?.25:1;
+ const linkColor=l=>l.wikiDim?'#152333':l.edge.argument_role?roleColor(l.edge.argument_role):l.edge.relation_type==='CONTRADICTS'?roleColor('counter'):l.edge.relation_type==='SUPPORTS'?roleColor('support'):'#91b4c5',linkWidth=l=>l.wikiDim?.25:1;
  function styleFocus(){if(!graph)return;const id=v=>typeof v==='object'?v.id:v;for(const n of graph.graphData().nodes)n.wikiDim=!!focusIds&&!focusIds.has(n.id);for(const l of graph.graphData().links)l.wikiDim=!!focusIds&&(!focusIds.has(id(l.source))||!focusIds.has(id(l.target)));graph.nodeColor(nodeColor).linkColor(linkColor).linkWidth(linkWidth);}
  function clearGalaxy(){if(!focusRoot)return;focusRoot=null;focusIds=null;selectedDetail=null;detailRequest++;$('wikiDetail').replaceChildren(el('p',t('點選此版本的節點查看引用。','Select a node in this version to view its citations.')));styleFocus();saveRuntime();}
  function focusGalaxy(id,remember=true){focusRoot=id;focusIds=new Set([id]);let layer=[id];const branch=data.nodes.find(n=>n.id===id&&n.argument_role);if(branch){focusIds=new Set([id,...branch.branch_members]);layer=[];}for(let depth=0;depth<3&&layer.length&&focusIds.size<150;depth++){const next=[];for(const e of data.edges){const a=e.source.stable_id,b=e.target.stable_id;for(const [from,to] of [[a,b],[b,a]])if(layer.includes(from)&&!focusIds.has(to)&&focusIds.size<150){focusIds.add(to);next.push(to);}}layer=next;}fitPending=false;styleFocus();if(remember)saveRuntime();}
@@ -246,7 +322,7 @@
     graph=root.ForceGraph3D()($('wikiCanvas')).backgroundColor('#080f1a').showNavInfo(false).nodeId('id')
      .nodeColor(nodeColor)
      .nodeVal(nodeSize).nodeLabel(nodeTooltip).onEngineTick(shapeArguments)
-     .linkLabel(l=>el('span',l.edge.relation_type).outerHTML).linkColor(linkColor).linkOpacity(.65).linkDirectionalArrowLength(3).linkDirectionalArrowRelPos(1).linkWidth(linkWidth)
+     .linkLabel(l=>el('span',relationName(l.edge.relation_type)).outerHTML).linkColor(linkColor).linkOpacity(.65).linkDirectionalArrowLength(3).linkDirectionalArrowRelPos(1).linkWidth(linkWidth)
      .onNodeHover(n=>{hoverNode=n;glow?.refresh();}).cooldownTicks(70).onNodeClick(n=>{focusGalaxy(n.id);detailRequest++;details(n);if(n.kind!=='ArticleRevision'&&n.layer!=='L2')openViewpoint(n);}).onLinkClick(l=>{detailRequest++;details(l.edge,true);})
      .onBackgroundClick(()=>{if(backgroundClickAllowed)clearGalaxy();})
      .onEngineStop(()=>{shapeArguments();if(fitPending){fitPending=false;graph.zoomToFit(0,35);}});
@@ -279,7 +355,17 @@
   if(!researchRun||$('wikiLayer').value==='L1'||researchRun.bundle.lens.instrument!==baseData.instrument)return;
   const b=researchRun.bundle,ids=new Set(data.nodes.map(n=>n.id)),endpoint=id=>({stable_id:id,revision_id:id});
   const add=n=>{if(!ids.has(n.id)){ids.add(n.id);data.nodes.push(n);}};
-  for(const o of b.opinions){add({id:o.revision_id,kind:o.kind||'Claim',layer:'L1',source_snapshot:researchRun.snapshot,available_at:o.available_at,title:o.title,summary:o.statement,scope:o.scope,citations:o.evidence,classification_terms:o.labels});for(const e of o.evidence){add({id:e.revision_id,kind:'ArticleRevision',layer:'L1',published_at:e.published_at,available_at:e.available_at,title:e.quote,summary:e.quote,url:e.url,citations:[],classification_terms:o.labels});data.edges.push({source:endpoint(e.revision_id),target:endpoint(o.revision_id),relation_type:'SUPPORTS',rationale:'固定研究快照中的逐字來源',evidence_refs:[e]});}}
+  data.edges.push(...(b.relations||[]));
+  for(const o of b.opinions){
+   add({id:o.revision_id,kind:o.kind||'Claim',layer:'L1',source_snapshot:researchRun.snapshot,available_at:o.available_at,title:o.title,summary:o.statement,scope:o.scope,citations:o.evidence,classification_terms:o.labels});
+   const byArticle=new Map();
+   for(const e of o.evidence){
+    add({id:e.revision_id,kind:'ArticleRevision',layer:'L1',published_at:e.published_at,available_at:e.available_at,title:e.quote,summary:e.quote,url:e.url,citations:[],classification_terms:o.labels});
+    if(!byArticle.has(e.revision_id))byArticle.set(e.revision_id,[]);
+    byArticle.get(e.revision_id).push(e);
+   }
+   for(const [article,refs] of byArticle)data.edges.push({source:endpoint(article),target:endpoint(o.revision_id),relation_type:'SUPPORTS',rationale:t('固定研究快照中的逐字引用','Source quotation in the research snapshot'),evidence_refs:refs});
+  }
   researchRun.result.claims.forEach((c,index)=>{const id=researchRun.id+':'+c.id,opinions=b.opinions.filter(o=>c.derived_from.includes(o.claim_id));add({id,kind:'CustomerOpinion',layer:'L2',title:c.statement,summary:c.statement,scope:b.lens.instrument,research_question:b.lens.query,snapshot:researchRun.snapshot,run_id:researchRun.id,derived_from:c.derived_from,argument_roles:['support','counter'].filter(role=>(researchRun.result[role]||[]).includes(c.id)),assumptions:c.assumptions,invalidating_conditions:c.invalidating_conditions,classification_terms:[...new Set(opinions.flatMap(o=>o.labels))],citations:opinions.flatMap(o=>o.evidence),reveal_index:index});for(const o of opinions)data.edges.push({source:endpoint(id),target:endpoint(o.revision_id),relation_type:'DERIVED_FROM',rationale:'L2 使用的精確 L1 claim / revision',evidence_refs:o.evidence});});
   // Saved role membership is relative to the question, never a fabricated L1 truth edge.
   for(const role of ['support','counter']){
@@ -288,7 +374,15 @@
    add({id,kind:'ArgumentBranch',layer:'L2',argument_role:role,title:roleName(role),summary:t('模型對研究問題的論證分組；引用不等於已證實。','Model argument grouping relative to the research question; citation is not proof.'),research_question:b.lens.query,snapshot:researchRun.snapshot,run_id:researchRun.id,classification_terms:[...new Set(opinions.flatMap(o=>o.labels))],branch_members:[...claims.map(c=>researchRun.id+':'+c.id),...opinions.flatMap(o=>[o.revision_id,...o.evidence.map(e=>e.revision_id)])],reveal_index:Math.min(...claims.map(c=>researchRun.result.claims.indexOf(c)))});
    for(const c of claims)data.edges.push({source:endpoint(id),target:endpoint(researchRun.id+':'+c.id),relation_type:'ARGUMENT_MEMBER',argument_role:role,rationale:t('模型對研究問題的分組：','Model grouping relative to the question: ')+roleName(role),evidence_refs:[]});
   }
-  data.edges=[...new Map(data.edges.map(e=>[[e.source.stable_id,e.target.stable_id,e.relation_type].join('|'),e])).values()];data.total_nodes=data.nodes.length;
+  const seenEdges=new Set(),seenEndpoints=new Set();
+  data.edges=data.edges.filter(e=>{
+   const key=[e.source.stable_id,e.target.stable_id,e.relation_type].join('|');
+   if(e.revision_id){
+    if(seenEdges.has(e.revision_id))return false;
+    seenEdges.add(e.revision_id);
+   }else if(seenEndpoints.has(key))return false;
+   seenEndpoints.add(key);return true;
+  });data.total_nodes=data.nodes.length;
  }
  function setResearch(run,id,animate=false){
   if(run.bundle.lens.instrument!==current())return;clearTimeout(revealTimer);researchRun={...run,id};reveal=animate&&!matchMedia('(prefers-reduced-motion: reduce)').matches?0:Infinity;combine();if(animate||$('wikiLayer').value==='L1')$('wikiLayer').value='both';$('wikiKind').value='';$('wikiRelation').value='';$('wikiAssessment').value='';render();
@@ -300,7 +394,7 @@
  }
  $('wikiLayer').onchange=()=>{clearTimeout(revealTimer);reveal=Infinity;render();saveRuntime();root.dispatchEvent(new CustomEvent('atlas-wiki-layer',{detail:$('wikiLayer').value}));};
  function versionInfo(){const box=$('wikiVersionInfo'),change=data.changes?.find(v=>v.version===data.version);box.replaceChildren(el('summary',t('此版本的變更','Changes in this version')));if(!change){box.append(el('p',t('此版本沒有變更摘要','No change summary for this version')));return;}box.append(el('p',`v${change.version} · ${change.model} · ${new Date(change.created_at).toLocaleString(language())}`),el('p',t(`新增 ${change.added} 節點、${change.relations} 關係；${change.updates} 個觀點更新連結。`,`Added ${change.added} nodes and ${change.relations} relations; ${change.updates} viewpoint update links.`)));for(const title of change.titles)box.append(el('p',title));}
- function selectedBounds(){const a=Number($('wikiRangeStart').value),b=Number($('wikiRangeEnd').value);return Number.isFinite(a)&&Number.isFinite(b)&&a>10000&&a<=b?{start:a,end:b}:null;}
+ function selectedBounds(){if($('wikiRange').value==='all')return null;const a=Number($('wikiRangeStart').value),b=Number($('wikiRangeEnd').value);return Number.isFinite(a)&&Number.isFinite(b)&&a>10000&&a<=b?{start:a,end:b}:null;}
  function viewpoints(){const bounds=selectedBounds();return (data?.opinion_index||[]).flatMap(n=>{const dates=(n.dates||[]).filter(d=>!bounds||(stamp(d)>=bounds.start&&stamp(d)<=bounds.end));return bounds&&!dates.length?[]:[{...n,date:dates.at(-1)||'unknown'}];});}
  function chartTerms(){const rows=viewpoints(),chosen=$('wikiAssessment').value;return classificationTerms().filter(c=>(!chosen||chosen===c.id)&&rows.some(n=>classificationTags(n).includes(c.id)));}
 
@@ -343,18 +437,81 @@
   }else section.append(el('small',t('正在讀取目前股價快取…','Reading current cached prices…')));
   if(n.market_evidence?.length){const history=el('details',undefined,'wiki-market-history');history.append(el('summary',t('生成時使用的股價資料','Price evidence used at generation')));for(const o of n.market_evidence)history.append(observation(o));box.append(history);}
  }
- function details(item,edge=false){selectedDetail=item;selectedEdge=edge;const n=copy(item.argument_role?data?.nodes.find(x=>x.id===item.id)||item:item),box=$('wikiDetail');box.replaceChildren(el('small',edge?t('模型關係提案','Model-proposed relation'):kindNames()[n.kind]),el('h3',edge?n.relation_type:n.title),el('p',edge?n.rationale:n.summary===n.title?'':n.summary||''));if(!edge){box.firstChild.replaceWith(nodeHeading(n));}if(!edge&&n.layer==='L2'){box.append(el('p',t('研究問題：','Research question: ')+n.research_question),(()=>{const d=el('details');d.append(el('summary',t('研究版本','Research snapshot')),el('small',n.snapshot));return d;})(),...(n.argument_role?[]:[el('p',t('假設：','Assumptions: ')+(n.assumptions||[]).join('；')),el('p',t('失效條件：','Invalidating conditions: ')+(n.invalidating_conditions||[]).join('；'))]));}
+ function details(item,edge=false){selectedDetail=item;selectedEdge=edge;const n=copy(item.argument_role?data?.nodes.find(x=>x.id===item.id)||item:item),box=$('wikiDetail');box.replaceChildren(el('small',edge?t('模型關係提案','Model-proposed relation'):kindNames()[n.kind]),el('h3',edge?relationName(n.relation_type):n.title),el('p',edge?n.rationale:n.summary===n.title?'':n.summary||''));if(!edge){box.firstChild.replaceWith(nodeHeading(n));}if(!edge&&n.layer==='L2'){box.append(el('p',t('研究問題：','Research question: ')+n.research_question),(()=>{const d=el('details');d.append(el('summary',t('研究版本','Research snapshot')),el('small',n.snapshot));return d;})(),...(n.argument_role?[]:[el('p',t('假設：','Assumptions: ')+(n.assumptions||[]).join('；')),el('p',t('失效條件：','Invalidating conditions: ')+(n.invalidating_conditions||[]).join('；'))]));}
   if(!edge&&n.kind!=='ArticleRevision'&&n.layer!=='L2'){if(!n.translations?.[language()])box.append(el('small',t('此舊節點尚無此語系版本，顯示原始內容。','This older node has no selected-language variant; showing its original content.')));box.append(el('h4',t('財務影響屬性：','Financial impact: ')+categoryNames()[n.assessment?.category||'uncertain']),el('p',n.assessment?.rationale||t('尚未分類','Not yet classified')),el('p',t('模型質性觀點；尚未驗證與未來股價的關聯。','Qualitative model interpretation; not validated against future stock returns.'),'wiki-note'));}
   if(!edge&&n.unassessed_term_ids?.length)box.append(el('small',t('沿用既有分類；新增術語尚未評估。','Existing labels retained; additional terms have not been evaluated.')));
   if(!edge&&n.kind!=='ArticleRevision'&&n.layer!=='L2'){const labels={supported:t('引用支持','Supported by quotes'),mixed:t('證據分歧','Mixed evidence'),insufficient:t('證據不足','Insufficient evidence')};box.append(el('p',(topicNames()[n.assessment?.topic]||t('主題待重審','Topic pending review'))+' · '+(labels[n.assessment?.evidence]||t('證據程度尚未標記','Evidence strength not yet labeled'))));marketDetails(box,n);}
 
   if(!edge&&item.url){const a=el('a',t('開啟新聞來源 ↗','Open source ↗'));a.href=item.url;a.target='_blank';a.rel='noopener noreferrer';box.append(a);}
   const history=data.histories?.[item.id];if(history){const section=el('section');section.append(el('h4',t('觀點演變：原始＋最新三批','Evolution: original + latest three batches')));const entry=(node,label)=>{const value=copy(node);section.append(el('small',label+' · v'+node.version),el('h4',value.title),el('p',value.summary));};entry(history.original,t('原始觀點','Original'));history.recent_batches.forEach(group=>{for(const node of group)entry(node,t('修訂觀點','Revision'));});box.append(section);}
-  if(!edge){for(const e of data.edges.filter(e=>e.source.stable_id===item.id||e.target.stable_id===item.id).slice(0,20)){const b=el('button',e.relation_type+' · '+copy(e).rationale);b.onclick=()=>details(e,true);box.append(b);}}
+  if(!edge){
+   const incident=data.edges.filter(e=>e.source.stable_id===item.id||e.target.stable_id===item.id);
+   const incoming=incident.filter(e=>e.target.stable_id===item.id&&['SUPPORTS','CONTRADICTS'].includes(e.relation_type));
+   const relationButton=e=>{
+    const inbound=e.target.stable_id===item.id;
+    const other=inbound?e.source:e.target;
+    const node=data.nodes.find(n=>n.id===other.stable_id);
+    const label=e.relation_type==='SUPPORTS'&&inbound&&node?.kind==='ArticleRevision'?t('原文引用','Source citation'):relationName(e.relation_type);
+    const button=el('button',label+' · '+(node?copy(node).title:other.stable_id));
+    button.title=copy(e).rationale;button.onclick=()=>details(e,true);return button;
+   };
+   if(item.kind!=='ArticleRevision'&&item.layer!=='L2'){
+    for(const type of ['SUPPORTS','CONTRADICTS']){
+     const edges=incoming.filter(e=>e.relation_type===type),group=el('details');
+     group.append(el('summary',relationName(type)+t('此觀點',' this viewpoint')+' · '+edges.length));
+     group.ontoggle=()=>{if(group.open&&group.childElementCount===1)for(const e of edges)group.append(relationButton(e));};
+     box.append(group);
+    }
+    const archiveLink=el('button',t('檢視此 L1 版本的全部關係','Inspect all relations in this L1 version'));
+    archiveLink.onclick=()=>browse('edges',0,data.version,item.id);box.append(archiveLink);
+   }
+   const rest=item.kind==='ArticleRevision'||item.layer==='L2'?incident:incident.filter(e=>!incoming.includes(e));
+   for(const e of rest.slice(0,20))box.append(relationButton(e));
+  }
   const ident=data.instrument;for(const c of item.evidence_refs||item.citations||[]){box.append(el('blockquote',c.quote));const b=el('button',t('查看引用來源','View cited source'));b.onclick=()=>buttonAction(b,t('正在讀取來源…','Loading source…'),async()=>{const a=await api('article?'+new URLSearchParams({instrument:ident,id:c.article_revision_id}));const link=el('a',a.title);link.href=a.url;link.target='_blank';link.rel='noopener noreferrer';b.replaceWith(link);});box.append(b);}
  }
  function saveRuntime(){if(!initialized||restoringUI)return;const controls=Object.fromEntries(runtimeKeys.map(id=>[id,$(id).type==='checkbox'?$(id).checked:$(id).value]));const c=graph?.cameraPosition();const value={instrument:current(),controls,layout:layout.state(),root_selection:rootSelection,graph_universe:graphUniverse,graph_settings:graphSettings,root:focusRoot,selected:selectedDetail?.id||null,...(c?{camera:{x:c.x,y:c.y,z:c.z}}:{})};try{localStorage.setItem('stocknexus.wikiRuntime',JSON.stringify(value));}catch{}root.AtlasWorkspace?.save('wiki',value);}
- function restoreRuntime(saved){if(!saved)return;restoringUI=true;try{layout.restore(saved.layout);if(saved.instrument)instrumentChoices(saved.instrument);for(const [id,value] of Object.entries(saved.controls||{}))if(runtimeKeys.includes(id)&&id!=='wikiRangeStart'&&id!=='wikiRangeEnd'){$(id).type==='checkbox'?$(id).checked=!!value:$(id).value=value;}sliders();for(const id of ['wikiRangeStart','wikiRangeEnd'])if(saved.controls?.[id]!==undefined)$(id).value=saved.controls[id];rootSelection=saved.root_selection||rootSelection;graphUniverse=saved.graph_universe||graphUniverse;graphSettings=saved.graph_settings||graphSettings;focusRoot=saved.root||null;sliderLabel();strategyNote();}finally{restoringUI=false;}}
+ function restoreRuntime(saved){if(!saved)return;restoringUI=true;try{layout.restore(saved.layout);if(saved.instrument)instrumentChoices(saved.instrument);for(const [id,value] of Object.entries(saved.controls||{}))if(runtimeKeys.includes(id)&&id!=='wikiRangeStart'&&id!=='wikiRangeEnd'){$(id).type==='checkbox'?$(id).checked=!!value:$(id).value=value;}sliders();for(const id of ['wikiRangeStart','wikiRangeEnd'])if(saved.controls?.[id]!==undefined)$(id).value=saved.controls[id];if(lastJobs.some(isActive)||lastConfig.enabled||lastConfig.catch_up)lockDates(true,true);rootSelection=saved.root_selection||rootSelection;graphUniverse=saved.graph_universe||graphUniverse;graphSettings=saved.graph_settings||graphSettings;focusRoot=saved.root||null;sliderLabel();strategyNote();}finally{restoringUI=false;}}
+ const archive=el('dialog',undefined,'wiki-settings');
+ document.body.append(archive);
+ let archiveRequest=0;
+ async function browse(collection='nodes',offset=0,version=data?.version,id=''){
+  const ident=current(),ticket=++archiveRequest;
+  archive.replaceChildren();
+  const close=el('button',t('關閉','Close'));close.onclick=()=>archive.close();
+  archive.append(close,el('h2',ident+' · L1'),el('p',t('讀取中…','Loading…')));
+  if(!archive.open)archive.showModal();
+  try{
+   const params=new URLSearchParams({instrument:ident,collection,offset,limit:20});
+   if(version!=null)params.set('version',version);
+   if(id)params.set('id',id);
+   const response=await fetch('/api/context/graph?'+params);
+   const page=await response.json();
+   if(ticket!==archiveRequest || !archive.open)return;
+   if(!response.ok)throw Error(page.error);
+   const button=(title,fn)=>{const b=el('button',title);b.onclick=fn;return b;};
+   archive.lastChild.remove();
+   const go=(kind,start=0,filter='')=>browse(kind,start,page.version,filter);
+   archive.append(button(t('全部節點','All nodes'),()=>go('nodes')),button(t('全部關係','All edges'),()=>go('edges')),
+    el('p',`v${page.version} · ${page.total?offset+1:0}–${offset+page.items.length} / ${page.total}`));
+   for(const item of page.items){
+    const line=el('details'),edge=collection==='edges';
+    line.append(el('summary',edge?relationName(item.relation_type)+' · '+copy(item).rationale:item.title||item.id));
+    if(edge){
+     for(const end of [item.source,item.target])line.append(button(end.revision_id,()=>go('nodes',0,end.revision_id)));
+    }else line.append(el('p',item.summary||''),button(t('支持、反證與相關修訂','Evidence and related revisions'),()=>go('edges',0,item.id)));
+    for(const citation of item.citations||item.evidence_refs||[])line.append(el('blockquote',citation.quote||citation.article_revision_id));
+    archive.append(line);
+   }
+   if(offset)archive.append(button(t('上一頁','Previous'),()=>go(collection,Math.max(0,offset-20),id)));
+   if(page.next_offset!==null)archive.append(button(t('下一頁','Next'),()=>go(collection,page.next_offset,id)));
+  }catch(error){if(ticket===archiveRequest)archive.lastChild.textContent=error.message;}
+ }
+ $('wikiBrowse').onclick=()=>browse();
+ $('wikiCompare').onclick=()=>{
+  const [model,effort]=$('wikiModel').value.split('|');
+  if(current())root.openWikiComparison({instrument:current(),model,effort,t});
+ };
  function show(){if(showPending)return showPending;showPending=openWiki().finally(()=>{showPending=null;});return showPending;}
  async function openWiki(){
   panel.hidden=false;layout.refresh();hooks.visible(true);status(t('正在載入 Wiki 狀態…','Loading Wiki status…'),false,true);
@@ -362,8 +519,9 @@
   const selected=hooks.selection('global').graph_selection;if(selected?.trees?.length)rootSelection=selected;
   panel.hidden=false;layout.refresh();hooks.visible(true);graph?.resumeAnimation();translate();
   try{
-   const [nextInfo,catalog]=await Promise.all([api('status'),initialized?Promise.resolve(null):api('models')]);info=nextInfo;catalogAt=Date.now();
-   if(!initialized){models=catalog.models;modelChoices();
+   const [nextInfo,catalog]=await Promise.all([api('status'),api('models').catch(error=>{if(!initialized)throw error;return {models};})]);info=nextInfo;catalogAt=Date.now();
+   models=catalog.models;modelChoices();
+   if(!initialized){
     const saved=root.AtlasWorkspace?.state.wiki||JSON.parse(localStorage.getItem('stocknexus.wikiRuntime')||'null');
     savedChoices(true);if(saved?.instrument){$('wikiSaved').value=info.instruments.some(x=>x.instrument===saved.instrument)?saved.instrument:'';instrumentChoices(saved.instrument);}
     else if(!current()){const id=hooks.selection('global').search?.instrument;const existing=info.instruments.find(x=>x.instrument===id)||info.instruments.filter(x=>x.version>0).sort((a,b)=>b.version-a.version)[0];if(existing){$('wikiSaved').value=existing.instrument;instrumentChoices(existing.instrument);}}
@@ -402,7 +560,7 @@
    invalidate();$('wikiVersion').value='';await load();status(job.status==='noop'?job.message:t('工作已排入佇列，可隨時停止。','Work queued. Stop at any time.'));
   }catch(e){if(mine===generation)status(e.message,true);}finally{busy=false;$('wikiStatus').classList.remove('wiki-working');$('wikiStatus').setAttribute('aria-busy','false');activity();}
  };
- $('wikiPause').onclick=()=>buttonAction($('wikiPause'),t('正在停止維護…','Stopping maintenance…'),async()=>{await api('configure',{instrument:current(),enabled:false});await poll();},t('持續維護已停止。','Continuous maintenance stopped.'));
+
  $('wikiExport').onclick=()=>{if(!data)return;return buttonAction($('wikiExport'),t('正在匯出…','Exporting…'),async()=>{const result=await api('markdown?'+new URLSearchParams({instrument:data.instrument,version:data.version}));const url=URL.createObjectURL(new Blob([result.markdown],{type:'text/markdown;charset=utf-8'})),a=el('a');a.href=url;a.download=data.instrument.replace(':','-')+'-wiki.md';a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);},t('已產生 Markdown，下載已交給瀏覽器。','Markdown generated; download handed to the browser.'));};
  let tipTimer;const hideTip=()=>{clearTimeout(tipTimer);$('wikiStartTip').hidden=true;$('wikiStart').removeAttribute('aria-describedby');};for(const event of ['mouseenter','focus'])$('wikiStart').addEventListener(event,()=>{clearTimeout(tipTimer);tipTimer=setTimeout(()=>{$('wikiStartTip').hidden=false;$('wikiStart').setAttribute('aria-describedby','wikiStartTip');},550);});for(const event of ['mouseleave','blur'])$('wikiStart').addEventListener(event,hideTip);$('wikiStart').addEventListener('keydown',e=>{if(e.key==='Escape')hideTip();});
  $('wikiVersionInfo').addEventListener('toggle',()=>{$('wikiResizeChanges').hidden=!$('wikiVersionInfo').open;layout.refresh();});

@@ -245,8 +245,9 @@ def up(args):
 
 
 def merge_help(data):
-    command=shlex.quote(str(ROOT/'merge_data.sh'))+' --from /media/usb/data --to '+shlex.quote(str(data))
-    return ('Import USB data from another terminal (replace /media/usb/data):\n'
+    command=shlex.quote(str(ROOT/'merge_data.sh'))+' --from ../incoming/data --to '+shlex.quote(str(data))
+    return ('Import from another terminal (replace ../incoming/data with your source data, graph/TICKER or llm_wiki/TICKER directory):\n'
+            'First preview with --dry-run. After checking the report, remove --dry-run and run the same command to merge.\n'
             '  Preview: '+command+' --dry-run\n'
             '  Merge:   '+command+'\n'
             'Keep this web service open; pause Wiki work/watchers for stocks being merged.\n'

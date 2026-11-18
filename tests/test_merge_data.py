@@ -118,6 +118,17 @@ class MergeDataTests(unittest.TestCase):
         self.assertEqual(self.count(self.sa.path,'snapshots'),2)
         self.assertEqual(self.count(self.sb.path,'snapshots'),2)
 
+    def test_same_snapshot_header_but_different_edges_remains_two_graphs(self):
+        for path,edge in [(self.sa.path,'a'),(self.sb.path,'b')]:
+            with sqlite3.connect(path) as db:
+                db.execute("INSERT INTO snapshots VALUES ('id','market','2026-11-11','{}','{}')")
+                db.execute("INSERT INTO snapshot_relations VALUES ('id','cross',?,'{}')",(edge,))
+        run(self.a,self.b);run(self.a,self.b);run(self.b,self.a);run(self.a,self.b)
+        for path in (self.sa.path,self.sb.path):
+            with sqlite3.connect(path) as db:
+                self.assertEqual(db.execute('SELECT count(*) FROM snapshots').fetchone()[0],2)
+                self.assertEqual(db.execute('SELECT count(DISTINCT snapshot_id),count(*) FROM snapshot_relations').fetchone(),(2,2))
+
     def test_imported_running_job_never_queues_and_citations_preserved(self):
         a=self.wiki(self.sa,[row()])
         with a.connection() as d:d.execute("UPDATE jobs SET status='running'")

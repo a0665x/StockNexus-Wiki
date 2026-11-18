@@ -65,7 +65,7 @@ def handle(handler):
         if handler.headers.get('Content-Type','').split(';')[0]!='application/json' or not 0<length<=32*1024*1024: raise ValueError('無效Wiki請求大小')
         body=json.loads(handler.rfile.read(length))
         if not isinstance(body,dict): raise ValueError('需要JSON object')
-        action={'plan':service.plan,'apply':service.apply,'jobs':service.start,'configure':service.configure,'cancel':service.cancel,'resume':service.resume}.get(path)
+        action={'plan':service.plan,'apply':service.apply,'jobs':service.start,'configure':service.configure,'cancel':service.cancel,'stop':service.stop_maintenance,'resume':service.resume}.get(path)
         if not action: handler.json_response(404,{'error':'Unknown Wiki endpoint'});return
         handler.json_response(202 if path=='jobs' else 200,action(body))
     except (ValueError,TypeError,KeyError) as error: handler.json_response(400,{'error':str(error)})

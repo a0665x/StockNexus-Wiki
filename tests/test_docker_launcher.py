@@ -32,7 +32,7 @@ class DockerLaunchTests(unittest.TestCase):
         self.assertEqual(len(commands),2)
         preview,merge=map(shlex.split,commands)
         self.assertEqual(preview,[*merge,'--dry-run'])
-        self.assertEqual(merge,[str(d.ROOT/'merge_data.sh'),'--from','/media/usb/data','--to',str(data)])
+        self.assertEqual(merge,[str(d.ROOT/'merge_data.sh'),'--from','../incoming/data','--to',str(data)])
 
     def test_fixed_project_ignores_environment_project_names(self):
         self.assertEqual(d.COMPOSE[-2:],['-p','news-atlas'])

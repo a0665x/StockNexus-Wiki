@@ -7,7 +7,7 @@ import urllib.parse
 from pathlib import Path
 from .wiki.store import instrument
 
-RESOURCES = ('catalog', 'news', 'related', 'prices', 'l1', 'l2')
+RESOURCES = ('catalog', 'news', 'related', 'prices', 'l1', 'l2', 'graph')
 
 @contextlib.contextmanager
 def connect(path):
@@ -22,26 +22,36 @@ def connect(path):
     finally:
         db.close()
 
-def catalog(root):
+def catalog(root, symbol=None):
     result = []
-    for path in sorted((root/'graph').glob('*/news-atlas.sqlite3')):
-        if path.parent.name == '_unassigned': continue
-        with connect(path) as db:
-            tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-            row = db.execute("SELECT value FROM graph_metadata WHERE key='instrument'").fetchone() if 'graph_metadata' in tables else None
-            ident = row[0] if row else None
-            count = db.execute('SELECT count(*) FROM articles').fetchone()[0]
-        wiki = root/'llm_wiki'/path.parent.name/'wiki.sqlite3'
-        if wiki.exists():
+    news_paths={p.parent.name:p for p in (root/'graph').glob('*/news-atlas.sqlite3')}
+    wikis={p.parent.name:p for p in (root/'llm_wiki').glob('*/wiki.sqlite3')}
+    tickers=(news_paths.keys() | wikis.keys()) - {'_unassigned'}
+    for ticker in sorted(tickers if symbol is None else tickers & {symbol}):
+        path=news_paths.get(ticker)
+        wiki=wikis.get(ticker)
+        ident=None
+        count=version=runs=0
+        if path:
+            with connect(path) as db:
+                tables={r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                row=db.execute("SELECT value FROM graph_metadata WHERE key='instrument'").fetchone() if 'graph_metadata' in tables else None
+                ident=row[0] if row else None
+                count=db.execute('SELECT count(*) FROM articles').fetchone()[0]
+        if wiki:
             with connect(wiki) as db:
-                row = db.execute("SELECT value FROM metadata WHERE key='instrument'").fetchone()
-                saved = json.loads(row[0]) if row else None
-                if ident and saved and saved != ident: continue
-                ident = ident or saved
+                row=db.execute("SELECT value FROM metadata WHERE key='instrument'").fetchone()
+                saved=json.loads(row[0]) if row else None
+                if ident and saved and saved!=ident:continue
+                ident=ident or saved
+                version=db.execute('SELECT coalesce(max(version),0) FROM versions').fetchone()[0]
+                if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='research_objects'").fetchone():
+                    from .wiki.research import OWNER
+                    runs=db.execute("SELECT count(*) FROM research_objects WHERE kind='run' AND owner=?",(OWNER,)).fetchone()[0]
         try: instrument(ident)
         except ValueError: continue
-        if ident.split(':')[1] != path.parent.name: continue
-        result.append({'instrument':ident, 'articles':count, 'wiki_available':wiki.exists()})
+        if ident.split(':')[1] != ticker: continue
+        result.append({'instrument':ident, 'articles':count, 'news_available':bool(path), 'wiki_available':bool(wiki), 'l1_version':version, 'l2_runs':runs})
     return {'instruments':result, 'network_requests':0}
 
 def integer(params, key, default, minimum, maximum):
@@ -63,18 +73,51 @@ def window(params, now):
     start=cutoff-dt.timedelta(days=days)
     return start.isoformat(),cutoff.isoformat()
 
+def graph_page(root, params):
+    ident=instrument(params.get('instrument',''))
+    collection=params.get('collection','nodes')
+    if collection not in ('nodes','edges'):
+        raise ValueError('collection must be nodes or edges')
+    limit=integer(params,'limit',20,1,100)
+    offset=integer(params,'offset',0,0,2**63-1)
+    with connect(root/'llm_wiki'/ident.split(':')[1]/'wiki.sqlite3') as db:
+        identity=db.execute("SELECT value FROM metadata WHERE key='instrument'").fetchone()
+        if not identity or json.loads(identity[0])!=ident:
+            raise FileNotFoundError('Wiki instrument not found')
+        latest=db.execute('SELECT coalesce(max(version),0) FROM versions').fetchone()[0]
+        version=integer(params,'version',latest,0,latest)
+        where='created_version<=?'
+        args=[version]
+        if params.get('id'):
+            if collection=='nodes':
+                where+=' AND id=?'
+                args.append(params['id'])
+            else:
+                where+=' AND (source=? OR target=?)'
+                args.extend([params['id'],params['id']])
+        base=f'FROM {collection} WHERE {where}'
+        total=db.execute('SELECT count(*) '+base,args).fetchone()[0]
+        rows=db.execute('SELECT payload '+base+' ORDER BY created_version DESC,id LIMIT ? OFFSET ?',(*args,limit,offset))
+        return {'instrument':ident,'version':version,'collection':collection,'total':total,
+                'items':[json.loads(row[0]) for row in rows],
+                'next_offset':offset+limit if offset+limit<total else None,
+                'model_calls':0,'network_requests':0}
+
 def query(root, resource, params, now=None):
     root=Path(root)
     allowed={'instrument','days','end'}
     if resource=='catalog': allowed=set()
     if resource in ('news','related','l2'): allowed|={'query','limit','offset'}
+    if resource=='graph': allowed={'instrument','collection','version','id','offset','limit'}
     if resource=='l1': allowed.add('query')
     if resource in ('related','l2'): allowed.add('id')
     if set(params)-allowed: raise ValueError('Unknown parameters: '+','.join(sorted(set(params)-allowed)))
     if resource not in RESOURCES: raise FileNotFoundError('Unknown context resource')
-    cat=catalog(root)
-    if resource=='catalog': return cat
+    if resource=='graph':
+        return graph_page(root,params)
+    if resource=='catalog': return catalog(root)
     ident=instrument(params.get('instrument',''))
+    cat=catalog(root,ident.split(':')[1])
     if ident not in {r['instrument'] for r in cat['instruments']}: raise FileNotFoundError('Unknown instrument; read catalog first')
     ticker=ident.split(':')[1]
     start,end=window(params,now or dt.datetime.now(dt.timezone.utc))
@@ -129,7 +172,7 @@ def query(root, resource, params, now=None):
     from .wiki.research import taxonomy,parse_lens,bundle,obj,OWNER
     with connect(wiki) as db:
         if json.loads(db.execute("SELECT value FROM metadata WHERE key='instrument'").fetchone()[0])!=ident: raise ValueError('Wiki instrument mismatch')
-        if resource=='l1':
+        if resource=="l1":
             if not db.execute("SELECT 1 FROM research_objects WHERE kind='taxonomy' AND owner=''").fetchone():
                 return {**page([]),'status':'unavailable','reason':'Taxonomy not initialized'}
             tax=taxonomy(db)

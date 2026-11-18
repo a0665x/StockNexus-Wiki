@@ -58,3 +58,16 @@ Chat 同源代理：GET `/api/chat/status`；POST `/api/chat/session|sync|turn|c
 
 ## 情境式唯讀查詢（2026-11-14）
 新增 `/api/context/catalog|news|related|prices|l1|l2`，不受畫面節點預算限制、不外連、不建立 DB／研究工作。實作 [context_api.py](../news_atlas/context_api.py)；完整使用契約與情境路由在 [獨立 Skill](../skills/stocknexus-research-api/SKILL.md) 及其 [API 表](../skills/stocknexus-research-api/references/routes.md)。Chat 新增 `read_database` 經原 session/tool capability 與瀏覽器同源取用；回應時股票切換會拒絕過期結果。既有文章／graph／Wiki 路由保留。操作總數以實際 OpenAPI 為準，本文歷史 29 個數字不代表目前總數。
+
+### Agent 更新與修訂流程
+
+Swagger 首頁列出下列可串接的操作。整條 HTTP 流程的隔離驗收在 [test_agent_workflow.py](../tests/test_agent_workflow.py)，使用正式 handler 和 SQLite，來源及模型使用 fixture。
+
+1. GET `/api/context/catalog` 查看股票、新聞筆數、L1 最新版本、目前 owner 的 L2 run 數。
+2. POST `/api/cache/graph` 提供 instrument、sources、起迄日期。依各來源的 missing_ranges 決定是否 POST `/api/search`。搜尋輸入的 end 含當天，缺口的 end 不含當天。沿用原搜尋條件即只補缺口。消費 NDJSON 的 cache、status、heartbeat、source、done，再查 coverage。
+3. GET `/api/wiki/models`，POST `/api/wiki/plan` 指定 model、instrument、news_db:true、scope:global 及 date_range。update 編譯新證據，review 重新評估已處理證據。POST `/api/wiki/jobs` 送 plan_id，GET 同路徑帶 instrument 觀察目前工作。
+4. GET `/api/context/graph` 帶 instrument，選 collection=nodes 或 edges。後續頁帶首次回傳的 version 和 next_offset 作為 offset。edges 加節點 id 可讀取該節點全部入邊與出邊，包括 SUPPORTS、CONTRADICTS 及 UPDATES。完整分頁獨立於 3D 預算。模型維護仍以批次選取相關觀點。
+5. GET `/api/wiki/research/availability`，POST query，GET job，依 payload.run_id 讀 run，再 save 為 live 或 pinned。刷新 live 傳 lens_id 與 expected_revision。來源更正可以 source-status 登記 corrected 或 retracted 並附理由。舊 run 保留原快照。
+6. GET `/api/chat/models` 回傳目前 Codex 全目錄。`POST /api/chat/turn` 可指定 model。Wiki 的目錄只列名稱屬於 Sol、Luna、Mini、Nano 的模型，兩處重用主機五分鐘的 model/list 快取。
+
+7. 合併後可用 research/comparison-candidates 以 q、offset 搜尋同股的精確觀點 ref。POST research/compare 傳 instrument、refs（兩個）、model 與選用 reasoning_effort；GET research/job 查看狀態，完成後依 payload.comparison_id 讀 research/comparison。research/comparisons 可分頁查看本機比對紀錄。

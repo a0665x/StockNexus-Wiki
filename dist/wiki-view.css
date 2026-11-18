@@ -106,3 +106,14 @@
 
 .research-facets{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 12px}.research-facets button{font-size:12px}.research-facets button[aria-pressed="true"]{border-color:#73ddca;color:#73ddca;background:#17343c}#researchSearch{width:100%;box-sizing:border-box;margin-bottom:12px}#researchSaved>section{padding:10px;border:1px solid #2b4355;border-radius:8px;margin:8px 0}#researchSaved>section.research-current{border-color:#73ddca}#researchSaved .research-source{overflow-wrap:anywhere;text-align:left}#researchSaved small{display:block;margin:6px 0;color:#9db2c4}.wiki-research-question{flex-basis:100%;overflow-wrap:anywhere;font-size:13px;color:#d8eeeb}
 .research-facets button small{display:inline;margin:0}.wiki-research-question{display:block;margin:8px 0 4px}
+
+@media (prefers-reduced-motion:no-preference){
+ .wiki-live[data-state="running"] progress::-webkit-progress-value{
+  background:repeating-linear-gradient(110deg,#79e3c2 0 10px,#a3efd5 10px 17px);
+  background-size:36px 100%;
+  animation:wiki-progress 1.4s linear infinite;
+ }
+ @keyframes wiki-progress{to{background-position:36px 0}}
+}
+
+.wiki-comparison select{width:100%;min-width:0}.wiki-comparison button{margin:3px}.wiki-comparison{overflow-wrap:anywhere}.wiki-comparison blockquote{margin-inline:12px}
