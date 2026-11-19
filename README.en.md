@@ -80,6 +80,19 @@ Choose your source and pause Wiki processing for the target stocks. This example
 
 See [data merging and backups](spec/DATA_MERGE.md) for more examples.
 
+## Import your own document graph
+
+Give your independent agent the [document import skill](skills/stocknexus-document-import/SKILL.md) and a folder. Ask for UTF-8 JSONL with stable IDs, hierarchy and original locators. Transfer the result to the web server host and run from the project root:
+
+```bash
+# Preview only
+python3 scripts/import_documents.py --collection my_research --source manuals --input records.jsonl --dry-run
+# Remove --dry-run to apply
+python3 scripts/import_documents.py --collection my_research --source manuals --input records.jsonl
+```
+
+Choose the collection and check its source beneath Massive on the homepage. Open multiple sources together in the document graph. Use the same `--data-dir` on both commands if the service mounts a different host directory. Undated documents and agent-authored L1/L2 claims are supported.
+
 ## Learn more
 
 - [Wiki operation and maintenance](spec/WIKI_RUNTIME.md)

@@ -10,6 +10,8 @@
 
 本輪年度資料／L1 更新及市場報告交接：[2026-11-14 批次](references/annual-research-batch-20261114.md)。讀取即時 private ledger 後再續作，不沿用歷史工作數字。
 
+文件知識庫從 [外部 agent 匯入規格與範例](../skills/stocknexus-document-import/SKILL.md) 開始。資料選用獨立的 documents.sqlite3，由首頁來源區進入。
+
 ## 新 session 的最短閱讀路徑
 
 1. 先讀本頁、[開發協作偏好](ai-dev-experience-preferences.md) 與 [目前功能狀態](CURRENT_STATE.md)，再讀相關領域。需要操作／啟動時讀 [標準流程](WORKFLOWS.md) 與 [RUNTIME.md](RUNTIME.md)。不要先掃描資料庫或大型 vendor bundle。

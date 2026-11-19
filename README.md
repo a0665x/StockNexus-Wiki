@@ -80,6 +80,19 @@ npx --no-install codex login  # 已登入可略過
 
 更多範例見 [資料合併與備份](spec/DATA_MERGE.md)。
 
+## 匯入自己的文件圖譜
+
+在另一個 agent 中提供 [文件轉檔 skill](skills/stocknexus-document-import/SKILL.md) 與原始資料夾，請它保留章節、原文位置與穩定 ID，輸出 UTF-8 的 `records.jsonl`。將 JSONL 放到執行 Web UI 的主機，在專案根目錄執行以下兩步。可先用 `skills/stocknexus-document-import/examples/manual.jsonl` 取代輸入路徑試跑。
+
+```bash
+# 第一步：只預覽
+python3 scripts/import_documents.py --collection my_research --source manuals --input records.jsonl --dry-run
+# 第二步：移除 --dry-run，正式匯入
+python3 scripts/import_documents.py --collection my_research --source manuals --input records.jsonl
+```
+
+首頁 Massive 下方選擇知識庫並勾選來源，或開啟 `/documents?collection=my_research&source=manuals`。勾選多個來源可合看章節、引用與觀點。直接讀取 DB，無日期也能顯示。JSONL 歸檔於 `data/graph/<collection>/imports/<source>/`，文件與外部 agent 產生的 L1/L2 修訂共存於該庫的 `documents.sqlite3`。若服務另掛資料目錄，在兩條指令都加上 `--data-dir /實際資料目錄`。這個流程獨立於股票新聞搜尋及其 Wiki 背景工作。
+
 ## 深入了解
 
 - [Wiki 使用與維護](spec/WIKI_RUNTIME.md)

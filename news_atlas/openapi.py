@@ -103,6 +103,9 @@ def specification():
     operation('/api/channels/{id}','delete','delete_channel','刪除自訂分類','Channels',response=ref('ChannelResult'),parameters=param('id'),description='Only custom-* IDs. Existing snapshots retain frozen definitions.',writes=True)
     operation('/api/classify','post','classify_articles','以目前 Channel 規則分類文字','Channels',ref('ClassifyRequest'),description='Pure classification; no fetching or persistence.')
     operation('/api/view/validate','post','validate_view','驗證與清理完整視圖／快照內容','Snapshots',ref('SnapshotRequest'),ref('SnapshotRequest'),description='Uses the same validation as saving snapshots, without writing to DB. Useful before a future MCP write tool.')
+    operation('/api/documents','get','read_document_collection','文件知識庫目錄、節點或指定修訂','Documents',
+              response={'type':'object'},parameters=[{'in':'query','name':k,'required':False,'schema':string()} for k in ('collection','source','id','revision')],
+              description='No parameters lists collections and source counts. collection returns current nodes, optionally filtered by source. Supply collection, source, id and revision to retrieve an exact historical record.')
     operation('/api/snapshots','get','list_snapshots','列出最近 50 份圖譜快照','Snapshots',response=obj({'snapshots':arr(ref('SnapshotSummary'),50)}))
     operation('/api/snapshots','post','save_snapshot','按來源保存圖譜與視圖設定','Snapshots',ref('SnapshotRequest'),obj({'id':string(),'name':string(),'created_at':{'type':'string','format':'date-time'},'db':ref('DatabaseStats')}),description='Creates a new snapshot; never marks acquisition coverage complete. Freezes channel and root-selection state.',writes=True,code='201')
     operation('/api/snapshots/{id}','get','get_snapshot','載回文章、關聯與視圖設定','Snapshots',response=ref('Snapshot'),parameters=param('id'))
