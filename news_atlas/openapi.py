@@ -106,6 +106,14 @@ def specification():
     operation('/api/documents','get','read_document_collection','文件知識庫目錄、節點或指定修訂','Documents',
               response={'type':'object'},parameters=[{'in':'query','name':k,'required':False,'schema':string()} for k in ('collection','source','id','revision')],
               description='No parameters lists collections and source counts. collection returns current nodes, optionally filtered by source. Supply collection, source, id and revision to retrieve an exact historical record.')
+    operation('/api/documents/import','post','import_document_collection','預覽或匯入研究文件 JSONL','Documents',
+              parameters=[{'in':'query','name':key,'required':True,'schema':schema} for key,schema in
+                          [('collection',string(64)),('source',string(64)),('mode',{'enum':['preview','apply']})]],
+              description='Send a UTF-8 JSONL file up to 32 MiB from an allowed same-origin client. Preview validates without writing. Apply imports the complete source batch and returns counts.',writes=True)
+    upload=paths['/api/documents/import']['post']
+    upload['requestBody']={'required':True,'content':{'application/x-ndjson':{'schema':{'type':'string'}}}}
+    upload['responses'].update({str(code):{'description':message} for code,message in
+                               [(403,'Origin is not allowed'),(413,'Upload exceeds 32 MiB'),(415,'Expected application/x-ndjson'),(503,'Storage unavailable')]})
     operation('/api/snapshots','get','list_snapshots','列出最近 50 份圖譜快照','Snapshots',response=obj({'snapshots':arr(ref('SnapshotSummary'),50)}))
     operation('/api/snapshots','post','save_snapshot','按來源保存圖譜與視圖設定','Snapshots',ref('SnapshotRequest'),obj({'id':string(),'name':string(),'created_at':{'type':'string','format':'date-time'},'db':ref('DatabaseStats')}),description='Creates a new snapshot; never marks acquisition coverage complete. Freezes channel and root-selection state.',writes=True,code='201')
     operation('/api/snapshots/{id}','get','get_snapshot','載回文章、關聯與視圖設定','Snapshots',response=ref('Snapshot'),parameters=param('id'))

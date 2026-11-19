@@ -4,6 +4,21 @@
 
 把大量新聞整理成可探索、可追溯、持續維護的觀點。
 
+## 用自己的文件建立研究圖譜
+
+把下方提示詞貼給能讀取你文件的 agent，將尖括號內的路徑換成實際位置。如果 agent 在另一台電腦，請一併提供[文件轉檔 skill 資料夾](skills/stocknexus-document-import/)。
+
+```text
+請讀取 skills/stocknexus-document-import/SKILL.md，依照其中的文件節點 schema，
+將「<某股票操作手冊、研究筆記與其他雜亂文件的資料夾路徑>」轉成一個 UTF-8 records.jsonl。
+目標知識庫 ID 為 my_research，來源 ID 為 manuals。
+保留有意義的資料夾、文件與章節層級，每個節點使用穩定 ID，以 parent_id 連回上層。
+保留原文、相對檔案路徑與可確認的頁碼或標題。日期不明就留空。若是更新，請沿用上一版節點 ID。
+交付可直接匯入的 records.jsonl，另列略過的檔案與原因。由我在 Web UI 匯入。
+```
+
+在已啟動的首頁點 **匯入研究文件**，填入相同的知識庫與來源 ID，選取 `records.jsonl`，按 **匯入並開啟圖譜**。整份檔案會一次存入該研究庫，畫面會選中這個來源並顯示節點。選 **只預覽** 可先查看新增、更新及未變更筆數。可用[三節點範例](skills/stocknexus-document-import/examples/manual.jsonl)試跑。網頁單檔上限為 32 MiB，更大的檔案可使用下方的命令列匯入流程。
+
 ## 解決什麼問題？
 
 - **新聞太多、噪音太多**：整合 Google News RSS、Yahoo 新聞與 Massive，去重後在新聞圖譜中探索相關事件。

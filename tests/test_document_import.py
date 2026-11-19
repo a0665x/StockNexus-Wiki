@@ -50,3 +50,32 @@ class DocumentImportTests(unittest.TestCase):
         self.assertEqual(self.apply(self.write([rows[0],rows[0]]))['duplicate_lines'],1)
         with self.assertRaises(ValueError):
             self.apply(self.write([rows[0],{**rows[0],'title':'different'}]))
+
+    def test_web_import_preview_apply_retry_and_invalid_file(self):
+        from email.message import Message
+        from io import BytesIO
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        from news_atlas.documents import handle_import
+
+        def upload(mode, data, origin='http://localhost:8765'):
+            headers = Message()
+            headers['Content-Type'] = 'application/x-ndjson'
+            headers['Content-Length'] = str(len(data))
+            headers['Host'] = 'localhost:8765'
+            headers['Origin'] = origin
+            handler = SimpleNamespace(command='POST', headers=headers, client_address=('127.0.0.1', 1000),
+                                      path=f'/api/documents/import?collection=research&source=notes&mode={mode}',
+                                      rfile=BytesIO(data), store=SimpleNamespace(path=self.root/'news-atlas.sqlite3'),
+                                      json_response=Mock())
+            handle_import(handler)
+            return handler.json_response.call_args.args
+
+        data = EXAMPLE.read_bytes()
+        self.assertEqual(upload('apply', data, 'https://elsewhere.example')[0], 403)
+        self.assertEqual(upload('preview', data)[1]['added'], 3)
+        self.assertFalse(self.root.exists())
+        self.assertEqual(upload('apply', data)[1]['added'], 3)
+        self.assertEqual(upload('apply', data)[1]['unchanged'], 3)
+        self.assertEqual(upload('apply', data + b'{invalid}')[0], 400)
+        self.assertEqual(query(self.root)['collections'], [{'id':'research','sources':{'notes':3}}])

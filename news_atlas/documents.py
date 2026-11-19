@@ -2,6 +2,7 @@
 import contextlib
 import datetime as dt
 import hashlib
+import io
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -103,24 +104,23 @@ def encode(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':'), allow_nan=False)
 
 
-def read_records(path, source):
+def read_records(stream, source):
     records = {}
     duplicates = 0
-    with Path(path).open(encoding='utf-8-sig') as stream:
-        for index, line in enumerate(stream, 1):
-            if not line.strip():
-                continue
-            try:
-                row = json.loads(line)
-                validate(row, source)
-                ident = row['id']
-                if ident in records:
-                    if records[ident] != row:
-                        raise ValueError('Conflicting definitions of '+ident)
-                    duplicates += 1
-                records[ident] = row
-            except (ValueError, TypeError) as exc:
-                raise ValueError(f'Line {index}: {exc}') from exc
+    for index, line in enumerate(stream, 1):
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+            validate(row, source)
+            ident = row['id']
+            if ident in records:
+                if records[ident] != row:
+                    raise ValueError('Conflicting definitions of '+ident)
+                duplicates += 1
+            records[ident] = row
+        except (ValueError, TypeError) as exc:
+            raise ValueError(f'Line {index}: {exc}') from exc
     if not records:
         raise ValueError('The JSONL input is empty')
     return records, duplicates
@@ -169,9 +169,14 @@ def archive(base, source, records):
 
 
 def import_records(root, collection, source, input_path, dry_run):
+    with Path(input_path).open(encoding='utf-8-sig') as stream:
+        return import_stream(root, collection, source, stream, dry_run)
+
+
+def import_stream(root, collection, source, stream, dry_run):
     slug(source)
     base = folder(root, collection)
-    records, duplicates = read_records(input_path, source)
+    records, duplicates = read_records(stream, source)
     path = base/DB_NAME
     if dry_run:
         conn = sqlite3.connect(path.as_uri()+'?mode=ro', uri=True) if path.exists() else sqlite3.connect(':memory:')
@@ -247,3 +252,35 @@ def handle(handler):
         handler.json_response(404,{'error':str(exc)})
     except sqlite3.Error:
         handler.json_response(503,{'error':'Document collection is unavailable'})
+
+def handle_import(handler):
+    from .wiki.http import writable
+    if not writable(handler):
+        handler.json_response(403, {'error': 'Use an allowed same-origin host'})
+        return
+    if handler.headers.get_content_type() != 'application/x-ndjson':
+        handler.json_response(415, {'error': 'Expected a UTF-8 JSONL file (application/x-ndjson)'})
+        return
+    try:
+        params = urllib.parse.parse_qs(urllib.parse.urlsplit(handler.path).query, keep_blank_values=True)
+        if (set(params) != {'collection', 'source', 'mode'} or any(len(v) != 1 for v in params.values())
+                or params['mode'][0] not in ('preview', 'apply')):
+            raise ValueError('Provide collection, source and mode (preview or apply)')
+        length = int(handler.headers.get('Content-Length', '0'))
+        if length > 32 * 1024 * 1024:
+            handler.json_response(413, {'error': 'Web uploads support up to 32 MiB. Use the CLI for larger exports.'})
+            return
+        if length <= 0:
+            raise ValueError('Select a non-empty JSONL file')
+        data = handler.rfile.read(length)
+        if len(data) != length:
+            raise ValueError('Incomplete upload')
+        with io.TextIOWrapper(io.BytesIO(data), encoding='utf-8-sig') as stream:
+            report = import_stream(handler.store.path.parent, params['collection'][0], params['source'][0],
+                                   stream, params['mode'][0] == 'preview')
+        report.pop('archive', None)
+        handler.json_response(200, report)
+    except ValueError as exc:
+        handler.json_response(400, {'error': str(exc)})
+    except (OSError, sqlite3.Error):
+        handler.json_response(503, {'error': 'Document storage is unavailable'})

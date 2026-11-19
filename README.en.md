@@ -4,6 +4,21 @@
 
 Turn a flood of news into connected, traceable opinions that you can explore and maintain over time.
 
+## Build a research graph from your own documents
+
+Give the following prompt to an agent with access to your documents. Replace the placeholder with the folder path. If the agent works on another machine, give it the [document import skill folder](skills/stocknexus-document-import/) as well.
+
+```text
+Read skills/stocknexus-document-import/SKILL.md and follow its document record schema.
+Convert <folder containing stock manuals, research notes and other mixed files> into one UTF-8 records.jsonl.
+Use collection ID my_research and source ID manuals. Preserve meaningful folders, documents and sections.
+Use stable IDs and parent_id for hierarchy. Keep original text, relative paths and verifiable page or heading locators.
+Leave unknown dates empty. Reuse prior node IDs on updates. Deliver the importable records.jsonl
+and list any skipped files with reasons. I will import it in the Web UI.
+```
+
+On the running homepage choose **Import documents**. Enter the same collection and source IDs, select `records.jsonl`, and click **匯入並開啟圖譜** (import and open graph). The graph opens with the imported source selected. **只預覽** (preview only) shows added, updated and unchanged counts. Try the [three-node example](skills/stocknexus-document-import/examples/manual.jsonl). Web uploads accept files up to 32 MiB. Larger exports can use the CLI workflow below.
+
 ## What does it help you do?
 
 - **Cut through news overload**: collect Google News RSS, Yahoo news and Massive articles, deduplicate them, and explore related events in a news graph.

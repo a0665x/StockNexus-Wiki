@@ -120,7 +120,7 @@
     if(ticket!==loadTicket) return;
     nodes=result.nodes; render();
   }
-  async function refresh(force=false) {
+  async function refresh(force=false, imported=null) {
     const ticket=++catalogTicket;
     const result=await read({});
     if(ticket!==catalogTicket) return;
@@ -130,13 +130,52 @@
     const previous=[...choices.querySelectorAll('input:checked')].map(box=>box.value);
     catalogSignature=next; collections=result.collections;
     picker.replaceChildren(...collections.map(c=>new Option(c.id,c.id)));
-    const desired = old || params.get('collection');
+    const desired = imported?.collection || old || params.get('collection');
     if (collections.some(c=>c.id===desired)) picker.value=desired;
     if (launcher) launcher.hidden=!collections.length;
-    await load(old===picker.value && old ? previous : params.has('source')?[params.get('source')]:undefined);
+    await load(imported ? [imported.source] : old===picker.value && old ? previous : params.has('source')?[params.get('source')]:undefined);
   }
   picker.onchange=()=>load().catch(fail);
   if (!launcher) {
+    const form = byId('importDocuments');
+    const status = byId('importStatus');
+    form.onsubmit = async event => {
+      event.preventDefault();
+      if (form.ariaBusy === 'true') return;
+      const file = form.elements.records.files[0];
+      if (!file) return;
+      const mode = event.submitter?.value || 'apply';
+      const collection = form.elements.collection.value;
+      const source = form.elements.source.value;
+      const buttons = form.querySelectorAll('button');
+      form.ariaBusy = 'true';
+      buttons.forEach(button => { button.disabled = true; });
+      status.textContent = mode === 'preview' ? '預覽中…' : '匯入中…';
+      try {
+        const query = new URLSearchParams({collection, source, mode});
+        const response = await fetch('/api/documents/import?' + query, {
+          method:'POST', headers:{'Content-Type':'application/x-ndjson'}, body:file
+        });
+        const result = await response.json();
+        if (!response.ok) throw Error(result.error || String(response.status));
+        const action = result.dry_run ? '預覽（未寫入）' : '已匯入';
+        status.textContent = action + ' · 新增 ' + result.added + ' · 更新 ' + result.updated +
+          ' · 未變更 ' + result.unchanged + ' · 重複列 ' + result.duplicate_lines;
+        if (!result.dry_run) {
+          try {
+            await refresh(true, {collection, source});
+            history.replaceState(null, '', '/documents?' + new URLSearchParams({collection,source}));
+          } catch (error) {
+            status.textContent += '。讀取圖譜失敗，請重新讀取 DB。' + error.message;
+          }
+        }
+      } catch (error) {
+        status.textContent = error.message;
+      } finally {
+        form.ariaBusy = 'false';
+        buttons.forEach(button => { button.disabled = false; });
+      }
+    };
     byId('layers').onchange=render;
     byId('refreshDocuments').onclick=()=>refresh(true).catch(fail);
     const canvas=byId('docGraph');
