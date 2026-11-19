@@ -1,4 +1,7 @@
 import json
+import shutil
+import subprocess
+import sys
 from pathlib import Path
 import tempfile
 import unittest
@@ -79,3 +82,37 @@ class DocumentImportTests(unittest.TestCase):
         self.assertEqual(upload('apply', data)[1]['unchanged'], 3)
         self.assertEqual(upload('apply', data + b'{invalid}')[0], 400)
         self.assertEqual(query(self.root)['collections'], [{'id':'research','sources':{'notes':3}}])
+
+    def test_portable_agent_handoff_then_web_compatible_import(self):
+        base = self.input.parent
+        skill = base / 'standalone' / 'stocknexus-document-import'
+        shutil.copytree(ROOT/'stocknexus-document-import', skill)
+        folder = base/'research'
+        chapter = folder/'手冊'/'研究.md'
+        chapter.parent.mkdir(parents=True)
+        chapter.write_text('# 總論\n## 方法\n原文。\n', encoding='utf-8')
+        output = base/'records.jsonl'
+        def run(script, *args):
+            return subprocess.run([sys.executable, '-E', str(skill/'scripts'/script), *map(str,args)],
+                                  cwd=base, text=True, capture_output=True)
+        def validate(source):
+            return run('validate_export.py', output, '--input', source)
+        for source, expected in [(chapter, 3), (folder, 4)]:
+            conversion = run('convert_folder.py', source, '--output', output)
+            self.assertEqual(conversion.returncode, 0, conversion.stderr)
+            validation = validate(source)
+            self.assertEqual(validation.returncode, 0, validation.stderr)
+            self.assertEqual(self.apply(output, preview=True)['added'], expected)
+        self.assertFalse(self.root.exists())
+        self.assertEqual(self.apply(output)['added'], 4)
+        self.assertEqual(self.apply(output)['unchanged'], 4)
+        rows = [json.loads(line) for line in output.read_text().splitlines()]
+        doc = next(r for r in rows if r['kind'] == 'document')
+        section = next(r for r in rows if r['kind'] == 'section')
+        for bad in ([*rows, rows[0]], [r for r in rows if r != doc],
+                    [{**r, 'parent_id': None} if r == doc else r for r in rows],
+                    [{**r, 'parent_id': None} if r == section else r for r in rows],
+                    [{**r, 'parent_id': r['id']} if r == section else r for r in rows]):
+            with self.subTest(bad=bad):
+                output.write_text(''.join(json.dumps(r)+'\n' for r in bad))
+                self.assertNotEqual(validate(folder).returncode, 0)

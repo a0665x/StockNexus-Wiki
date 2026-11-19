@@ -3,6 +3,7 @@
 !server.py
 !news_atlas/
 !news_atlas/**
+!skills/stocknexus-document-import/scripts/document_records.py
 !dist/
 !dist/**
 !schema/

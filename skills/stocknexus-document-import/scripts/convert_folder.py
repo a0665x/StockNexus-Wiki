@@ -54,17 +54,22 @@ def convert(root, path):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('folder',type=Path)
+    parser.add_argument('input',type=Path,help='Markdown/text file or document folder')
     parser.add_argument('--output',type=Path,required=True)
     args=parser.parse_args()
-    if not args.folder.is_dir():
-        parser.error('Input must be a directory')
-    files=sorted(path for path in args.folder.rglob('*') if path.is_file() and not path.is_symlink()
-                 and not any(p.startswith('.') for p in path.relative_to(args.folder).parts))
+    if args.input.is_file():
+        root = args.input.parent
+        files = [args.input]
+    elif args.input.is_dir():
+        root = args.input
+        files = sorted(path for path in root.rglob('*') if path.is_file() and not path.is_symlink()
+                       and not any(p.startswith('.') for p in path.relative_to(root).parts))
+    else:
+        parser.error('Input file or directory does not exist')
     supported=[p for p in files if p.suffix.lower() in ('.txt','.md')]
     for path in files:
         if path.suffix.lower() not in ('.txt','.md') and path.resolve()!=args.output.resolve():
-            print('Needs external extraction:',path.relative_to(args.folder),file=sys.stderr)
+            print('Needs external extraction:',path.relative_to(root),file=sys.stderr)
     if not supported or args.output.suffix.lower()!='.jsonl':
         parser.error('Provide Markdown/text input and a .jsonl output path')
     args.output.parent.mkdir(parents=True,exist_ok=True)
@@ -72,14 +77,14 @@ def main():
         temp=Path(out.name)
     try:
         with temp.open('w',encoding='utf8') as out:
-            directories = {p for f in supported for p in f.relative_to(args.folder).parents if p != Path('.')}
+            directories = {p for f in supported for p in f.relative_to(root).parents if p != Path('.')}
             for directory in sorted(directories):
                 row = {'id':identity('folder', directory.as_posix()), 'kind':'folder', 'title':directory.name}
                 if directory.parent != Path('.'):
                     row['parent_id'] = identity('folder', directory.parent.as_posix())
                 out.write(json.dumps(row,ensure_ascii=False)+'\n')
             for path in supported:
-                for row in convert(args.folder,path):
+                for row in convert(root,path):
                     out.write(json.dumps(row,ensure_ascii=False)+'\n')
         temp.replace(args.output)
     finally:

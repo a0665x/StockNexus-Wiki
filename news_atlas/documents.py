@@ -1,21 +1,18 @@
 """Versioned local document collections. No ticker, remote fetch or model dependency."""
 import contextlib
-import datetime as dt
+from importlib import import_module
 import hashlib
 import io
 import json
 import os
-from pathlib import Path, PurePosixPath
-import re
+from pathlib import Path
 import sqlite3
 import tempfile
 import urllib.parse
 
-SLUG = re.compile(r'[a-z0-9][a-z0-9_-]{0,63}')
-NODE = re.compile(r'[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}')
-KINDS = {'folder', 'document', 'section', 'note', 'claim'}
-RELATIONS = {'cites', 'supports', 'contradicts', 'updates', 'related'}
-FIELDS = {'id', 'kind', 'title', 'parent_id', 'path', 'locator', 'text', 'published_at', 'links', 'layer', 'question'}
+# The standalone agent bundle owns the same record contract served by the API.
+records_schema = import_module('skills.stocknexus-document-import.scripts.document_records')
+
 DB_NAME = 'documents.sqlite3'
 SCHEMA = """CREATE TABLE IF NOT EXISTS versions (
     source TEXT NOT NULL, id TEXT NOT NULL, revision INTEGER NOT NULL, body TEXT NOT NULL,
@@ -26,104 +23,16 @@ CREATE VIEW IF NOT EXISTS current_nodes AS
 """
 
 
-def slug(name):
-    if not isinstance(name, str) or not SLUG.fullmatch(name):
-        raise ValueError('Use 1–64 lowercase letters, numbers, underscores or hyphens for collection/source IDs')
-    return name
-
-
 def folder(root, collection):
     graph = Path(root).resolve() / 'graph'
-    path = graph / slug(collection)
+    path = graph / records_schema.slug(collection)
     if graph.is_symlink() or path.is_symlink() or (path / DB_NAME).is_symlink():
         raise ValueError('Unexpected symlink inside the graph directory')
     return path
 
 
-def string(value, field, limit):
-    if not isinstance(value, str) or not value.strip() or len(value) > limit:
-        raise ValueError(f'Invalid {field} (maximum {limit} characters)')
-    return value
-
-
-def node_id(value):
-    if not isinstance(value, str) or not NODE.fullmatch(value):
-        raise ValueError('Invalid node ID')
-    return value
-
-
-def validate(row, source):
-    if not isinstance(row, dict) or set(row) - FIELDS:
-        raise ValueError('Expected a record with only documented fields')
-    node_id(row.get('id'))
-    if row.get('kind') not in KINDS:
-        raise ValueError('Invalid kind')
-    string(row.get('title'), 'title', 2000)
-    if 'text' in row and (not isinstance(row['text'], str) or len(row['text']) > 120000):
-        raise ValueError('Invalid text (split long documents into sections)')
-    if row.get('parent_id') is not None:
-        node_id(row['parent_id'])
-    if 'path' in row:
-        path = string(row['path'], 'path', 2000)
-        if '\\' in path or PurePosixPath(path).is_absolute() or '..' in path.split('/') or re.match(r'^[A-Za-z]+:', path):
-            raise ValueError('path must be relative to the original document folder')
-    if 'locator' in row:
-        loc = row['locator']
-        if not isinstance(loc, dict) or not loc or set(loc) - {'page','heading','line'}:
-            raise ValueError('Use page, heading or line in locator')
-        for key, value in loc.items():
-            if key == 'heading':
-                string(value, key, 500)
-            elif type(value) is not int or value < 1:
-                raise ValueError('page/line must be positive integers')
-    if row.get('published_at') is not None:
-        date = string(row['published_at'], 'published_at', 10)
-        if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', date):
-            raise ValueError('Use YYYY-MM-DD or null')
-        dt.date.fromisoformat(date)
-    links = row.get('links', [])
-    if not isinstance(links, list):
-        raise ValueError('Expected a links array')
-    for link in links:
-        if not isinstance(link, dict) or set(link) - {'type','source','id','revision'} or link.get('type') not in RELATIONS:
-            raise ValueError('Invalid link')
-        slug(link.get('source',source))
-        node_id(link.get('id'))
-        if 'revision' in link and (type(link['revision']) is not int or link['revision'] < 1):
-            raise ValueError('Invalid citation revision')
-    if row.get('kind') == 'claim':
-        if row.get('layer') not in ('L1','L2') or not any(l['type']=='cites' and 'revision' in l for l in links):
-            raise ValueError('Claims need a layer and a citation to a specific revision')
-        if row['layer']=='L2':
-            string(row.get('question'), 'L2 research question', 2000)
-    elif 'layer' in row or 'question' in row:
-        raise ValueError('Only claims have a Wiki layer or research question')
-
-
 def encode(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':'), allow_nan=False)
-
-
-def read_records(stream, source):
-    records = {}
-    duplicates = 0
-    for index, line in enumerate(stream, 1):
-        if not line.strip():
-            continue
-        try:
-            row = json.loads(line)
-            validate(row, source)
-            ident = row['id']
-            if ident in records:
-                if records[ident] != row:
-                    raise ValueError('Conflicting definitions of '+ident)
-                duplicates += 1
-            records[ident] = row
-        except (ValueError, TypeError) as exc:
-            raise ValueError(f'Line {index}: {exc}') from exc
-    if not records:
-        raise ValueError('The JSONL input is empty')
-    return records, duplicates
 
 
 def validate_graph(db, source, records, revisions):
@@ -174,9 +83,9 @@ def import_records(root, collection, source, input_path, dry_run):
 
 
 def import_stream(root, collection, source, stream, dry_run):
-    slug(source)
+    records_schema.slug(source)
     base = folder(root, collection)
-    records, duplicates = read_records(stream, source)
+    records, duplicates = records_schema.read_records(stream, source)
     path = base/DB_NAME
     if dry_run:
         conn = sqlite3.connect(path.as_uri()+'?mode=ro', uri=True) if path.exists() else sqlite3.connect(':memory:')
@@ -211,7 +120,7 @@ def query(root, collection=None, source=None, ident=None, revision=None):
     if collection is None:
         entries = []
         for path in sorted((Path(root)/'graph').glob('*/'+DB_NAME)):
-            if not SLUG.fullmatch(path.parent.name) or path.is_symlink() or path.parent.is_symlink():
+            if not records_schema.SLUG.fullmatch(path.parent.name) or path.is_symlink() or path.parent.is_symlink():
                 continue
             with contextlib.closing(sqlite3.connect(path.resolve().as_uri()+'?mode=ro', uri=True)) as db:
                 sources = dict(db.execute('SELECT source,count(*) FROM current_nodes GROUP BY source'))
@@ -224,11 +133,11 @@ def query(root, collection=None, source=None, ident=None, revision=None):
     with contextlib.closing(sqlite3.connect(path.as_uri()+'?mode=ro', uri=True)) as db:
         if ident is not None:
             row = db.execute('SELECT body FROM versions WHERE source=? AND id=? AND revision=?',
-                             (slug(source),node_id(ident),int(revision))).fetchone()
+                             (records_schema.slug(source),records_schema.node_id(ident),int(revision))).fetchone()
             if not row:
                 raise KeyError('Unknown revision')
             return {'record':json.loads(row[0]),'revision':int(revision),'source':source}
-        clause, args = (' WHERE source=?',(slug(source),)) if source is not None else ('',())
+        clause, args = (' WHERE source=?',(records_schema.slug(source),)) if source is not None else ('',())
         rows = db.execute('SELECT source,id,revision,body FROM current_nodes'+clause+' ORDER BY source,id', args)
         return {'collection':collection,'nodes':[dict(json.loads(body),source=owner,revision=rev) for owner,_,rev,body in rows]}
 
