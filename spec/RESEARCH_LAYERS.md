@@ -25,7 +25,9 @@ For the current L1 backfill packet format, partial classification, L2 reading an
 
 使用者確認白底、柔和配色、圓角框、AI 插畫、節點簇與清晰箭頭的構圖符合產品概念。三層金字塔是 **News／Evidence → 共享通用 L1 → 客製 L2**；不改程式的兩個觀點層命名，Classifier／Taxonomy 仍是支援元件。圖上 Root Trees 是新聞分組示意，不能把 News 規則邊當成已驗證的支持／因果關係。
 
-[README](../README.md) 提供 [中文圖](../docs/media/stocknexus-architecture-zh-TW.png)／[英文圖](../docs/media/stocknexus-architecture-en.png)。技術文件保留第一版限制（介紹圖不放限制旁註）：確定性 Lens、分類＋文字檢索、候選詞受控審核、價格／敘事基線缺口；持續累積不等於保證正確。維護回路是新增證據、檢查反證、修訂受影響觀點與刷新研究，不許把 L2 推論當 L1 外部證據。這次只更新介紹與圖，不宣稱新增 runtime 能力。
+[英文 README](../README.md) 和[繁體中文版](../README.zh-TW.md) 各附對應語言的圖。2026-11-20 版本標出 L1 圖譜模式的新聞樹 worker、供 L2 檢索的觀點與分類輸出，以及客戶文件經 JSONL 匯入獨立知識庫的路徑。[中文圖](../docs/media/stocknexus-architecture-zh-TW.png) · [英文圖](../docs/media/stocknexus-architecture-en.png) · [圖片來源與重製方法](../docs/media/README.md)
+
+技術文件保留第一版限制（介紹圖不放限制旁註）：確定性 Lens、分類＋文字檢索、候選詞受控審核、價格／敘事基線缺口；持續累積不等於保證正確。維護回路是新增證據、檢查反證、修訂受影響觀點與刷新研究，不許把 L2 推論當 L1 外部證據。這次只更新介紹與圖，不宣稱新增 runtime 能力。
 
 ## 現況與整合
 

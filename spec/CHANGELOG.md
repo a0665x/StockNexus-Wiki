@@ -1,5 +1,11 @@
 # 變更與驗證 log
 
+## 2026-11-20 — English repository landing page and architecture figures
+
+The [English guide](../README.md) and [Traditional Chinese guide](../README.zh-TW.md) link to one another at the top right. Both figures now show tree workers in stock L1 and the independent JSONL document collection. The original PNG URLs and the previous English README link still resolve. [Bilingual figure source and export commands](../docs/media/README.md)
+
+Chromium followed the language links in both directions at widths of 390 and 1223 pixels. Both images loaded and the pages fit the viewport. Rendering the SVG again reproduced both 1800 × 1125 PNGs byte for byte. To repeat the 37 passing document import, worker and L2 research checks, run `PYTHONPATH=tests python3 -m unittest -q test_document_import test_wiki_parallel test_research` from the project root.
+
 ## 2026-11-20 — Contextual help and functional colors
 
 News, Wiki, Chat, document graphs and API navigation reveal secondary explanations on demand. The shared header displays the ribbon. Source, time and viewpoint tools carry distinct background colors. The Chromium journey measures hover timing, verifies accessible names and descriptions, checks modal and touch dismissal and samples the three filled launchers. [Acceptance scenarios](references/unslop-20261120.md#contextual-help-and-tool-colors) · [Release verification](TESTING.md#workbench-release-verification)

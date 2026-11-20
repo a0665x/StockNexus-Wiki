@@ -1,0 +1,125 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+     width="1200" height="750" viewBox="0 0 1200 750" role="img" aria-labelledby="title desc">
+  <title id="title">StockNexus Wiki</title>
+  <desc id="desc">Stock news feeds shared L1 viewpoints and question-specific L2 research. Document collections use a separate JSONL import workflow.</desc>
+  <defs>
+    <style>
+      text { font-family: "DejaVu Sans", "Noto Sans CJK TC", sans-serif; fill: #172e39; }
+      .brand { font-size: 20px; font-weight: bold; fill: #356864; }
+      .title { font-size: 43px; font-weight: bold; }
+      .stage { font-size: 24px; font-weight: bold; }
+      .section { font-size: 24px; font-weight: bold; }
+      .label { font-size: 19px; font-weight: bold; }
+      .body { font-size: 18px; }
+      .sub { font-size: 17px; fill: #425960; }
+      .key { font-size: 15px; font-weight: bold; }
+      .edge { fill: none; stroke: #546970; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+      .rule { stroke: #c7d6d6; stroke-width: 1; }
+    </style>
+    <image id="art" width="2172" height="724" xlink:href="architecture-art.png"/>
+  </defs>
+  <rect width="1200" height="750" fill="white"/>
+  <text x="34" y="43" class="brand">StockNexus Wiki</text>
+
+  <!-- The same three tiers appear in the cards below. The classifier belongs to L1. -->
+  <g stroke-linejoin="round" stroke-width="1.3">
+    <path d="M1025 17 1014 34H1036Z" fill="#e4dafa" stroke="#9989ba"/>
+    <path d="M1011 39H1039L1051 56H999Z" fill="#d8eddf" stroke="#7fa78f"/>
+    <path d="M996 61H1054L1066 79H984Z" fill="#d6e7f4" stroke="#81a3bc"/>
+  </g>
+  <text x="1080" y="32" class="key">L2</text>
+  <text x="1080" y="54" class="key">L1</text>
+
+  <rect x="32" y="122" width="350" height="334" rx="18" fill="#f0f6fb" stroke="#b6cddf"/>
+  <rect x="425" y="122" width="350" height="334" rx="18" fill="#eff7f1" stroke="#b2cfbf"/>
+  <rect x="818" y="122" width="350" height="334" rx="18" fill="#f5f2fa" stroke="#ccbfdf"/>
+  <path class="edge" d="M382 269H422M415 263l8 6-8 6"/>
+
+  <!-- Each viewBox frames one illustration from the shared, unlettered strip. -->
+  <svg x="101" y="211" width="212" height="126" viewBox="65 205 658 392"><use xlink:href="#art"/></svg>
+  <svg x="532" y="207" width="136" height="132" viewBox="848 102 552 539"><use xlink:href="#art"/></svg>
+  <svg x="918" y="207" width="151" height="132" viewBox="1490 109 555 485"><use xlink:href="#art"/></svg>
+  <path class="rule" d="M54 348H360M447 348H753M840 348H1146"/>
+
+  <!-- Both L1 outputs feed the retrieval step in L2. -->
+  <rect x="445" y="355" width="308" height="29" rx="6" fill="#daeee1"/>
+  <rect x="445" y="389" width="308" height="29" rx="6" fill="#f5e8cb"/>
+  <path d="M753 369H785Q791 369 791 375V386" fill="none" stroke="#5a9578" stroke-width="2.5"/>
+  <path d="M753 403H785Q791 403 791 397V386" fill="none" stroke="#b58c45" stroke-width="2.5"/>
+  <path class="edge" d="M791 386H815M808 380l8 6-8 6"/>
+
+  <path class="rule" d="M32 472H1168M32 526H1168"/>
+  <!-- This lane is a separate collection. No arrows cross from it into the stock Wiki. -->
+  <rect x="32" y="550" width="1136" height="175" rx="18" fill="#fbf8f2" stroke="#d9cfbb"/>
+  <g fill="#fff" stroke="#dfd7c8">
+    <rect x="54" y="604" width="314" height="98" rx="10"/>
+    <rect x="443" y="604" width="314" height="98" rx="10"/>
+    <rect x="832" y="604" width="314" height="98" rx="10"/>
+  </g>
+  <path class="edge" d="M368 653H440M433 647l8 6-8 6M757 653H829M822 647l8 6-8 6"/>
+
+  <switch>
+    <g systemLanguage="zh" xml:lang="zh-TW">
+      <text x="32" y="95" class="title">從股票新聞到有據可查的研究</text>
+      <text x="1080" y="77" class="key">新聞</text>
+      <text x="54" y="165" class="stage">新聞圖譜</text>
+      <text x="54" y="194" class="sub">Google 新聞 RSS、Yahoo、Massive</text>
+      <text x="54" y="378" class="body">依股票保存新聞至 SQLite</text>
+      <text x="54" y="405" class="body">依規則連結相關報導</text>
+      <text x="54" y="432" class="body">在 3D 圖譜或時間軸閱讀原文</text>
+      <text x="447" y="165" class="stage">L1 · 共享觀點</text>
+      <text x="447" y="194" class="sub">同一股票的不同研究可共用</text>
+      <text x="455" y="376" class="body">觀點子圖與引用的新聞版本</text>
+      <text x="455" y="410" class="body">分類標籤與別名索引</text>
+      <text x="447" y="440" class="sub">圖譜模式 · 1、3、5 或 10 個 worker</text>
+      <text x="840" y="165" class="stage">L2 · 專題研究</text>
+      <text x="840" y="194" class="sub">依研究問題、股票與期間選取證據</text>
+      <text x="840" y="378" class="body">依標籤與文字檢索 L1</text>
+      <text x="840" y="405" class="body">整理支持證據、反證與成立條件</text>
+      <text x="840" y="432" class="body">持續追蹤研究或保存固定快照</text>
+      <text x="42" y="505" class="label">啟用持續維護後</text>
+      <text x="328" y="505" class="body">新證據會更新受影響的 L1 觀點。追蹤中的研究會在輸入改變時更新。</text>
+      <text x="54" y="586" class="section">自己的文件知識庫</text>
+      <text x="69" y="636" class="label">文章或資料夾</text>
+      <text x="69" y="665" class="sub">Agent 閱讀原文，整理文章層級</text>
+      <text x="69" y="687" class="sub">與有文字依據的連線。</text>
+      <text x="458" y="636" class="label">records.jsonl</text>
+      <text x="458" y="665" class="sub">在 Web UI 預覽已驗證的檔案，</text>
+      <text x="458" y="687" class="sub">確認內容後匯入。</text>
+      <text x="847" y="636" class="label">文件圖譜</text>
+      <text x="847" y="665" class="sub">在同一知識庫查看多篇文章、</text>
+      <text x="847" y="687" class="sub">章節、引用與內容關係。</text>
+    </g>
+    <g xml:lang="en">
+      <text x="32" y="95" class="title">From stock news to cited research</text>
+      <text x="1080" y="77" class="key">News</text>
+      <text x="54" y="165" class="stage">News graph</text>
+      <text x="54" y="194" class="sub">Google News RSS · Yahoo · Massive</text>
+      <text x="54" y="378" class="body">News stored by stock in SQLite</text>
+      <text x="54" y="405" class="body">Rules link related articles</text>
+      <text x="54" y="432" class="body">Explore in 3D or on a timeline</text>
+      <text x="447" y="165" class="stage">L1 · Shared viewpoints</text>
+      <text x="447" y="194" class="sub">Reusable viewpoints for one stock</text>
+      <text x="455" y="376" class="body">L1 subgraphs and cited articles</text>
+      <text x="455" y="410" class="body">Taxonomy labels and aliases</text>
+      <text x="447" y="440" class="sub">Graph mode · 1, 3, 5 or 10 workers</text>
+      <text x="840" y="165" class="stage">L2 · Custom research</text>
+      <text x="840" y="194" class="sub">A question, a stock and a date range</text>
+      <text x="840" y="378" class="body">Retrieve L1 by labels and text</text>
+      <text x="840" y="405" class="body">Weigh evidence for and against</text>
+      <text x="840" y="432" class="body">Track updates or pin a snapshot</text>
+      <text x="42" y="505" class="label">Optional maintenance</text>
+      <text x="328" y="505" class="body">Update affected L1 viewpoints. Refresh tracked studies when their inputs change.</text>
+      <text x="54" y="586" class="section">Your document collection</text>
+      <text x="69" y="636" class="label">Files or folders</text>
+      <text x="69" y="665" class="sub">An agent reads the articles and</text>
+      <text x="69" y="687" class="sub">records evidence-backed links.</text>
+      <text x="458" y="636" class="label">records.jsonl</text>
+      <text x="458" y="665" class="sub">Preview the validated export in</text>
+      <text x="458" y="687" class="sub">the Web UI, then import it.</text>
+      <text x="847" y="636" class="label">Document graph</text>
+      <text x="847" y="665" class="sub">Browse articles, sections and</text>
+      <text x="847" y="687" class="sub">their links in one collection.</text>
+    </g>
+  </switch>
+</svg>

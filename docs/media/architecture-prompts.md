@@ -1,5 +1,11 @@
 # Architecture illustration generation
 
+## Published November 20, 2026
+
+ImageGen adapted the previous English figure into a transparent strip illustrating news trees, the L1 robot arranging viewpoints and citations, and a magnifier inspecting an L2 viewpoint. The bilingual SVG adds the labels, arrows, L1 output boxes and the separate JSONL collection path. Edit the SVG and render both languages for factual or wording changes. [Source and export commands](README.md#update-the-figures)
+
+## November 7–8 artwork history
+
 Generated with the built-in imagegen tool on 2026-11-07. Raster PNGs with a vector illustration style; not editable SVGs. Both editions derive from the user-approved three-stage concept figure. Maintenance arrows represent orchestration, never L2-as-evidence feedback. The README and spec describe implementation boundaries.
 
 ## English prompt

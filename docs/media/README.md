@@ -1,9 +1,19 @@
-# README 媒體
+# README architecture figures
 
-- `stocknexus-architecture-zh-TW.png`：用於根目錄 `README.md`。
-- `stocknexus-architecture-en.png`：用於根目錄 `README.en.md`。
-- 兩份 README 在頂端互相切換語言，各自嵌入圖片。PNG 由內建 imagegen 製作，生成要求見 [architecture-prompts.md](architecture-prompts.md)。
-- 最新圖保留明確的 L1 子圖、分類索引與入選證據輸出框，箭頭連到實際輸入／輸出。三階段為新聞圖譜、共享 L1、客製 L2。
+The [English README](../../README.md) uses [the English figure](stocknexus-architecture-en.png). The [Traditional Chinese README](../../README.zh-TW.md) uses [the Traditional Chinese figure](stocknexus-architecture-zh-TW.png). Both PNGs keep their original public paths.
+
+## Update the figures
+
+Edit the labels and connectors in [architecture.svg](architecture.svg). Both languages share one layout and one [unlettered illustration](architecture-art.png). The blue, green and purple panels follow stock news through L1 and L2. The document import below them has its own collection database. [Research contract](../../spec/RESEARCH_LAYERS.md) · [Tree workers](../../spec/WIKI_RUNTIME.md) · [Document import](../../spec/DOCUMENT_IMPORT.md)
+
+With librsvg, DejaVu Sans and Noto Sans CJK TC installed, run these commands from the repository root.
+
+```bash
+rsvg-convert --accept-language en --width 1800 --output docs/media/stocknexus-architecture-en.png docs/media/architecture.svg
+rsvg-convert --accept-language zh-TW --width 1800 --output docs/media/stocknexus-architecture-zh-TW.png docs/media/architecture.svg
+```
+
+Inspect both exports at README width after editing. The [illustration notes](architecture-prompts.md) record the artwork's provenance.
 
 ## 歷史影片資產
 
