@@ -1,6 +1,7 @@
 /* Interface translation only. Original news, evidence and JSON are never translated. */
 (function(root){
   const dictionary={
+'調整頁首高度':'Resize header height','拖曳調整頁首高度，雙擊還原':'Drag to resize the header. Double-click to reset.',
 '搜尋完成後自動儲存圖譜快照':'Automatically save snapshot after search',
 '上一頁':'Previous page','下一頁':'Next page','頁碼':'Page number',
 '時間貢獻':'Time contribution','股價貢獻':'Price contribution','混合倍率':'Blended size',

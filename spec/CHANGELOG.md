@@ -1,5 +1,9 @@
 # 變更與驗證 log
 
+## 2026-11-20 — Resizable header and centered News tool icons
+
+The shared header scales the visible ribbon artwork as its bottom edge moves. News sources use a stacked database and time/size focus uses a curve inside a magnifier. Both also appear in their expanded headings. The shared spec now routes new sessions from `main` to a feature contract, its browser or service tests and the local source index. [Behavior and verification](references/wiki-timeline-workbench.md#resizing-the-shared-header) · [Test routes](TESTING.md#workbench-release-verification)
+
 ## 2026-11-20 — Movable News and Wiki launchers and ribbon logo
 
 News source and time tools can float over the sidebars. All three tools remember separate window and launcher positions. Collapsing and reopening a docked News reader also restores its split. The shared header uses the replaceable ribbon PNG. [Interaction and image replacement](references/wiki-timeline-workbench.md)

@@ -1,6 +1,14 @@
 # Current handoff — 2026-11-20 (Asia/Taipei)
 
-## Latest update on November 20 — News and Wiki floating tools
+## Workbench release handoff
+
+Use `main` for new work. The corresponding release branch is `llm_wiki_unslop`. To check the release on a later checkout, run `git rev-parse HEAD` and `git merge-base --is-ancestor origin/llm_wiki_unslop origin/main` after refreshing remote refs. An exit code of zero confirms that the fetched main includes the tip of the fetched feature branch.
+
+News and Wiki share a left-aligned, resizable ribbon logo. Drag the bottom edge or focus it and use the arrow keys. The News source and time tools use centered database and curve-lens icons. The English acceptance record links to executable browser tests, deployment checks and the existing controls for cache, workers, Chat and document import. [Header and icon behavior](references/wiki-timeline-workbench.md#resizing-the-shared-header) · [Feature-to-test index](TESTING.md#workbench-release-verification)
+
+For a research task, read the current stock's job ledger before continuing it. Historical NVDA and TSLA publication numbers below are dated observations. [NVDA research handoff](references/nvda-research-20261120.md)
+
+## Earlier on November 20 — News and Wiki floating tools
 
 The source filter, time and size focus, and citation timeline can move across their workbenches. Each minimized icon can move independently. The replaceable header PNG lives at `dist/stocknexus-wiki.png`. [Interaction and replacement instructions](references/wiki-timeline-workbench.md) · [Browser verification](TESTING.md)
 

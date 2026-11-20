@@ -1,5 +1,32 @@
 # 測試與驗收
 
+## Workbench release verification
+
+Run the listed scripts from the repository root. On this host, use `/usr/bin/python3` for Chromium journeys. Each journey opens an isolated profile with controlled data. The current release changes the shared header and News tool icons. The paths below also locate the acceptance records for features brought into `main` with it.
+
+| Area | Contract | Executable regression |
+| --- | --- | --- |
+| Ribbon, header edge, centered tool icons, chart and comparison | [Workbench gestures and expected results](references/wiki-timeline-workbench.md#resizing-the-shared-header) | [Header resize and image substitution](../tests/browser_workbench_header.py), [News and Wiki launchers](../tests/browser_wiki_timeline.py), [Wiki pane geometry](../tests/browser_wiki_layout.py), [News controls](../tests/browser_user_journeys.py) |
+| Stock alignment, preparation and Chat history | [Workbench and Chat](references/unslop-20261120.md) | [Browser entry and conversations](../tests/browser_unslop.py), [saved identity](../tests/browser_wiki_identity.py), [Chat history storage](../tests/chat-history.test.mjs) |
+| Parallel L1 tree work and progress | [Worker and tree units](WIKI_RUNTIME.md#2026-11-20--parallel-tree-workers-and-consistent-progress) | [Concurrent work and checkpoints](../tests/test_wiki_parallel.py), [worker progress in the browser](../tests/browser_wiki_workers.py) |
+| News-to-Wiki warm reads and isolated classifier failures | [Cache and classifier acceptance](references/wiki-cache-classifier-20261120.md) | [Conditional reads](../tests/browser_wiki_cache.py), [batch failure recovery](../tests/test_wiki_classification_batches.py) |
+| Timing and errors across L1, L2 and the model bridge | [Trace fields and report](WIKI_OBSERVABILITY.md) | [Python traces](../tests/test_wiki_trace.py), [bridge traces](../tests/chat-wiki-trace.test.mjs) |
+| L2 evidence, bilingual Chat, context and viewpoint comparison | [Research scenarios](CHAT_RESEARCH_BDD.md), [research layers](RESEARCH_LAYERS.md) | [L2 and Chat](../tests/browser_research_chat_bdd.py), [context API](../tests/test_context_api.py), [comparison](../tests/test_viewpoint_comparison.py) |
+| Client articles, missing metadata, JSONL preview and graph relations | [Document import](DOCUMENT_IMPORT.md) | [Schema, replay and relation reasons](../tests/test_document_import.py), [file upload through Chromium](../tests/browser_documents.py) |
+
+The full Python suite passed 372 tests. The combined Node command passed 48 tests. The header journey measured visible image pixels on desktop and compact screens, exercised mouse, keyboard, emulated touch and reload, and exposed a phone layout overflow during development. The final fixture kept every header action reachable. The timeline journey checked the rendered SVG path centers, the Wiki layout regression passed all 51 checks and the News journey passed its interaction checks.
+
+```sh
+/usr/bin/python3 tests/browser_workbench_header.py
+/usr/bin/python3 tests/browser_wiki_timeline.py
+/usr/bin/python3 tests/browser_wiki_layout.py
+/usr/bin/python3 tests/browser_user_journeys.py
+/usr/bin/python3 -m unittest discover -s tests -q
+node --test tests/test_*.cjs tests/*.test.mjs
+/usr/bin/python3 spec/scripts/verify_docs.py
+git diff --check
+```
+
 ## November 20, 2026 — Floating News tools, movable launchers and replaceable PNG
 
 The browser journey uses real pointer and keyboard events at 1223 × 914, 690 × 914 and 390 × 844. It verifies moving an expanded tool outside the graph, separate positions for open and minimized tools, touch cancellation, reloading nested splits, accessible focus, and delivery of the supplied PNG. [Given/When/Then and file replacement instructions](references/wiki-timeline-workbench.md#movable-tools-and-replaceable-header-artwork)

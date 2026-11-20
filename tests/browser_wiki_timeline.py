@@ -111,6 +111,18 @@ def touch(page, start, destination=None, cancel=False):
     page.call('Input.dispatchTouchEvent',{'type':'touchCancel' if cancel else 'touchEnd','touchPoints':[]})
 
 
+def centered_glyph(page, selector, glyph, expanded=False):
+    target=json.dumps(selector+' .panel-symbol' if expanded else selector)
+    result=page.js(f"""(()=>{{
+      const slot=document.querySelector({target}),path=slot.querySelector('svg path');
+      const box=slot.getBoundingClientRect(),ink=path.getBoundingClientRect();
+      return {{dx:ink.left+ink.width/2-box.left-box.width/2,dy:ink.top+ink.height/2-box.top-box.height/2,
+        width:ink.width,height:ink.height,expected:path.getAttribute('d')===AtlasUI.icon({json.dumps(glyph)}).firstChild.getAttribute('d')}};
+    }})()""")
+    assert result['expected'] and min(result['width'],result['height'])>10,(selector,result)
+    assert abs(result['dx'])<=1 and abs(result['dy'])<=1,(selector,result)
+
+
 def news_windows(page):
     stage=rect(page,'#stage')
     saved={}
@@ -120,12 +132,15 @@ def news_windows(page):
         grip='#'+prefix+'Drag'
         if page.js(f"$('{body}').hidden"):
             click(page,grip)
+        glyph='database' if prefix=='sourcePanel' else 'curveLens'
+        centered_glyph(page,grip,glyph,expanded=True)
         window=rect(page,panel)
         drag(page,point(page,grip),x-window['x'],y-window['y'])
         expanded=rect(page,panel)
         assert abs(expanded['x']-x)<2 and abs(expanded['y']-y)<2 and expanded['x']<stage['left']-100,expanded
         click(page,'#'+prefix+'Toggle')
         small=rect(page,grip)
+        centered_glyph(page,grip,glyph)
         assert small['width']==small['height']==40,(prefix,small,page.js(f"$('{body}').hidden"))
         assert page.js(f"document.activeElement.id==='{prefix}Drag'")
         pos=point(page,grip)
@@ -150,6 +165,7 @@ def news_windows(page):
     for selector in saved:
         r=rect(page,selector)
         assert 8<=r['x']<r['right']<=682 and r['height']==r['width']==44,r
+        centered_glyph(page,selector,'database' if selector=='#sourcePanelDrag' else 'curveLens')
     page.check('ribbon and header actions fit the annotated 690 px viewport',
         "(()=>{const h=document.querySelector('body>header'),img=h.querySelector('img');return img.complete&&img.naturalWidth>0&&img.width>=145&&h.scrollWidth<=innerWidth&&[...h.querySelectorAll('button,select')].every(n=>n.getBoundingClientRect().right<=innerWidth)})()")
     selector='#sourcePanelDrag'
@@ -280,6 +296,7 @@ def run(page):
     filtered=page.js("$('wikiTimeline').dataset.start")
     click(page,'#wikiTimelineFold')
     icon=rect(page,'#wikiTimelineLauncher')
+    centered_glyph(page,'#wikiTimelineLauncher','chart')
     assert 32<=icon['width']==icon['height']<=52 and rect(page,'#wikiCanvas')['height']>canvas['height']+50
     page.check('minimize moves focus onto the square launcher',"document.activeElement===$('wikiTimelineLauncher')")
     pos=point(page,'#wikiTimelineLauncher')

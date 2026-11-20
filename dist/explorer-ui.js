@@ -3,8 +3,8 @@
   const read=(key,fallback=null)=>{try{return JSON.parse(localStorage.getItem('graphnews.'+key))??fallback;}catch{return fallback;}};
   const write=(key,value)=>{try{if(value===null)localStorage.removeItem('graphnews.'+key);else localStorage.setItem('graphnews.'+key,JSON.stringify(value));return true;}catch{return false;}};
   const iconPaths={
-    sources:'m3 8 9-5 9 5-9 5-9-5 M3 12l9 5 9-5 M3 16l9 5 9-5',
-    clock:'M21 12a9 9 0 1 1-18 0 9 9 0 1 1 18 0 M12 7v5l3 2',
+    database:'M20 6a8 3 0 1 1-16 0 8 3 0 0 1 16 0Z M4 6v12a8 3 0 0 0 16 0V6 M4 12a8 3 0 0 0 16 0',
+    curveLens:'M18.5 10.5a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z M16.2 16.2l5.3 5.3 M5.5 12.5c1.8 0 2.3-4.6 4.1-3.5s1.9 4.1 3.6 2.1l2.2-3',
     chart:'M3 4v16h18 M7 15v-4 M12 15V6 M17 15V9',
     reset:'M9 4 4 9l5 5 M5 9h9a6 6 0 0 1 0 12',
     expand:'M9 4H4v5 M15 4h5v5 M20 15v5h-5 M9 20H4v-5',
@@ -285,10 +285,113 @@
     }
     constrain();return {constrain,state};
   }
-  const initSourcePanel=$=>initFloatingPanel($,{key:'sourcePanel',panelId:'sourcePanel',bodyId:'sourcePanelBody',handleId:'sourcePanelDrag',toggleId:'sourcePanelToggle',resetId:'sourcePanelReset',glyph:'sources',openLabel:'開啟來源篩選'});
-  const initTimePanel=($,onChange)=>initFloatingPanel($,{key:'timePanel',panelId:'timeFocusBar',bodyId:'timeFocusBody',handleId:'timePanelDrag',toggleId:'timePanelToggle',resetId:'timePanelReset',glyph:'clock',openLabel:'開啟時間大小焦點',onChange});
+  const initSourcePanel=$=>initFloatingPanel($,{key:'sourcePanel',panelId:'sourcePanel',bodyId:'sourcePanelBody',handleId:'sourcePanelDrag',toggleId:'sourcePanelToggle',resetId:'sourcePanelReset',glyph:'database',openLabel:'開啟來源篩選'});
+  const initTimePanel=($,onChange)=>initFloatingPanel($,{key:'timePanel',panelId:'timeFocusBar',bodyId:'timeFocusBody',handleId:'timePanelDrag',toggleId:'timePanelToggle',resetId:'timePanelReset',glyph:'curveLens',openLabel:'開啟時間大小焦點',onChange});
+  // Measure a small alpha mask once per image load so a drop-in PNG can have any border.
+  function frameBrand(image,onMeasure){
+    const heading=image.closest('h1');
+    function measure(){
+      const width=image.naturalWidth,height=image.naturalHeight;
+      if(!width||!height)return;
+      const sample=document.createElement('canvas'),scale=Math.min(1,512/Math.max(width,height));
+      sample.width=Math.max(1,Math.round(width*scale));
+      sample.height=Math.max(1,Math.round(height*scale));
+      let left=0,top=0,right=sample.width,bottom=sample.height;
+      try{
+        const ctx=sample.getContext('2d');
+        ctx.drawImage(image,0,0,sample.width,sample.height);
+        const pixels=ctx.getImageData(0,0,sample.width,sample.height).data;
+        let xMin=right,yMin=bottom,xMax=-1,yMax=-1;
+        for(let y=0;y<sample.height;y++)for(let x=0;x<sample.width;x++){
+          if(pixels[(y*sample.width+x)*4+3]<32)continue;
+          xMin=Math.min(xMin,x);xMax=Math.max(xMax,x);
+          yMin=Math.min(yMin,y);yMax=Math.max(yMax,y);
+        }
+        if(xMax>=0){
+          left=Math.max(0,xMin-1);top=Math.max(0,yMin-1);
+          right=Math.min(right,xMax+2);bottom=Math.min(bottom,yMax+2);
+        }
+      }catch{/* An unreadable mask uses the full intrinsic image. */}
+      const w=right-left,h=bottom-top;
+      heading.style.setProperty('--brand-aspect',(width*w/sample.width)/(height*h/sample.height));
+      heading.style.setProperty('--brand-image-width',100*sample.width/w+'%');
+      heading.style.setProperty('--brand-image-left',-100*left/w+'%');
+      heading.style.setProperty('--brand-image-top',-100*top/h+'%');
+      onMeasure();
+    }
+    image.addEventListener('load',measure);
+    if(image.complete)measure();
+  }
+
+  function initHeaderResize(header,handle){
+    if(!header||!handle)return;
+    const rootNode=document.documentElement;
+    const heading=header.querySelector('h1');
+    const controls=Array.from(header.querySelectorAll(':scope > span,button,select'));
+    const saved=read('headerHeight');
+    let preferred=Number.isFinite(saved)?saved:null;
+    let height,minimum,maximum,standard,drag=null;
+    // Move the controls below a wide wordmark when a second row gives it more room.
+    function fitRows(){
+      const css=getComputedStyle(header);
+      const gap=parseFloat(css.columnGap);
+      let room=header.clientWidth-parseFloat(css.paddingLeft)-parseFloat(css.paddingRight);
+      for(const control of controls)if(control.offsetWidth)room-=control.offsetWidth+gap;
+      const aspect=Number(heading.style.getPropertyValue('--brand-aspect'))||3;
+      const secondRowWidth=(height-parseFloat(css.getPropertyValue('--controls-row')))*aspect;
+      header.toggleAttribute('data-stacked',root.innerWidth<=520||secondRowWidth>room);
+    }
+    function render(value){
+      height=limit(Math.round(value??standard),minimum,maximum);
+      rootNode.style.setProperty('--workbench-header-height',height+'px');
+      fitRows();
+      handle.setAttribute('aria-valuenow',height);
+    }
+    function refresh(){
+      const css=getComputedStyle(rootNode);
+      standard=parseFloat(css.getPropertyValue('--header-default'));
+      minimum=parseFloat(css.getPropertyValue('--header-min'));
+      maximum=Math.max(minimum,Math.min(180,Math.floor(root.innerHeight/4)));
+      handle.setAttribute('aria-valuemin',minimum);handle.setAttribute('aria-valuemax',maximum);
+      render(preferred);
+    }
+    function save(value){
+      render(value);preferred=value===null?null:height;write('headerHeight',preferred);
+    }
+    function finish(commit){
+      if(!drag)return;
+      const {id,startHeight}=drag;drag=null;
+      if(commit&&height!==startHeight)save(height);
+      else render(preferred);
+      if(handle.hasPointerCapture(id))handle.releasePointerCapture(id);
+    }
+    handle.addEventListener('pointerdown',event=>{
+      if(drag||event.button!==0)return;
+      drag={id:event.pointerId,y:event.clientY,startHeight:height};
+      handle.focus({preventScroll:true});handle.setPointerCapture(event.pointerId);event.preventDefault();
+    });
+    handle.addEventListener('pointermove',event=>{
+      if(drag?.id===event.pointerId)render(drag.startHeight+event.clientY-drag.y);
+    });
+    for(const type of ['pointerup','pointercancel','lostpointercapture']){
+      handle.addEventListener(type,event=>{if(drag?.id===event.pointerId)finish(type==='pointerup');});
+    }
+    handle.addEventListener('keydown',event=>{
+      if(event.key==='Escape'&&drag){event.preventDefault();finish(false);return;}
+      if(drag||!['ArrowUp','ArrowDown','Home'].includes(event.key))return;
+      event.preventDefault();save(event.key==='Home'?null:height+(event.key==='ArrowDown'?8:-8));
+    });
+    handle.addEventListener('dblclick',()=>save(null));
+    root.addEventListener('blur',()=>finish(false));
+    root.addEventListener('resize',()=>{finish(false);refresh();});
+    root.addEventListener('atlas-language',fitRows);
+    refresh();
+    frameBrand(header.querySelector('.workbench-brand'),fitRows);
+  }
+
   function initResize($,onResize){
     if(!document.documentElement?.style)return;
+    initHeaderResize($('workbenchHeader'),$('headerResize'));
     const style=document.documentElement.style;
     const limits=()=>window.innerWidth<=700?{left:Math.min(520,window.innerWidth*.92),right:window.innerWidth}:{left:Math.max(220,Math.min(520,window.innerWidth-620)),right:Math.max(240,Math.min(620,window.innerWidth-620))};
     const widths={left:read('leftWidth',290),right:read('rightWidth',320)};

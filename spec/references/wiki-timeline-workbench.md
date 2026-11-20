@@ -16,7 +16,23 @@ The News source filters, News time and size focus, and Wiki citation timeline sh
 
 News initially places its tools below the graph controls. A user-positioned tool can use the entire News workbench. If tools collide, the active tool gets priority. An expanded tool can still resize from an edge or corner. Minimizing a docked tool temporarily releases its split space. Reopening returns it to the same split with the saved ratio. Switching to Wiki hides News tools. L2 reports retain their own reading pane.
 
-Replace the single tracked file `dist/stocknexus-wiki.png` and run `./run.sh up` from the project root. Reload the browser to see the replacement. Both surfaces use the same header and asset URL. The HTTP handler serves the PNG with revalidation, and the normal launcher rebuilds the image from `dist/`. The supplied 2172 × 724 RGBA artwork ships byte for byte, including its transparent padding.
+Replace the active file `dist/stocknexus-wiki.png` and run `./run.sh up` from the project root. Reload the browser to see the replacement. Both surfaces use the same header and asset URL. The HTTP handler serves the PNG with revalidation, and the normal launcher rebuilds the image from `dist/`. The release includes the broader wordmark at the active path and the earlier ribbon as `dist/stocknexus-wiki_v2.png`. Both original PNGs retain their transparent padding.
+
+## Resizing the shared header
+
+The left-aligned wordmark scales with the header. Drag anywhere along its bottom edge. Double-click the edge to restore the responsive default. The separator also accepts the up/down arrow keys in 8-pixel steps and Home to reset. The browser saves a completed resize under `graphnews.headerHeight`. Cancelling a touch restores the prior height. Shrinking the viewport temporarily limits the rendered height and preserves the saved preference.
+
+`frameBrand` samples the PNG's alpha channel on image load. It frames the visible artwork and leaves a small margin for antialiased edges. Opaque replacements use their full bounds. The logo keeps its proportions up to the available width. At phone widths, or when a second row gives the wordmark more room, the controls sit below it. News sources use a stacked database icon. The time and size focus tool uses a magnifier around a curve. The same glyph appears beside each expanded title and at the center of its minimized square.
+
+| Given | When | Then |
+| --- | --- | --- |
+| A fresh profile and the active wordmark at 1223 × 914 | Drag the global edge down 52 px while reading L1, then to its limit | Header height changes from 68 to 120 CSS px. Visible artwork grows from 53.2 to 73.9 px. At the 180 px limit it can occupy the full first row. Wiki and News remain aligned to the bottom edge. |
+| A saved header height | Reload, briefly shorten the viewport, use the arrow keys, then press Home | Reload restores the height. The saved value survives the temporary viewport clamp. Home clears the preference and restores the responsive default. |
+| A 690 × 914 touch viewport | Cancel a drag, then complete a 66 px drag and open the News search drawer | Cancellation restores 60 px. The completed drag gives a 126 px header. Visible artwork grows from 34.5 to 62.0 px. The drawer starts below it. Double-click restores the default. |
+| A 390 × 844 phone | Enlarge the header, switch languages and substitute an opaque 2:1 PNG in the fixture | The wide wordmark already spans the available 374 px. Its measured ink height stays at 34.8 px as the header goes from 94 to 114 px. Chinese and English controls stay reachable, including at 320 px. The replacement retains its whole image and aspect ratio. |
+| An expanded or minimized News tool | Open, minimize, move, reload and reopen it at desktop and compact widths | The database and magnifier stay paired with their tools. The center of each drawn path is within one CSS pixel of its icon slot or square button center. The Wiki timeline retains its centered bar-chart icon. |
+
+The measured heights come from visible pixels in a separately sampled copy of the served image. Use the dedicated header and timeline journeys from the repository root. [Header gestures and replacement](../../tests/browser_workbench_header.py) · [Launcher geometry and chart navigation](../../tests/browser_wiki_timeline.py) · [Release test commands](../TESTING.md#workbench-release-verification)
 
 ### Browser acceptance for the three tools
 
@@ -47,7 +63,13 @@ The focused browser journey is `python3 tests/browser_wiki_timeline.py`. Related
 
 Physical input also exposed a layout shift when the graph regenerated its 3D legend above the timeline. The reader now preserves that legend across refreshes and reserves each thumbnail's final dimensions before WebGL paints it. The L2 argument suite verifies the rendered images for the actual supporting and opposing meshes.
 
-## Tailscale delivery of the floating tools and logo
+## Tailscale delivery of the resizable header and icons
+
+The standard launcher rebuilt the service after a read-only check of 18 idle Wiki stores. Docker reported a healthy container on image `44833af77b6a96c474c2de4e4c736b4f884c421a9788ad2e1756f6f770f28fc4`. The pre-release image is tagged `news-atlas:before-resizable-header-20261120`.
+
+HTTPS delivered the new header markup and exact checkout bytes for the workbench stylesheet, explorer UI, translations and active PNG. The active PNG's SHA-256 is `bde6524d12e6dd80c969f338ca8a06789f39d132347c061277bdcb623cb65866`. A fresh Chromium profile measured both News launcher path centers, dragged the shared header while reading published TSLA v124 and restored its height after reloading. Desktop and compact artwork heights matched the fixture above. Workspace writes, price lookups and graph previews were isolated for the smoke. It recorded zero model submissions and zero browser errors.
+
+## Earlier Tailscale delivery of the floating tools and logo
 
 The normal launcher rebuilt the web service after a read-only check of 18 idle Wiki stores. Docker reported a healthy container with image `d23da706d74cb6f09a3c1b4426081a91ccd012401ae79e8e0de66c602d0d4d2e`. The previous production image is tagged `news-atlas:before-floating-tools-20261120`.
 

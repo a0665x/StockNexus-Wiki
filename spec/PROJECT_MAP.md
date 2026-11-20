@@ -1,6 +1,8 @@
 # StockNexus-Wiki — 專案入口
 
-The shared News and Wiki tool contract covers full-workbench dragging, movable launchers, chart gestures, split restoration and the path for replacing the header logo. [Window behavior and browser acceptance](references/wiki-timeline-workbench.md)
+Start a new `project-spec-graph-onboarding` session on `main`. The November 20 workbench release comes from `llm_wiki_unslop`. Run `git status -sb` and `git log -3 --oneline`, read the latest handoff, then choose one feature and its test. [Current handoff](CURRENT_STATE.md#workbench-release-handoff) · [Feature-to-test index](TESTING.md#workbench-release-verification) · [CodeGraph access](codegraph/INDEX.md)
+
+The shared News and Wiki tool contract covers the resizable header, centered launcher icons, chart gestures, split restoration and the path for replacing the logo. [Window behavior and browser acceptance](references/wiki-timeline-workbench.md)
 
 The current News-to-Wiki navigation, incremental reads, classifier recovery and their acceptance scenarios are covered in the [cache and classifier contract](references/wiki-cache-classifier-20261120.md).
 
@@ -22,11 +24,7 @@ Wiki 耗時與錯誤追查：[執行 Log 與診斷](WIKI_OBSERVABILITY.md)。
 
 ## Using this checkout's CodeGraph index
 
-The local source index is `.codegraph/codegraph.db`. A fresh checkout needs one `codegraph init` from the repository root. This machine uses version 1.6.3. The tracked `.gitignore` explicitly includes the hand-written `dist/` frontend in discovery. The [project configuration](../codegraph.json) excludes runtime data, vendored scripts and minified bundles. The generated index is local and Git ignores it.
-
-Start a source investigation with the CodeGraph MCP tool and this repository's absolute path, or run `codegraph explore 'dist/wiki-view.js categoryDetail filterTerm'`. Use `codegraph status` to inspect pending changes. The MCP watcher batches file changes and incrementally updates SQLite. Reconnecting catches up on offline edits. For a CLI-only workflow, `codegraph sync` applies pending changes before a query.
-
-A fresh 1.6.3 MCP connection answered a query against this checkout. A direct read of SQLite observed a temporary JavaScript symbol appear, change name and disappear while the watcher ran, without a manual sync. A Codex connection that had already loaded 1.5.0 reported an internal error after the CLI upgrade. The installed CLI and a fresh MCP connection both read the index. [Upstream release](https://github.com/colbymchenry/codegraph/releases/tag/v1.6.3) · [Index and auto-sync behavior](https://github.com/colbymchenry/codegraph#how-it-works)
+Use this checkout's existing index first. Pass the repository root as `projectPath` to `codegraph_explore`, or ask one scoped question with the CLI. The access guide covers the watcher, CLI fallback and the scope of the index. [CodeGraph access](codegraph/INDEX.md)
 
 ## 新 session 的最短閱讀路徑
 

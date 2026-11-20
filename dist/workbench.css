@@ -67,11 +67,59 @@ body.documents-workbench main{height:calc(100dvh - 68px)}body.documents-workbenc
 .wiki-panel button.wiki-primary{background:#e2e9e6;color:#192520;border-color:transparent}.wiki-panel button.wiki-primary:hover:not(:disabled){background:#f0f5f2}
 #language{background:var(--raised);border-color:var(--line);color:var(--text)}
 
-/* The replaceable PNG includes transparent padding above and below its artwork. */
-body>header h1{display:flex;align-items:center;flex:0 1 228px;min-width:0;height:100%}
-.workbench-brand{display:block;width:100%;height:auto}
-@media(max-width:700px){body>header h1{flex-basis:164px}body>header .mobile-toggle,body>header>select,body>header>button{flex:none;white-space:nowrap}}
-@media(max-width:420px){body>header{gap:4px;padding-inline:8px}body>header .mobile-toggle,body>header #relationOpen{padding-inline:6px}}
+/* The News canvas, its drawers and this shared header use the same height. */
+:root{--header-default:68px;--header-min:48px;--workbench-header-height:var(--header-default)}
+#workbenchHeader{
+  --brand-height:calc(var(--workbench-header-height) - 12px);
+  --controls-row:50px;--header-gap:16px;
+  position:relative;height:var(--workbench-header-height);padding:2px 20px 6px 16px;gap:var(--header-gap)
+}
+#workbenchHeader h1{
+  display:flex;align-items:center;flex:0 1 auto;min-width:0;
+  width:calc(var(--brand-height) * var(--brand-aspect,3))
+}
+#workbenchHeader .brand-artwork{
+  display:block;position:relative;width:100%;overflow:hidden;aspect-ratio:var(--brand-aspect,3)
+}
+.workbench-brand{
+  display:block;position:absolute;max-width:none;height:auto;
+  width:var(--brand-image-width,100%);left:var(--brand-image-left,0%);top:var(--brand-image-top,0%)
+}
+#workbenchHeader>span{flex:none;font-size:clamp(14px,calc(var(--workbench-header-height) * .22),24px)}
+#workbenchHeader :is(button,select){flex:none;white-space:nowrap}
+#headerResize{
+  position:absolute;inset:auto 0 0;height:10px;cursor:ns-resize;touch-action:none;user-select:none;outline:none
+}
+#headerResize::after{
+  content:'';position:absolute;bottom:1px;left:50%;transform:translateX(-50%);
+  width:48px;height:2px;border-radius:2px;background:var(--quiet)
+}
+#headerResize:is(:hover,:focus-visible,:active)::after{height:3px;background:var(--accent)}
+#headerResize:focus-visible{box-shadow:inset 0 -2px var(--accent)}
+#workbenchHeader[data-stacked]{
+  --brand-height:calc(var(--workbench-header-height) - var(--controls-row));
+  display:grid;grid-template-columns:auto auto minmax(0,1fr) auto auto;grid-template-rows:minmax(0,1fr) 32px;
+  row-gap:2px;padding-block:3px 12px
+}
+#workbenchHeader[data-stacked] h1{grid-column:1/-1;width:100%;contain:inline-size}
+#workbenchHeader[data-stacked] .brand-artwork{max-width:calc(var(--brand-height) * var(--brand-aspect,3))}
+#workbenchHeader[data-stacked]>span{grid-column:1/4;justify-self:start}
+#workbenchHeader[data-stacked] #openSearch{grid-column:1}
+#workbenchHeader[data-stacked] #language{grid-column:4}
+#workbenchHeader[data-stacked] :is(button,select){min-height:32px;height:32px;padding-block:2px}
+@media(max-width:700px){
+  :root{--header-default:60px}
+  #workbenchHeader{--header-gap:8px;padding-inline:12px}
+}
+@media(max-width:520px){
+  :root{--header-default:94px;--header-min:80px}
+  #workbenchHeader{padding-inline:8px}
+  #workbenchHeader .mobile-toggle,#workbenchHeader #relationOpen{padding-inline:6px}
+}
+@media(max-width:380px){
+  #workbenchHeader[data-stacked]{column-gap:3px;padding-inline:6px}
+  #workbenchHeader[data-stacked] :is(button,select){padding-inline:4px;font-size:12px}
+}
 .workbench-icon{width:18px;height:18px;display:block;flex:none;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
 :is(.wiki-panel,.wiki-settings) button.icon-control{display:inline-grid;place-items:center;flex:none;width:36px;height:36px;min-height:36px;padding:0;background:transparent;color:var(--muted);border:1px solid transparent;border-radius:8px}
 :is(.wiki-panel,.wiki-settings) button.icon-control:hover:not(:disabled){background:var(--raised);color:var(--text);border-color:var(--line)}
@@ -118,19 +166,18 @@ body>header h1{display:flex;align-items:center;flex:0 1 228px;min-width:0;height
 #newsFloatingTools>.floating-resizable:not(.collapsed){padding:0}
 #newsFloatingTools .floating-heading{padding:6px 12px;margin:0;border-bottom:1px solid var(--line);flex-wrap:nowrap}
 .floating-heading .panel-drag{flex:1;justify-content:flex-start;user-select:none}
-.floating-heading .panel-drag:not(.tool-launcher)::before{content:'';width:3px;height:12px;flex:none;border-inline:1px solid var(--quiet)}
-.floating-heading .panel-symbol{display:none}
+.floating-heading .panel-symbol{display:grid;place-items:center;flex:none;width:24px;height:24px;color:var(--accent)}
 .floating-heading .icon-control{width:32px;height:32px;min-height:32px;padding:0}
 #newsFloatingTools :is(#sourcePanelBody,#timeFocusBody){padding:8px 12px 12px}
 #newsFloatingTools>:is(#sourcePanel,#timeFocusBar).collapsed{width:var(--launcher-size);height:var(--launcher-size);min-width:0;padding:0;border:0;box-shadow:none;background:transparent}
 #newsFloatingTools>.collapsed .floating-heading{padding:0;border:0;margin:0}
 #newsFloatingTools>.collapsed :is(.panel-title,.panel-fold,.panel-reset){display:none}
-#newsFloatingTools .tool-launcher .panel-symbol{display:contents}
 .wiki-panel #wikiTimelineLauncher{position:fixed;z-index:12;left:8px;top:var(--wiki-top,68px)}
 #newsFloatingTools .floating-heading button.tool-launcher,.wiki-panel button#wikiTimelineLauncher{
- display:grid;place-items:center;flex:none;width:var(--launcher-size);height:var(--launcher-size);min-height:0;padding:0;
+ display:grid;grid-template:1fr / 1fr;place-content:center;place-items:center;gap:0;flex:none;width:var(--launcher-size);height:var(--launcher-size);min-height:0;padding:0;
  border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--accent);cursor:grab;touch-action:none;user-select:none
 }
+#newsFloatingTools .tool-launcher .workbench-icon,#wikiTimelineLauncher .workbench-icon{width:24px;height:24px}
 #newsFloatingTools button.tool-launcher:hover,.wiki-panel #wikiTimelineLauncher:hover{background:var(--raised);border-color:var(--quiet)}
 #newsFloatingTools button.tool-launcher:active,.wiki-panel #wikiTimelineLauncher:active{cursor:grabbing}
 

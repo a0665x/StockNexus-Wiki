@@ -2,6 +2,8 @@
 
 The [Wiki timeline and comparison reader](references/wiki-timeline-workbench.md) defines chart filtering, pan, zoom, docking, window state and responsive controls.
 
+News and Wiki share the draggable header edge. Its local height preference controls the News canvas, drawers and Wiki top offset. The source filter uses a stacked database icon and the time/size focus uses a magnifier around a curve. [Header controls, artwork and acceptance](references/wiki-timeline-workbench.md#resizing-the-shared-header)
+
 入口：[PROJECT_MAP.md](PROJECT_MAP.md)。實作索引：[ARCHITECTURE.md](ARCHITECTURE.md)。回歸合約：[BEHAVIOR_CONTRACTS.md](references/BEHAVIOR_CONTRACTS.md)。
 
 ## app.js 的狀態邊界
