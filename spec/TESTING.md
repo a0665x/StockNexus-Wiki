@@ -16,6 +16,8 @@ Run the listed scripts from the repository root. On this host, use `/usr/bin/pyt
 
 The full Python suite passed 372 tests. The combined Node command passed 48 tests. The header journey measured visible image pixels on desktop and compact screens, exercised mouse, keyboard, emulated touch and reload, and exposed a phone layout overflow during development. The final fixture kept every header action reachable. The timeline journey checked the rendered SVG path centers, the Wiki layout regression passed all 51 checks and the News journey passed its interaction checks.
 
+During a second full run, the simulated Docker terminal attempted to acquire the live launcher's lock while a deployment was starting. The terminal fixture now starts its child with a private temporary directory for its lock and simulated data. It can exercise the real terminal menu alongside a running service. The independent lock test still covers mutual exclusion. [Launcher tests](../tests/test_docker_launcher.py)
+
 ```sh
 /usr/bin/python3 tests/browser_workbench_header.py
 /usr/bin/python3 tests/browser_wiki_timeline.py

@@ -14,4 +14,4 @@ Follow the returned paths to the current implementation and its browser journey.
 
 ## Index health
 
-`codegraph status --strict .` checks freshness. The MCP watcher updates the local index for changed files. With a CLI-only session, `codegraph sync .` refreshes an existing index incrementally. If an open MCP connection fails after a tool upgrade, reconnect it or use the CLI. A separate checkout starts without this local database. Use scoped source search there until the user requests indexing.
+`codegraph status --strict .` checks freshness. The MCP watcher updates the local index for changed files. With a CLI-only session, `codegraph sync .` refreshes an existing index incrementally. If an open MCP connection reports `statInode is not a function`, reconnect it or use the installed CLI. A fresh MCP connection and the CLI both returned the header symbols during release verification. A separate checkout starts without this local database. Use scoped source search there until the user requests indexing.
