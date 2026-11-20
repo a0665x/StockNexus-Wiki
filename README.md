@@ -2,7 +2,15 @@
 
 # StockNexus Wiki
 
-StockNexus Wiki connects stock news to the claims people make about a company. Explore related stories, see which sources support or challenge a viewpoint, and follow a research conclusion back to the articles it cites. You can also build a separate graph from your own documents.
+A single earnings report can generate dozens of headlines. Some repeat the same announcement. Others draw conflicting conclusions from the same numbers. StockNexus Wiki helps you clean up a noisy stock news feed, see what each source adds, and trace a research conclusion back to the articles behind it.
+
+## What does it help you do?
+
+- **Cut through news overload.** Collect articles from Google News RSS, Yahoo News and Massive, remove duplicates, and explore related coverage together in the news graph.
+- **Compare conflicting arguments.** Use AI to compare sources and organize the evidence for and against a claim, along with the conditions under which it holds.
+- **Build on earlier research.** The shared Wiki (L1) keeps viewpoints, classifications and citations for each stock. Incremental updates preserve earlier revisions so you can see what changed.
+- **Investigate your own questions.** A custom study (L2) draws on the relevant parts of the L1 graph. You can ask how AI demand affects margins and reuse the same evidence for a separate question about capital spending.
+- **Ask about connections you discover.** Select an article or a Wiki viewpoint and ask the Chat Agent to explain the connection using the current selection and its citations.
 
 [![Stock news feeds a shared L1 Wiki. A research question selects L1 evidence for L2. Personal documents follow a separate JSONL import path.](docs/media/stocknexus-architecture-en.png)](docs/media/stocknexus-architecture-en.png)
 
@@ -28,9 +36,16 @@ npx --no-install codex login
 
 1. **Explore the news.** Choose a stock and date range. Open a story in the 3D graph or timeline to inspect the rule behind a connection and read the original source.
 2. **Build shared viewpoints (L1).** Open **LLM Wiki** for that stock and select **Start processing**. Each viewpoint keeps its citations and revision history. In graph mode, 1, 3, 5 or 10 workers can take different news trees. Expand progress to see which tree each worker is processing.
-3. **Ask a research question (L2).** Open **Research question · L2** and ask, for example, “Which reports support or challenge the claim that data-center demand is improving margins?” L2 retrieves relevant L1 viewpoints and evidence for the selected period. Save a **Pinned snapshot** or choose **Track updates** to follow changing evidence.
+3. **Inspect a viewpoint.** Use the category filter to find a group of viewpoints. Open a node to see its claims, events and citations, then read the articles that support or challenge it.
+4. **Ask a research question (L2).** Open **Research question · L2** and ask, for example, “Which reports support or challenge the claim that data-center demand is improving margins?” L2 retrieves relevant L1 viewpoints and evidence for the selected period.
+5. **Compare the layers.** Switch between **L1**, **L2** and **L1+L2**. Follow a conclusion back to its shared viewpoints and sources, or ask a follow-up in the Chat Agent panel.
+6. **Save and follow changes.** Choose **Pinned snapshot** to preserve the study as it stands, or **Track updates** to follow changes in its evidence and compare versions.
 
-The **Chat Agent** in News and Wiki can discuss the current selection. Reopen a saved conversation to continue, or export the Wiki as Markdown to share your findings.
+## Keep your data and research
+
+- News and Wiki data are stored locally in SQLite by stock, including sources, relationships and revision history.
+- The news graph cache lets you reuse earlier work when you change the display limit, switch sources or reopen the page.
+- Save a news graph snapshot to return to an exploration, export the graph as JSON, or share the Wiki as Markdown. Saved Chat Agent conversations can also be reopened.
 
 ## Import your own documents
 
