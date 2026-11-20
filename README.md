@@ -57,7 +57,9 @@ Read stocknexus-document-import/SKILL.md and process <path to an article or fold
 
 The agent returns a validated `records.jsonl` with article sections and links grounded in the text. Missing titles fall back to the filename stem. Unknown dates can be omitted.
 
-Open **Import research documents** on the homepage. Choose **只預覽** to preview, then **匯入並開啟圖譜** to import and open the graph. Articles in the same collection share a graph with their sections and citations. The collection is stored separately from the stock Wiki. [Try a sample JSONL](skills/stocknexus-document-import/examples/manual.jsonl) · [Import guide](spec/DOCUMENT_IMPORT.md)
+Open **Import research documents** on the homepage and select your JSONL file. The upload form currently uses Traditional Chinese. Of the two buttons below the file picker, the second previews how many records will be added or updated. After reviewing the counts, use the first button to import the file and open the graph.
+
+Each collection has its own graph of articles, sections and citations, stored separately from the stock Wiki. [Try a sample JSONL](skills/stocknexus-document-import/examples/manual.jsonl) · [Import guide](spec/DOCUMENT_IMPORT.md)
 
 ## Reference
 

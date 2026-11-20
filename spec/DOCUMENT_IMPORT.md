@@ -25,16 +25,16 @@ flowchart LR
 1. Give the agent the complete [document import skill folder](../skills/stocknexus-document-import/SKILL.md) and one file or a folder. A path is sufficient; defaults are collection `my_research` and source `manuals`.
 2. The bundled converter handles UTF-8 `.md` and `.txt`, preserving folder and heading ancestry. PDF, Word, HTML, CSV and OCR need external extraction into the same record contract. The web form accepts JSONL, not these raw formats. The agent must report unreadable or skipped files.
 3. Validate the final export with the bundled validator. For updates or references to existing records, also preview against the actual target collection.
-4. Open **Import documents** on the homepage (Chinese: **匯入研究文件**), or navigate to `/documents`. Select `records.jsonl`; use **只預覽** to inspect counts, then **匯入並開啟圖譜** to write and open it.
+4. Open **Import research documents** on the homepage or go to `/documents`. Select `records.jsonl`. The form uses Traditional Chinese. The second button below the file picker previews the changes. The first imports the file and opens the graph.
 5. Select a collection and one or more sources. Browse the hierarchy or click a graph node for original text, location and citations. Use the layer filter for documents, L1 or L2. A revision-pinned citation opens the saved historical text even after its target changes.
 
-The dedicated document page currently uses Chinese labels; the homepage entry supports English. A complete English document UI is not implemented. If 3D is unavailable, the outline remains usable.
+If 3D is unavailable, browse the document outline.
 
 ## Multiple articles, missing metadata and graph distance
 
 A collection contains multiple document trees in one graph. Sources can be enabled together. Each document is a node; headings become section nodes linked by containment. An unsectioned article remains one document node with its original body. Articles with no supported links remain visible as disconnected nodes or components.
 
-The converter uses the filename stem as the display title, falling back to `Untitled document` if the stem is blank. Original article titles and dates are not required. The exported record still needs a non-empty `title`; the agent fills that label before validation. Duplicate titles are allowed because identity comes from source/ID, not title or date. Publication dates may be absent or null, and the details panel displays “日期未知” (unknown date); the pipeline does not invent dates from file timestamps or import time.
+The converter uses the filename stem as the display title, falling back to `Untitled document` if the stem is blank. Original article titles and dates are not required. The exported record still needs a non-empty `title`; the agent fills that label before validation. Duplicate titles are allowed because identity comes from source/ID, not title or date. When the publication date is missing or null, the details panel marks it as unknown.
 
 The user confirmed that the skill should read content and produce supported cross-article links. The deterministic converter supplies hierarchy only. The agent then identifies concrete shared subjects, citations, supporting/opposing statements or documented revisions, and emits explicit `links` with a short `rationale`. The portable skill owns the relation-selection rules and missing-metadata workflow. Relationship validity and JSONL compatibility can be tested structurally; the factual quality of an agent's reasoning still requires checking against the actual source text.
 
