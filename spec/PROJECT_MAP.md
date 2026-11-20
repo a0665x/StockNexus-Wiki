@@ -18,6 +18,14 @@ The current News-to-Wiki navigation, incremental reads, classifier recovery and 
 
 Wiki 耗時與錯誤追查：[執行 Log 與診斷](WIKI_OBSERVABILITY.md)。
 
+## Using this checkout's CodeGraph index
+
+The local source index is `.codegraph/codegraph.db`. A fresh checkout needs one `codegraph init` from the repository root. This machine uses version 1.6.3. The tracked `.gitignore` explicitly includes the hand-written `dist/` frontend in discovery. The [project configuration](../codegraph.json) excludes runtime data, vendored scripts and minified bundles. The generated index is local and Git ignores it.
+
+Start a source investigation with the CodeGraph MCP tool and this repository's absolute path, or run `codegraph explore 'dist/wiki-view.js categoryDetail filterTerm'`. Use `codegraph status` to inspect pending changes. The MCP watcher batches file changes and incrementally updates SQLite. Reconnecting catches up on offline edits. For a CLI-only workflow, `codegraph sync` applies pending changes before a query.
+
+A fresh 1.6.3 MCP connection answered a query against this checkout. A direct read of SQLite observed a temporary JavaScript symbol appear, change name and disappear while the watcher ran, without a manual sync. A Codex connection that had already loaded 1.5.0 reported an internal error after the CLI upgrade. The installed CLI and a fresh MCP connection both read the index. [Upstream release](https://github.com/colbymchenry/codegraph/releases/tag/v1.6.3) · [Index and auto-sync behavior](https://github.com/colbymchenry/codegraph#how-it-works)
+
 ## 新 session 的最短閱讀路徑
 
 1. 先讀本頁、[開發協作偏好](ai-dev-experience-preferences.md) 與 [目前功能狀態](CURRENT_STATE.md)，再讀相關領域。需要操作／啟動時讀 [標準流程](WORKFLOWS.md) 與 [RUNTIME.md](RUNTIME.md)。不要先掃描資料庫或大型 vendor bundle。

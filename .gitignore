@@ -23,6 +23,9 @@ data/private/
 .data-link-*
 
 # Local development and test output
+.codegraph/
+# dist contains the hand-written Web UI. Include it in CodeGraph discovery.
+!/dist/
 node_modules/
 .pytest_cache/
 .coverage
