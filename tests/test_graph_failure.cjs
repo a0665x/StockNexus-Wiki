@@ -11,6 +11,11 @@ const elements=new Map(),get=id=>{if(!elements.has(id))elements.set(id,new Eleme
 const logs=[];
 const context={ResizeObserver:class{observe(){}},document:{documentElement:{},getElementById:get,createElement:()=>new Element(),createElementNS:()=>new Element(),querySelectorAll:()=>[],body:new Element()},ForceGraph3D(){throw Error('Error creating WebGL context.');},console:{...console,error:(...args)=>logs.push(args.join(' '))},Date,URL,Blob,TextDecoder,TextEncoder,Uint8Array,AbortController,setTimeout:()=>0,clearTimeout(){},setInterval:()=>0,clearInterval(){},fetch:async()=>({ok:true,json:async()=>({db:{articles:1},channels:[],snapshots:[]})})};
 context.addEventListener=()=>{};context.document.addEventListener=()=>{};context.AtlasWorkspace={ready:new Promise(()=>{}),save(){}};
+// These VMs render without a browser layout engine.
+Element.prototype.ownerDocument=context.document;
+Element.prototype.getClientRects=()=>[];
+Element.prototype.querySelector=()=>new Element();
+context.document.querySelector=()=>new Element();
 vm.createContext(context);
 for(const file of ['i18n','explorer-ui','graph-view','timeline','glow','date-range','interaction','time-lens','app'])vm.runInContext(fs.readFileSync('dist/'+file+'.js','utf8'),context);
 vm.runInContext(`rebuild({articles:[{id:'one',title:'Test article',source:{provider:'google'},published_at:'2026-10-28',summary:'',symbols:[]}],relations:[]})`,context);

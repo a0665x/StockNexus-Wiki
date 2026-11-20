@@ -3,6 +3,7 @@
 No listening socket, API keys, external provider calls, or production DB writes.
 Missing HTTP assets are omitted exactly as a failed browser resource load would be.
 """
+import base64
 import json
 from pathlib import Path
 import re
@@ -36,6 +37,15 @@ def served_document(request, omit=None):
         assets.append({'url':url,'status':status})
         return '<style>'+content.decode()+'</style>' if status==200 else '<!-- unavailable stylesheet -->'
     html=re.sub(r'<link rel="stylesheet" href="([^"]+)"[^>]*>',stylesheet,html)
+    def image(match):
+        url=match.group(1)
+        head,content=request('GET',url)
+        status=int(head.split()[1])
+        assets.append({'url':url,'status':status})
+        if status!=200:
+            return match.group()
+        return match.group().replace(url,'data:image/png;base64,'+base64.b64encode(content).decode('ascii'))
+    html=re.sub(r'<img\b[^>]*?src="(/[^"]+\.png)"',image,html)
     return html, assets
 
 
@@ -73,10 +83,10 @@ window.fetch=async(url,options)=>{
  checks.quickDates=byId('start').value===quick.start&&byId('end').value===quick.end&&byId('start').readOnly;
  for(const prefix of ['sourcePanel','timePanel']){
    const panel=byId(prefix==='sourcePanel'?'sourcePanel':'timeFocusBar'),handle=byId(prefix+'Drag'),body=byId(prefix==='sourcePanel'?'sourcePanelBody':'timeFocusBody');
-   byId(prefix+'Toggle').click();await wait(30);const folded=panel.getBoundingClientRect();
-   checks[prefix+'Compact']=body.hidden&&folded.width<=40&&folded.height<=40;
-   panel.setPointerCapture=()=>{};panel.hasPointerCapture=()=>false;
-   const pointer=(name,x,y)=>new PointerEvent(name,{pointerId:7,button:0,clientX:x,clientY:y,bubbles:true,cancelable:true});
+   if(!body.hidden)byId(prefix+'Toggle').click();await wait(30);const folded=panel.getBoundingClientRect();
+   checks[prefix+'Compact']=body.hidden&&folded.width===folded.height&&folded.width===(innerWidth<=800?44:40);
+   document.documentElement.setPointerCapture=()=>{};document.documentElement.hasPointerCapture=()=>false;
+   const pointer=(name,x,y)=>new PointerEvent(name,{pointerId:7,isPrimary:true,button:0,clientX:x,clientY:y,bubbles:true,cancelable:true});
    handle.dispatchEvent(pointer('pointerdown',folded.left+18,folded.top+18));handle.dispatchEvent(pointer('pointermove',folded.left-32,folded.top-32));handle.dispatchEvent(pointer('pointerup',folded.left-32,folded.top-32));
    const moved=panel.getBoundingClientRect();checks[prefix+'Move']=Math.hypot(moved.left-folded.left,moved.top-folded.top)>5;
    handle.click();await wait(30);checks[prefix+'Expand']=!body.hidden;
@@ -84,7 +94,7 @@ window.fetch=async(url,options)=>{
  }
  const source=byId('sourcePanel'),time=byId('timeFocusBar');
  const separate=()=>{const a=source.getBoundingClientRect(),b=time.getBoundingClientRect();return a.right+7.5<=b.left||b.right+7.5<=a.left||a.bottom+7.5<=b.top||b.bottom+7.5<=a.top;};
- const dragPanel=(panel,dx,dy,target=panel)=>{panel.setPointerCapture=()=>{};panel.hasPointerCapture=()=>false;for(const [name,x,y] of [['pointerdown',0,0],['pointermove',dx,dy],['pointerup',dx,dy]])target.dispatchEvent(new PointerEvent(name,{pointerId:8,button:0,clientX:x,clientY:y,bubbles:true,cancelable:true}));};
+ const dragPanel=(panel,dx,dy,target=panel)=>{for(const [name,x,y] of [['pointerdown',0,0],['pointermove',dx,dy],['pointerup',dx,dy]])target.dispatchEvent(new PointerEvent(name,{pointerId:8,isPrimary:true,button:0,clientX:x,clientY:y,bubbles:true,cancelable:true}));};
  let before=source.getBoundingClientRect();dragPanel(source,30,20);let after=source.getBoundingClientRect();
  checks.backgroundDrag=Math.hypot(after.left-before.left,after.top-before.top)>5;
  before=source.getBoundingClientRect();dragPanel(source,100,80,byId('rootQuery'));after=source.getBoundingClientRect();checks.inputNotDragged=before.left===after.left&&before.top===after.top;
@@ -103,12 +113,12 @@ window.fetch=async(url,options)=>{
  const stage=byId('stage'),originalStyle=stage.getAttribute('style')||'';
  stage.style.width='280px';stage.style.height='200px';byId('sourcePanelReset').click();timePanel.constrain();await wait(100);
  checks.smallStageCollision=separate();
- checks.smallStageCompact=byId('sourcePanelBody').hidden||byId('timeFocusBody').hidden;
+ checks.smallStageWorkspace=[source,time].every(p=>{const r=p.getBoundingClientRect();return r.left>=0&&r.top>=0&&r.right<=innerWidth&&r.bottom<=innerHeight});
  stage.setAttribute('style',originalStyle);timePanel.constrain();await wait(100);checks.restoredStageCollision=separate();
  byId('massiveHelpButton').click();checks.help=byId('massiveHelp').open&&byId('massiveDashboard').href==='https://massive.com/dashboard';
  byId('closeMassiveHelp').click();checks.helpClose=!byId('massiveHelp').open;
  let intercepted=false;byId('form').addEventListener('submit',e=>{intercepted=e.defaultPrevented;e.preventDefault();});
- byId('query').value='NVDA';byId('source-google').checked=true;byId('submit').click();await wait(200);
+ byId('query').value='NVDA';byId('ticker').value='NASDAQ:NVDA';byId('source-google').checked=true;byId('submit').click();await wait(200);
  checks.search=intercepted&&submittedSearches===1&&!byId('submit').disabled;checks.regionRequest=lastSearchBody?.rss_region==='JP';
  const missingLens=startupAssets.some(x=>x.url.split('?')[0]==='/time-lens.js'&&x.status!==200);
  if(missingLens)checks.degradedNotice=!byId('timeLensStatus').hidden&&byId('timeSizeEnabled').disabled;

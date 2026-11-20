@@ -1,6 +1,6 @@
 # StockNexus-Wiki — 專案入口
 
-The [Wiki timeline and comparison contract](references/wiki-timeline-workbench.md) covers chart gestures, minimized and floating windows, workspace persistence and browser acceptance.
+The shared News and Wiki tool contract covers full-workbench dragging, movable launchers, chart gestures, split restoration and the path for replacing the header logo. [Window behavior and browser acceptance](references/wiki-timeline-workbench.md)
 
 The current News-to-Wiki navigation, incremental reads, classifier recovery and their acceptance scenarios are covered in the [cache and classifier contract](references/wiki-cache-classifier-20261120.md).
 

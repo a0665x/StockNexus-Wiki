@@ -201,6 +201,9 @@
     [/ · 相隔 ([\d.]+|—) 天$/,(_,a)=>` · ${a} days apart`]
   ];
   Object.assign(dictionary,{
+    '開啟來源篩選':'Open source filters','開啟時間大小焦點':'Open time and size focus',
+    '拖動視窗或用方向鍵移動':'Drag the window or move it with arrow keys',
+    '縮小視窗':'Minimize window','視窗歸位':'Reset window position',
     '觀點詳情':'Viewpoint details','來源原文 ↗':'Source article ↗',
     'Wiki {instrument} · v{version} · {count} 個節點\n依目前選取與日期討論觀點；論述與引用可由工具讀取。':'Wiki {instrument} · v{version} · {count} nodes\nDiscuss viewpoints for the current selection and dates; tools can read arguments and citations.',
     '目前範圍：{scope} · {count} 篇 · {view}\n每次提問跟隨目前選取；回答期間可繼續操作。':'Current scope: {scope} · {count} articles · {view}\nEach question follows the current selection; you can keep exploring.',

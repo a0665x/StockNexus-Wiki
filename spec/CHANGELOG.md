@@ -1,5 +1,9 @@
 # 變更與驗證 log
 
+## 2026-11-20 — Movable News and Wiki launchers and ribbon logo
+
+News source and time tools can float over the sidebars. All three tools remember separate window and launcher positions. Collapsing and reopening a docked News reader also restores its split. The shared header uses the replaceable ribbon PNG. [Interaction and image replacement](references/wiki-timeline-workbench.md)
+
 ## 2026-11-20 — Wiki chart navigation and local CodeGraph
 
 The timeline detaches, resizes and minimizes. Series toggles, chart reset and pointer capture support returning to all categories and panning a zoomed interval. The comparison reader, filters and wordmark share the graphite workbench styling. Host workspace validation now accepts the controls already emitted by the Wiki. The repository has a local CodeGraph index and a frontend-aware discovery configuration. [Browser acceptance](references/wiki-timeline-workbench.md) · [CodeGraph onboarding](PROJECT_MAP.md#using-this-checkouts-codegraph-index)

@@ -1,5 +1,17 @@
 # 測試與驗收
 
+## November 20, 2026 — Floating News tools, movable launchers and replaceable PNG
+
+The browser journey uses real pointer and keyboard events at 1223 × 914, 690 × 914 and 390 × 844. It verifies moving an expanded tool outside the graph, separate positions for open and minimized tools, touch cancellation, reloading nested splits, accessible focus, and delivery of the supplied PNG. [Given/When/Then and file replacement instructions](references/wiki-timeline-workbench.md#movable-tools-and-replaceable-header-artwork)
+
+| Suite | Observed result |
+| --- | --- |
+| `browser_wiki_timeline.py`, `browser_floating_resize.py` | Window gestures, separate launcher positions, dock/floating restoration, content scrolling and chart navigation passed. |
+| `browser_native_controls.py`, `browser_user_journeys.py`, `browser_feedback.py` | Native click and drag targets, unobstructed default graph controls, timeline switching, WebGL recovery, taxonomy context and price-horizon selection passed. |
+| `browser_research.py` | A real-HTTP fixture displayed the L2 report and citations when L1 was minimized. |
+| `browser_startup.py` | Normal startup and a simulated missing time-lens module both passed in Chromium. The fixture requested the header image through the HTTP handler. |
+| Python and Node | `/usr/bin/python3 -m unittest discover -s tests -q` passed 372 tests. `node --test tests/test_*.cjs tests/wiki-cache.test.mjs` passed all 21 entries. The HTTP test verifies the stable logo URL, media type, cache header and file bytes. |
+
 ## November 20, 2026 — Wiki timeline, comparison and workspace
 
 | Test boundary | Result |

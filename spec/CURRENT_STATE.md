@@ -1,6 +1,10 @@
 # Current handoff — 2026-11-20 (Asia/Taipei)
 
-## Latest update on November 20 — Wiki timeline workbench
+## Latest update on November 20 — News and Wiki floating tools
+
+The source filter, time and size focus, and citation timeline can move across their workbenches. Each minimized icon can move independently. The replaceable header PNG lives at `dist/stocknexus-wiki.png`. [Interaction and replacement instructions](references/wiki-timeline-workbench.md) · [Browser verification](TESTING.md)
+
+## Earlier on November 20 — Wiki timeline workbench
 
 The local branch `llm_wiki_unslop` contains the floating chart, reversible classification filters, horizontal pan and the wider comparison reader. Wiki workspace persistence accepts the version pane height, worker control and saved L2 run. CodeGraph 1.6.3 indexes this checkout, including the hand-written frontend. See the [UI acceptance record](references/wiki-timeline-workbench.md), [verification ledger](TESTING.md) and [CodeGraph commands](PROJECT_MAP.md#using-this-checkouts-codegraph-index).
 

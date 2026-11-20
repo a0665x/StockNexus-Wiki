@@ -17,6 +17,11 @@ let finish;const wait=new Promise(resolve=>finish=resolve);let reads=0;
 const document={getElementById:get,createElement:()=>new Element(),createElementNS:()=>new Element(),querySelectorAll:()=>[{value:'massive'},{value:'google'}],body:new Element()};
 const context={document,ForceGraph3D:()=>()=>graph,ResizeObserver:class{observe(){}},console,Date,URL,Blob,TextDecoder,TextEncoder,Uint8Array,AbortController,setTimeout:(fn,ms)=>ms===80?setTimeout(fn,0):0,clearTimeout(){},setInterval:()=>0,clearInterval(){},fetch:async()=>({ok:true,body:{getReader:()=>({read:async()=>{reads++;if(reads===1)return {value:new TextEncoder().encode(JSON.stringify({type:'source',source:'massive',completed:1,total:2,articles:[article],error:null})+'\n'),done:false};await wait;return {value:new TextEncoder().encode(JSON.stringify({type:'done'})+'\n'),done:reads>2}},cancel(){}})}})};
 context.addEventListener=()=>{};context.document.addEventListener=()=>{};context.AtlasWorkspace={ready:new Promise(()=>{}),save(){}};
+// These VMs render without a browser layout engine.
+Element.prototype.ownerDocument=context.document;
+Element.prototype.getClientRects=()=>[];
+Element.prototype.querySelector=()=>new Element();
+context.document.querySelector=()=>new Element();
 vm.createContext(context);vm.runInContext(fs.readFileSync('dist/i18n.js','utf8'),context);vm.runInContext(fs.readFileSync('dist/explorer-ui.js','utf8'),context);vm.runInContext(fs.readFileSync('dist/graph-view.js','utf8'),context);vm.runInContext(fs.readFileSync('dist/timeline.js','utf8'),context);vm.runInContext(fs.readFileSync('dist/glow.js','utf8'),context);vm.runInContext(fs.readFileSync('dist/date-range.js','utf8'),context);vm.runInContext(fs.readFileSync('dist/interaction.js','utf8'),context);vm.runInContext(fs.readFileSync('dist/time-lens.js','utf8'),context);vm.runInContext(fs.readFileSync('dist/app.js','utf8'),context);
 (async()=>{
   get('start').value='2026-01-01';get('end').value='2026-01-07';

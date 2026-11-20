@@ -288,7 +288,7 @@ function syncTimeFocus(){
   layoutTimeBar();
 }
 function layoutTimeBar(){
-  const panel=timePanel?.state(),floating=panel&&(globalThis.AtlasDock?.docked($('timeFocusBar'))||panel.collapsed||panel.x!==0||panel.y!==0);
+  const panel=timePanel?.state(),floating=panel&&(globalThis.AtlasDock?.docked($('timeFocusBar'))||panel.collapsed||panel.position);
   const bottom=floating?54:($('timeFocusBar').offsetHeight||104)+64;
   $('timeline').style.bottom=(bottom+30)+'px';$('traceStatus').style.bottom=bottom+'px';
 }
@@ -684,7 +684,7 @@ function renderRootResults(){
 }
 
 AtlasUI.initSourcePanel($);
-timePanel=AtlasUI.initTimePanel($,()=>{timeLens?.paint();layoutTimeBar();});
+timePanel=AtlasUI.initTimePanel($,layoutTimeBar);
 function syncRSSRegion(){const languages={TW:'zh-TW',US:'en-US',HK:'zh-HK',JP:'ja',GB:'en-GB'},region=$('rssRegion').value||'TW';$('yahooRegion').textContent=region+' · '+languages[region];}
 $('rssRegion').addEventListener('change',syncRSSRegion);syncRSSRegion();
 
@@ -867,7 +867,7 @@ globalThis.AtlasWikiContext={
     const rows=visibleSources.flatMap(p=>(groups[p]?.articles||[]).filter(a=>mode!=='focus'||focus.has(a.id)||focus.has(p+'::'+a.id)));
     return {graph_universe:{ticker:(exportMeta.ticker||'').toUpperCase(),separate:isSeparate(),articles:viewSources().flatMap(p=>(groups[p]?.articles||[]).map(a=>({id:a.id,provider:p})))},graph_selection:highlightMode!=='category'?{ticker:(exportMeta.ticker||'').toUpperCase(),trees:(activeTrace.trees||[]).map(tree=>({root_id:tree.root,title:focusView.articles.find(a=>a.id===tree.root)?.title||tree.root,articles:[...tree.nodes.keys()].map(id=>focusView.articles.find(a=>a.id===id)).filter(Boolean).map(a=>({id:a.id.split('::').at(-1),provider:a.source.provider}))}))}:{ticker:(exportMeta.ticker||'').toUpperCase(),trees:[]},graph_settings:{relation_settings:basePayload.relation_settings||relationUI?.applied()||{},exploration:{...exploration}},price_horizon:priceLens?.state().horizon||3,graph_edges:relations.slice(0,30000).map(e=>({source:AtlasView.endpoint(e.source),target:AtlasView.endpoint(e.target),weight:Math.max(0,Math.min(100,Number(e.weight||e.score||1)))})),articles:rows.map(a=>({id:a.id,title:a.title,summary:a.summary||'',url:a.url,published_at:a.published_at,source:{provider:a.source.provider}})),sources:visibleSources,search:{instrument:exportMeta.instrument||'',query:exportMeta.query||'',ticker:exportMeta.ticker||'',rss_region:exportMeta.rss_region||'TW'}};
   },
-  visible(open){if(open){if(typeof rememberNews==='function'&&!workspaceRestoring)rememberNews();clearTimeout(fitTimer);graph?.pauseAnimation();}else if(viewMode==='network')graph?.resumeAnimation();}
+  visible(open){$('newsFloatingTools').hidden=open;document.querySelector('.layout').inert=open;if(open){if(typeof rememberNews==='function'&&!workspaceRestoring)rememberNews();clearTimeout(fitTimer);graph?.pauseAnimation();}else if(viewMode==='network')graph?.resumeAnimation();}
 };
 
 // News and Wiki own separate persisted runtime records. No automatic source search.

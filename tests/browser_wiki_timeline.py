@@ -82,12 +82,14 @@ def click(page, selector):
     mouse(page,'mouseReleased',pos,button='left',clickCount=1)
 
 
-def drag(page, pos, dx, dy):
+def drag(page, pos, dx, dy, dock=False):
     mouse(page,'mouseMoved',pos)
     mouse(page,'mousePressed',pos,button='left',buttons=1,clickCount=1)
     for step in range(1,7):
         dest={'x':pos['x']+dx*step/6,'y':pos['y']+dy*step/6}
         mouse(page,'mouseMoved',dest,button='left',buttons=1)
+    if dock:
+        page.wait("$('splitPreview').classList.contains('split-armed')&&!$('splitPreview').hidden")
     mouse(page,'mouseReleased',dest,button='left',clickCount=1)
 
 
@@ -99,9 +101,131 @@ def key(page, name, code):
         page.call('Input.dispatchKeyEvent',params)
 
 
+def touch(page, start, destination=None, cancel=False):
+    page.call('Emulation.setTouchEmulationEnabled',{'enabled':True})
+    page.call('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[start]})
+    if destination:
+        for i in range(1,7):
+            pos={k:start[k]+(destination[k]-start[k])*i/6 for k in ('x','y')}
+            page.call('Input.dispatchTouchEvent',{'type':'touchMove','touchPoints':[pos]})
+    page.call('Input.dispatchTouchEvent',{'type':'touchCancel' if cancel else 'touchEnd','touchPoints':[]})
+
+
+def news_windows(page):
+    stage=rect(page,'#stage')
+    saved={}
+    for prefix,panel,body,x,y in [
+        ('sourcePanel','#sourcePanel','sourcePanelBody',20,185),('timePanel','#timeFocusBar','timeFocusBody',60,285)
+    ]:
+        grip='#'+prefix+'Drag'
+        if page.js(f"$('{body}').hidden"):
+            click(page,grip)
+        window=rect(page,panel)
+        drag(page,point(page,grip),x-window['x'],y-window['y'])
+        expanded=rect(page,panel)
+        assert abs(expanded['x']-x)<2 and abs(expanded['y']-y)<2 and expanded['x']<stage['left']-100,expanded
+        click(page,'#'+prefix+'Toggle')
+        small=rect(page,grip)
+        assert small['width']==small['height']==40,(prefix,small,page.js(f"$('{body}').hidden"))
+        assert page.js(f"document.activeElement.id==='{prefix}Drag'")
+        pos=point(page,grip)
+        dest={'x':1100 if prefix=='sourcePanel' else 940,'y':760 if prefix=='sourcePanel' else 600}
+        drag(page,pos,dest['x']-pos['x'],dest['y']-pos['y'])
+        assert page.js(f"$('{body}').hidden")
+        moved=rect(page,grip)
+        assert abs(moved['x']+20-dest['x'])<2 and abs(moved['y']+20-dest['y'])<2,moved
+        click(page,grip)
+        restored=rect(page,panel)
+        assert all(abs(restored[k]-expanded[k])<2 for k in ('x','y','width','height'))
+        click(page,'#'+prefix+'Toggle')
+        saved[grip]=rect(page,grip)
+        assert abs(saved[grip]['x']-moved['x'])<2 and abs(saved[grip]['y']-moved['y'])<2
+    page.call('Page.reload')
+    page.wait("typeof AtlasWiki!=='undefined'")
+    for selector,before in saved.items():
+        after=rect(page,selector)
+        assert all(abs(after[k]-before[k])<2 for k in ('x','y','width','height'))
+    print('Both News windows cross the graph edge. Reopen and reload preserve separate icon and window positions.',flush=True)
+    viewport(page,690,914)
+    for selector in saved:
+        r=rect(page,selector)
+        assert 8<=r['x']<r['right']<=682 and r['height']==r['width']==44,r
+    page.check('ribbon and header actions fit the annotated 690 px viewport',
+        "(()=>{const h=document.querySelector('body>header'),img=h.querySelector('img');return img.complete&&img.naturalWidth>0&&img.width>=145&&h.scrollWidth<=innerWidth&&[...h.querySelectorAll('button,select')].every(n=>n.getBoundingClientRect().right<=innerWidth)})()")
+    selector='#sourcePanelDrag'
+    pos=point(page,selector)
+    dest={'x':130,'y':350}
+    touch(page,pos,dest)
+    moved=rect(page,selector)
+    assert abs(moved['left']+22-dest['x'])<2 and page.js("$('sourcePanelBody').hidden"),moved
+    touch(page,point(page,selector),{'x':300,'y':490},cancel=True)
+    assert abs(rect(page,selector)['x']-moved['x'])<2
+    touch(page,point(page,selector))
+    page.wait("!$('sourcePanelBody').hidden")
+    click(page,'#sourcePanelToggle')
+    click(page,'#openSearch')
+    click(page,'#timePanelDrag')
+    assert page.js("!$('timeFocusBody').hidden")
+    window=rect(page,'#timeFocusBar')
+    drag(page,point(page,'#timePanelDrag'),18-window['left'],135-window['top'])
+    assert rect(page,'#timeFocusBar')['left']<24
+    point(page,'#timePanelToggle')  # The window remains above the open drawer.
+    click(page,'#timePanelToggle')
+    click(page,'#openSearch')
+    page.call('Emulation.setTouchEmulationEnabled',{'enabled':False})
+    viewport(page,1223,914)
+    print('690 px viewport clamps both icons. Touch drag, cancellation, tap and the open News drawer work.',flush=True)
+
+
+def docked_launchers(page):
+    # Two real edge dwells give the detail pane a nested saved tree.
+    for prefix,edge in [('timePanel','top'),('sourcePanel','left')]:
+        click(page,'#'+prefix+'Drag')
+        grip=point(page,'#'+prefix+'Drag')
+        news=rect(page,'[data-pane="news"]')
+        x=news['left']+(2 if edge=='left' else news['width']/2)
+        y=news['top']+(2 if edge=='top' else news['height']/2)
+        drag(page,grip,x-grip['x'],y-grip['y'],dock=True)
+    tree=page.js("AtlasDock.state().tree")
+    assert tree['a']['id']=='timeFocusBar' and tree['b']['a']['id']=='sourcePanel',tree
+    page.call('Page.reload')
+    page.wait("window.AtlasDock?.ready&&AtlasDock.docked($('sourcePanel'))&&AtlasDock.docked($('timeFocusBar'))")
+    page.check('a reload keeps both expanded docked readers open',
+               "!$('sourcePanelBody').hidden&&!$('timeFocusBody').hidden")
+    grip=point(page,'#sourcePanelDrag')
+    touch(page,grip,{'x':180,'y':390},cancel=True)
+    assert page.js("AtlasDock.docked($('sourcePanel'))&&document.querySelector('[data-pane=sourcePanel]').contains($('sourcePanel'))")
+    assert tree==page.js("AtlasDock.state().tree")
+    page.call('Emulation.setTouchEmulationEnabled',{'enabled':False})
+    for prefix in ['sourcePanel','timePanel']:
+        click(page,'#'+prefix+'Toggle')
+        assert page.js(f"$('newsFloatingTools').contains($('{prefix}Drag'))")
+    news=rect(page,'[data-pane="news"]')
+    whole=rect(page,'#paneWorkspace')
+    assert all(abs(news[k]-whole[k])<2 for k in ('width','height'))
+    pos=point(page,'#sourcePanelDrag')
+    drag(page,pos,100-pos['x'],300-pos['y'])
+    page.call('Page.reload')
+    page.wait("typeof AtlasWiki!=='undefined'&&!!document.querySelector('[data-pane=sourcePanel]')")
+    assert page.js("AtlasDock.state().tree")==tree
+    after=rect(page,'#sourcePanelDrag')
+    assert abs(after['x']+20-100)<2 and abs(after['y']+20-300)<2
+    for prefix,panel in [('timePanel','timeFocusBar'),('sourcePanel','sourcePanel')]:
+        click(page,'#'+prefix+'Drag')
+        assert page.js(f"AtlasDock.docked($('{panel}'))&&document.querySelector('[data-pane={panel}]').contains($('{panel}'))")
+    # Undock through a normal title drag and let the sibling fill its saved slot.
+    pos=point(page,'#sourcePanelDrag')
+    drag(page,pos,190-pos['x'],375-pos['y'])
+    assert page.js("!AtlasDock.docked($('sourcePanel'))&&AtlasDock.state().tree.b.id==='news'")
+    click(page,'#sourcePanelToggle')
+    print('Both nested split slots release space, survive a mobile cancellation, and return after a launcher drag and reload.',flush=True)
+
+
 def run(page):
     viewport(page,1223,914)
     page.wait("typeof AtlasWiki!=='undefined'")
+    news_windows(page)
+    docked_launchers(page)
     page.js(SETUP)
     page.wait("AtlasWiki.runtime.state().version===124")
     page.js("$('wikiRange').value='all';$('wikiRange').dispatchEvent(new Event('change'))")
@@ -158,6 +282,14 @@ def run(page):
     icon=rect(page,'#wikiTimelineLauncher')
     assert 32<=icon['width']==icon['height']<=52 and rect(page,'#wikiCanvas')['height']>canvas['height']+50
     page.check('minimize moves focus onto the square launcher',"document.activeElement===$('wikiTimelineLauncher')")
+    pos=point(page,'#wikiTimelineLauncher')
+    drag(page,pos,75-pos['x'],200-pos['y'])
+    moved=rect(page,'#wikiTimelineLauncher')
+    assert abs(moved['x']+20-75)<2 and abs(moved['y']+20-200)<2
+    page.check('moving the Wiki square across the controls keeps it minimized',
+               "$('wikiTimelineTool').hidden&&$('newsFloatingTools').hidden")
+    key(page,'ArrowRight',39)
+    assert abs(rect(page,'#wikiTimelineLauncher')['x']-moved['x']-20)<2
     key(page,'Enter',13)
     page.wait("$('wikiTimelineTool').dataset.mode==='floating'")
     reopened=rect(page,'#wikiTimelineTool')
@@ -171,7 +303,8 @@ def run(page):
     click(page,'#wikiTimelineFloat')
     page.wait("$('wikiTimelineTool').dataset.mode==='docked'")
     page.check('toolbar labels and selected values are centered',"[...document.querySelectorAll('.wiki-toolbar label')].every(n=>getComputedStyle(n).textAlign==='center'&&getComputedStyle(n.querySelector('select')).textAlign==='center')")
-    page.check('brand contains a node mark and readable product name',"!!document.querySelector('header h1 svg')&&document.querySelector('header h1').textContent.includes('StockNexus')&&parseFloat(getComputedStyle(document.querySelector('.workbench-brand>span')).fontSize)>=20")
+    page.check('header loads the replaceable PNG with its accessible product name',
+               "(()=>{const img=document.querySelector('header h1 img');return img.complete&&img.naturalWidth>0&&img.alt==='StockNexus Wiki'&&img.clientWidth>=160})()")
     click(page,'#relationOpen')
     page.check('Wiki settings close icon is named', "$('wikiSettings').open&&$('wikiSettingsClose').title==='關閉設定'&&!!$('wikiSettingsClose').querySelector('svg')")
     click(page,'#wikiSettingsClose')
@@ -211,9 +344,20 @@ def run(page):
     page.call('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[]})
     page.check('touch panning advances the zoomed dates without selecting a bar',f"+$('wikiTimeline').dataset.start>{start}&&!$('wikiAssessment').value")
     click(page,'#wikiTimelineFold')
+    icon=rect(page,'#wikiTimelineLauncher')
+    assert abs(icon['x']-moved['x']-20)<2
+    pos=point(page,'#wikiTimelineLauncher')
+    touch(page,pos,{'x':180,'y':360})
+    page.js("$('wikiPanel').scrollTop=0")
+    icon=rect(page,'#wikiTimelineLauncher')
+    assert abs(icon['left']+22-180)<2 and abs(icon['top']+22-360)<2
     page.check('reading and all gestures use zero model writes and produce no script errors',"!wikiPosts.length&&!errors.length&&!languageErrors.length")
     page.call('Page.reload')
     page.wait("typeof AtlasWiki!=='undefined'")
+    page.js(SETUP)
+    page.wait("AtlasWiki.runtime.state().version===124")
+    after=rect(page,'#wikiTimelineLauncher')
+    assert all(abs(icon[k]-after[k])<2 for k in ('x','y','width','height'))
     page.check('a reload restores the minimized tool', "$('wikiTimelineTool').dataset.mode==='collapsed'&&!$('wikiTimelineLauncher').hidden")
 
 

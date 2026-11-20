@@ -40,7 +40,7 @@ Pointer capture 支援移出、反向拖動、cancel／lostcapture；按下不�
 
 ## 面板與瀏覽器保存
 
-`AtlasUI.initFloatingPanel` 共用於來源和時間焦點：標題與非互動空白區拖曳、方向鍵移動、▽ 收成 72px 圖示、點圖示展開、↺ 歸位、限制在 stage 範圍；不修改來源或搜尋內容。同一 stage 的兩面板協調位置，保持 8px 間距；展開／歸位／還原／resize 都避讓，空間不足讓另一面板收合／移位，不撤銷目前使用者的展開；展開內容在剩餘尺寸內捲動。浮動邊緣／四角可調整尺寸，停靠時由分割樹接管，見 [TOOL_DOCK](TOOL_DOCK.md)。互動控制項（含 label、summary、SVG 曲線）不啟動面板拖曳。左／右 sidebar 可拖分隔線調寬。JSON tree 預設隱藏值，展開才建子欄位。
+News source filters and time and size focus use the full visible workbench after a drag. Default windows leave the graph controls accessible. Drag the header, a free mouse surface or the minimized square, or move a focused grip with the arrow keys. Touch scrolling and interactive fields keep their own gestures. The three launchers, including the Wiki citation timeline, share their appearance and save independent window and icon positions. The News tools keep an eight-pixel gap where space permits. Edges and corners resize a floating reader. Docked readers follow the split tree. The sidebar splitters and lazy JSON inspector retain their existing behavior. [Dock layout](TOOL_DOCK.md) · [Launcher and logo contract](references/wiki-timeline-workbench.md)
 
 localStorage 前綴 `graphnews.`：
 
@@ -52,7 +52,7 @@ localStorage 前綴 `graphnews.`：
 | timeFocus | 時間大小開關、日期、peak、width、可選 profile；快照為 view.time_focus |
 | timeCurveOpen | 3D 中鐘形曲線面板的展開偏好 |
 | language | 繁中或英文；時間軸固定 density，不再讀取 timelineStyle 偏好 |
-| leftWidth / rightWidth / sourcePanel / timePanel | 面板寬度、浮動位置／收合／展開寬高 |
+| leftWidth / rightWidth / sourcePanel / timePanel | Sidebar widths, expanded window position and size, minimized state and icon position |
 
 `AtlasDates` 保存自訂日期草稿，快速區間重開／搜尋時按 UTC 今天更新。storage 不可用有提示。此表的 localStorage 只在同 origin／設定檔共享；另有主機 workspace 保存 News/Wiki 資料及控制值，可由全新瀏覽器恢復。浮動工具幾何仍屬瀏覽器偏好，見 [WORKFLOWS](WORKFLOWS.md)。新聞／證據 `.raw` 不翻譯，新增 UI 文字須加入 i18n。
 
@@ -71,7 +71,7 @@ RSS dropdown 預設 TW，選擇持久化在 searchDraft.rss_region；Yahoo 顯�
 每條相關新聞卡片讀 evidence 中的 rule_settings/base_score/time_factor 解釋規則；預設 rules-v1 證據格式保持相容。dialog 開啟時單 root idle 視為 busy，Esc 關 dialog 不清 root。關聯設定與節點大小／視圖門檻／channel 分類彼此獨立。
 
 
-圖示點擊以原生 pointer capture 行為驗證：capture 到 panel 時 click target 是 panel，故 panel 本身也處理 collapsed click，拖曳後的 click 仍抑制。避讓在必要時將已收合的另一工具移到邊角，讓正在展開的工具優先。設定 UI 已移除 A/B 與 preset select。預設 unified 自適應先保留 strict edges，再針對孤立點補上寬條件內有證據的線。Apply 在途停用並呈現 spinner／不定量 progress；成功不輸出統計摘要。欄位 tooltip 在 pointermove 顯示，靜止 2 秒後以 opacity 淡出，移動再顯示；鍵盤 focus 亦可查看。沒有保存偏好的新使用者採 unified；明確保存的偏好與載入快照的凍結設定保留。
+設定 UI 已移除 A/B 與 preset select。預設 unified 自適應先保留 strict edges，再針對孤立點補上寬條件內有證據的線。Apply 在途停用並呈現 spinner／不定量 progress；成功不輸出統計摘要。欄位 tooltip 在 pointermove 顯示，靜止 2 秒後以 opacity 淡出，移動再顯示；鍵盤 focus 亦可查看。沒有保存偏好的新使用者採 unified；明確保存的偏好與載入快照的凍結設定保留。
 
 ## 時間軸精簡與跨年（2026-11-02）
 

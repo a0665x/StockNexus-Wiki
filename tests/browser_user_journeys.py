@@ -110,7 +110,7 @@ def main():
             click('viewRelationsStop');check('cancel keeps graph',"viewRelationState.phase==='stopped'&&articles.length===3&&!$('activityText').textContent.includes('NaN')")
             js("finishBuild();holdPreview=false");time.sleep(.3)
             check('late cancelled reply ignored',"viewRelationState.phase==='stopped'")
-            js("$('query').value='TSLA, test';$('ticker').value='NASDAQ:TSLA';$('start').value='2026-01-01';$('end').value='2026-01-31'")
+            js("$('query').value='TSLA, test';$('ticker').value='NASDAQ:TSLA';$('start').value='2026-01-01';$('end').value='2026-01-31';$('end').dispatchEvent(new Event('input'))")
             click('submit');wait_for("!!window.feed")
             check('waiting search preserves graph and gives status',"!!controller&&articles.length===3&&!$('activitySpinner').hidden")
             click('modeTimeline');click('modeNetwork')

@@ -104,7 +104,7 @@ with tempfile.TemporaryDirectory(prefix='atlas-chat-qa-') as temp:
   assert js("AtlasDock.docked($('sourcePanel'))")
   assert js("AtlasDock.state().tree.b.axis")=='row'
   print('PASS: left-edge split adapts independently within the remaining news pane',flush=True)
-  # A compact tool intentionally uses an 88px pane, not the saved split ratio.
+  # Reopen the tool before resizing its split.
   if js("$('timeFocusBody').hidden"):click('#timePanelDrag')
   r=rect('.pane-workspace > .pane-split > .pane-divider');before=js('AtlasDock.state().tree.ratio')
   drag_to('.pane-workspace > .pane-split > .pane-divider',r['x']+r['width']/2,r['y']+r['height']/2+60)
@@ -114,8 +114,9 @@ with tempfile.TemporaryDirectory(prefix='atlas-chat-qa-') as temp:
   assert js("AtlasDock.state().tree.b.id")=='news'
   assert js("Math.abs(parseFloat(document.querySelector('[data-pane=news]').style.flexGrow)-(1-AtlasDock.state().tree.ratio))<.001"), 'Promoted pane must inherit its outer split ratio'
   if not js("$('sourcePanelBody').hidden"):click('#sourcePanelToggle')
-  assert rect('#sourcePanel')['width']>=71 and rect('#sourcePanel')['height']>=71
-  print('PASS: resize, drag out, split collapse and doubled compact icon',flush=True)
+  compact=rect('#sourcePanel')
+  assert compact['width']==compact['height']==40
+  print('PASS: resize, drag out, split collapse and square source launcher',flush=True)
   js("showArticle(articles.find(a=>a.published_at?.startsWith('2026-10-'))||articles[0])")
   assert js("$('timeFocusDate').textContent.startsWith(articles.find(a=>a.id===selected).published_at.slice(0,10))")
   assert js('qaErrors')==[],js('qaErrors')
@@ -123,6 +124,7 @@ with tempfile.TemporaryDirectory(prefix='atlas-chat-qa-') as temp:
   call('Page.reload');wait("typeof AtlasDock!=='undefined'&&document.querySelector('[data-pane=timeFocusBar]')!==null")
   assert js("AtlasDock.state().tree.a.id")=='timeFocusBar'
   print('PASS: adaptive split layout persists after reload',flush=True)
+  if js("$('sourcePanelBody').hidden"):click('#sourcePanelDrag')
   for edge in ['right','bottom']:
    js("$('sourcePanelDrag').scrollIntoView({block:'nearest'})")
    r=rect('[data-pane="news"]')

@@ -60,7 +60,7 @@ Validation: 94 Wiki tests (including six threaded/checkpoint/merge tests), 13 No
 
 ## 使用流程
 
-新聞圖與 Wiki 為獨立視圖，返回連結保留新聞節點／鏡頭。品牌圖片使用 `dist/stocknexus-wiki.png`，來源為根目錄使用者提供的同名 PNG。
+新聞圖與 Wiki 為獨立視圖，返回連結保留新聞節點／鏡頭。品牌圖片使用 `dist/stocknexus-wiki.png`。直接替換此檔，在專案根目錄執行 `./run.sh up` 後重新整理頁面即可更新。
 
 覆蓋進度下只有一個「開始整理／繼續整理」主要入口，依目前顯示的日期與設定執行，不暗中延伸日期。進頁、切換設定或輪詢不建立 plan；按下後立即顯示準備狀態，依序 `POST plan` 核對快取範圍、`POST jobs` 排入未完成新聞與缺漏分類。重複點擊不重複排入。正在整理時按設定 Apply 會中斷舊工作並以新設定接續；閒置 Apply 只保存，不啟動模型。開始按鈕 hover/focus 550ms 顯示說明，離開或 Escape 關閉。
 

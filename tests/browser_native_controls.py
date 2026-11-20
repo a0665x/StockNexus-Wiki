@@ -93,7 +93,9 @@ def main():
             checks['TooltipVisible']=js("Number(getComputedStyle(document.getElementById('relationTooltip')).opacity)>.9")
             time.sleep(2.6)
             checks['TooltipFades']=js("Number(getComputedStyle(document.getElementById('relationTooltip')).opacity)<.1")
-            call('Input.dispatchMouseEvent',{'type':'mouseMoved','x':point['x']+4,'y':point['y']});time.sleep(.6)
+            # The settings layout can settle after the tooltip fades. Move within the current label.
+            point=js("(()=>{const r=document.querySelector('[data-rule-help=adaptive]').getBoundingClientRect();return {x:r.left+94,y:r.top+r.height/2}})()")
+            call('Input.dispatchMouseEvent',{'type':'mouseMoved',**point});time.sleep(.6)
             checks['TooltipReturnsOnMove']=js("Number(getComputedStyle(document.getElementById('relationTooltip')).opacity)>.9")
             click('relationClose')
             js("exportMeta={start:'2025-11-03',end:'2026-11-02'};timelineCutoff=null")

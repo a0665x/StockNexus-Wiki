@@ -12,11 +12,17 @@
   let mode=['floating','collapsed'].includes(saved.mode)?saved.mode:'docked';
   let previous=saved.previous==='floating'?'floating':'docked';
   let x=Number.isFinite(saved.x)?saved.x:null,y=Number.isFinite(saved.y)?saved.y:null,drag=null;
-  const bounds=()=>{
-   const top=clamp(Math.max(0,document.querySelector('.wiki-header').getBoundingClientRect().bottom)+8,8,innerHeight-80);
-   return {left:8,right:innerWidth-8,top,bottom:innerHeight-8,width:innerWidth-16,height:innerHeight-top-8};
-  };
+  const header=document.querySelector('.wiki-header');
+  const bounds=()=>root.AtlasUI.windowBounds(header);
+  let iconPosition=Number.isFinite(saved.iconPosition?.x)&&Number.isFinite(saved.iconPosition.y)?saved.iconPosition:null;
+  function placeIcon(point=iconPosition){
+   if(mode!=='collapsed'||!launcher.getClientRects().length)return;
+   const graph=$('wikiCanvas').getBoundingClientRect(),r=launcher.getBoundingClientRect();
+   const p=root.AtlasUI.fitPoint(point||{x:graph.left+12,y:graph.bottom-r.height-12},r,bounds());
+   launcher.style.left=p.x+'px';launcher.style.top=p.y+'px';return p;
+  }
   function place(){
+   if(mode==='collapsed'){placeIcon();return;}
    if(mode!=='floating'||!tool.getClientRects().length)return;
    resize.constrain();
    const b=bounds(),r=tool.getBoundingClientRect(),graph=$('wikiCanvas').getBoundingClientRect();
@@ -27,7 +33,7 @@
   const resize=root.AtlasFloatingResize.attach({panel:tool,bounds,collapsed:()=>mode!=='floating',
    initial:{width:saved.width||720,height:saved.height||400},onStart:()=>{},
    onMove(dx,dy){x+=dx;y+=dy;place();},onFinish(){place();persist();}});
-  function persist(){root.AtlasUI.write('wikiTimelineWindow',{mode,previous,x,y,...resize.state()});}
+  function persist(){root.AtlasUI.write('wikiTimelineWindow',{mode,previous,x,y,iconPosition,...resize.state()});}
   function labels(){
    const title=t('L1 觀點群 × 引用新聞日期（UTC）','L1 opinion groups × cited news date (UTC)');
    $('wikiTimelineTitle').textContent=title;
@@ -49,7 +55,20 @@
    tool.hidden=mode==='collapsed';launcher.hidden=mode!=='collapsed';
    launcher.setAttribute('aria-expanded',String(mode!=='collapsed'));labels();place();
   }
-  fold.onclick=()=>{previous=mode;display('collapsed');persist();launcher.focus({preventScroll:true});};
+  fold.onclick=()=>{
+   if(!iconPosition&&mode==='floating'){const r=tool.getBoundingClientRect();iconPosition={x:r.left,y:r.top};}
+   previous=mode;display('collapsed');persist();launcher.focus({preventScroll:true});
+  };
+  root.AtlasUI.bindWindowDrag(launcher,{
+   start(e){const r=launcher.getBoundingClientRect();return {dx:e.clientX-r.left,dy:e.clientY-r.top,iconPosition};},
+   move(e,d){iconPosition=placeIcon({x:e.clientX-d.dx,y:e.clientY-d.dy});},
+   finish(e,d,cancel){if(cancel){iconPosition=d.iconPosition;placeIcon();}persist();}
+  });
+  launcher.addEventListener('keydown',e=>{
+   const step=root.AtlasUI.arrowStep(e.key);if(!step)return;
+   e.preventDefault();const r=launcher.getBoundingClientRect();
+   iconPosition=placeIcon({x:r.left+step[0],y:r.top+step[1]});persist();
+  });
   launcher.onclick=()=>{display(previous);persist();grip.focus({preventScroll:true});};
   expand.onclick=()=>{display(mode==='floating'?'docked':'floating');persist();};
   grip.onpointerdown=e=>{
@@ -84,7 +103,7 @@
   };
   grip.onclick=e=>{if(e.detail===0)expand.click();};
   root.addEventListener('blur',()=>finish(null,true));root.addEventListener('resize',place);
-  const observer=new ResizeObserver(place);observer.observe(document.querySelector('.wiki-header'));
+  const observer=new ResizeObserver(place);observer.observe(header);
   display(mode);return {labels};
  }
 
