@@ -1,5 +1,15 @@
 # 測試與驗收
 
+## 2026-11-20 — Unslop workbench, history and preparation
+
+- Wiki Python suite (`python3 -m unittest discover -s tests -p 'test_wiki*.py' -q`): **96 passed**. Exact forest reuse and invalidation cover changed content, dates, grouping settings and source separation; worker checkpoints remain covered.
+- Node Chat/bridge suite (`node --test tests/chat-*.test.mjs`): **19 passed**, including durable history across service restart, SDK thread resumption, owner/surface isolation, private file mode, deletion and cross-session busy guards. SDK replies are mocked; this does not certify model answer quality.
+- Chat proxy/Tailscale suite: **7 passed**. New history/conversation routes use the existing access boundary.
+- Real Chromium isolated fixtures: `browser_unslop.py` **14 checks**, `browser_wiki_identity.py` **9**, `browser_wiki_workers.py` **10**, `browser_chat_language.py` **23**, and `browser_chat_failure.py` **PASS**. Covers confirmed stock alignment, ignored input drafts, preparation stages and duplicate clicks, saved/reopened/continued/deleted history, cancelled deletion, language changes, reloads, worker navigation, mobile overflow and adjacent error display. The language fixture now waits for workspace restoration and explicitly loads its graph because entering Wiki no longer implicitly loads News; product behavior was not weakened to satisfy the fixture.
+- Paired local preparation benchmark without profiler overhead, using the same stored 9,000-record universe, date-filtered 2,338 target articles and 452 trees: regular preparation **3.693 / 4.061 s**; exact saved-forest reuse **0.839 / 0.872 s**. Returned values were equal in both pairs. This measures the preparation function with an existing graph cache, not HTTP latency, first-time work, model runtime or overall worker throughput.
+- Production rebuild: healthy container, Chat/Wiki ready, served stylesheet and two changed interaction scripts SHA256-match checkout. Tailscale UI shows automatic **NVDA v231** selection and the expanded empty Chat history. No production conversation/model job was created as a test. Existing memory-only chats cannot be recovered.
+- Desktop/mobile fixture screenshots and actual narrow-viewport production screenshots were inspected. JavaScript syntax, documentation links and whitespace checks pass. The approved design, installed skill provenance and operational limits are recorded in [the workbench reference](references/unslop-20261120.md).
+
 ## 2026-11-20 — Parallel tree processing
 
 - `PYTHONDONTWRITEBYTECODE=1 PYTHONWARNINGS=ignore::ResourceWarning python3 -m unittest discover -s tests -p 'test_wiki*.py' -q`: **95 passed**, including seven real threaded/SQLite worker tests (overlap, unequal trees, cancellation, failure, checkpoint resume, checkpoint merge, strict settings). Local HTTP tests require host socket permission; an initial sandbox socket denial was rerun successfully with that permission. Existing SQLite ResourceWarnings were suppressed in this run.

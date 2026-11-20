@@ -44,7 +44,7 @@ Shell tools and web search
 are disabled; the SDK runs read-only with no interactive approvals. Prompts and
 news sent to the signed-in model are not local inference. SDK conversation records
 may persist in that isolated home; New chat starts a fresh thread, not deletion of
-old stored records. Browser chat messages are in memory and reset on refresh.
+old stored records. Application chat history now persists across refresh/restart for the same browser owner; see the November 20 update below. Older in-memory conversations cannot be reconstructed.
 
 ## UI contract
 
@@ -162,3 +162,7 @@ approval for that interruption or deploy after those jobs finish; do not bypass.
 
 ### Database context tool
 `read_database` exposes catalog/news/related/prices/l1/l2 through `/api/context/*` using the authenticated session command/ack path. Unlike read_news/read_wiki it does not depend on loaded graph data. Only GET resources are allowed. Server validates stock/owner/time; the bridge rejects a response if the browser stock changed. Read-only existing research is allowed while L1 owns the model slot. See [API](API.md) and the [skill](../skills/stocknexus-research-api/SKILL.md).
+
+## November 20: persistent conversation history
+
+The history list supports reopen/continue, new chat without erasing old records, and confirmed deletion of app history. The bridge stores private owner-scoped records and resumes only server-owned SDK thread IDs. `/history` and `/conversation` are authenticated POST routes behind the existing proxy boundary. Browser capabilities stay out of workspace sync and exports. News and Wiki have separate lists. See [ownership, limits and deletion scope](references/unslop-20261120.md).

@@ -16,7 +16,7 @@ def local_peer(address):
     except (OSError,ValueError,IndexError):pass
     return False
 
-PATHS={'session','sync','turn','cancel','reset','status','models'}
+PATHS={'session','sync','turn','cancel','reset','status','models','history','conversation'}
 class UnixConnection(http.client.HTTPConnection):
     def __init__(self,path):
         super().__init__('localhost',timeout=650);self.path=path

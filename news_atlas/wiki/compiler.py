@@ -185,7 +185,7 @@ class WikiService:
             universe=body.get('graph_universe') or store.config().get('graph_universe')
             if universe:
                 from .forest import prepare
-                rows,context_rows,options['graph_selection']=prepare(self.news,store.instrument,universe,options['graph_settings'],dates)
+                rows,context_rows,options['graph_selection']=prepare(self.news,store.instrument,universe,options['graph_settings'],dates,cached=store.config().get('graph_selection'))
                 options['graph_universe']=universe;options['graph_context_revisions']=[a['revision_id'] for a in context_rows]
             else:
                 selection=body.get('graph_selection',store.config().get('graph_selection'))

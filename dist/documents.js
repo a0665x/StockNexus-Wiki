@@ -181,7 +181,7 @@
     byId('refreshDocuments').onclick=()=>refresh(true).catch(fail);
     const canvas=byId('docGraph');
     try {
-      graph=ForceGraph3D()(canvas).backgroundColor('#0b1420').nodeLabel(n=>n.record.title.replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';'))
+      graph=ForceGraph3D()(canvas).backgroundColor('#141617').nodeLabel(n=>n.record.title.replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';'))
         .nodeAutoColorBy(n=>n.record.layer || n.record.source).linkDirectionalArrowLength(3)
         .linkColor(l=>l.type==='contains'?'#5d8498':l.type==='contradicts'?'#fa8292':'#6ddbc2')
         .linkLabel('type').onNodeClick(n=>show(n.record));

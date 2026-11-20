@@ -160,7 +160,8 @@ class WikiStore:
             if active: return active[0]
             rows=self.pending(model,limit,revision_ids,review=operation=='review')
             ident=uuid.uuid4().hex;stamp=now()
-            payload={**{k:self.config()[k] for k in ('workers','reasoning_effort','languages','evidence_size','strategy','graph_edges','graph_settings','price_horizon','settings_version','graph_selection','graph_universe') if k in self.config()},'context_revisions':self.config().get('graph_context_revisions',self.config().get('revision_ids')) if self.config().get('strategy')=='root' else None,'model':model,'revisions':[r['revision_id'] for r in rows],'prompt_version':PROMPT_VERSION,'operation':operation}
+            config=self.config()
+            payload={**{k:config[k] for k in ('workers','reasoning_effort','languages','evidence_size','strategy','graph_edges','graph_settings','price_horizon','settings_version','graph_selection','graph_universe') if k in config},'context_revisions':config.get('graph_context_revisions',config.get('revision_ids')) if config.get('strategy')=='root' else None,'model':model,'revisions':[r['revision_id'] for r in rows],'prompt_version':PROMPT_VERSION,'operation':operation}
             db.execute('INSERT INTO jobs(id,created_at,updated_at,status,payload) VALUES (?,?,?,?,?)',(ident,stamp,stamp,'queued' if rows else 'completed',encode(payload)))
         return ident
 

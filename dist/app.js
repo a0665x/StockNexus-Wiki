@@ -86,7 +86,7 @@ $('graph').addEventListener('webglcontextlost',event=>{event.preventDefault();re
 $('graph').addEventListener('webglcontextrestored',()=>{if(graphFailure?.kind==='context-lost'){graphFailure=null;updateGraphMessage();}},true);
 function initializeGraph(){
 try {
-  graph = ForceGraph3D()($('graph')).backgroundColor('#090f1b').nodeId('id')
+  graph = ForceGraph3D()($('graph')).backgroundColor('#141617').nodeId('id')
     .nodeColor(nodeColor).nodeVal(3).nodeResolution(6).nodeOpacity(.95)
     .linkColor(linkColor).linkWidth(.6).linkOpacity(1)
     .onNodeHover(n => {if(interaction&&interaction.supported!==false)return;setHovered(n);})

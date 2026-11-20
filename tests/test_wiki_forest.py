@@ -38,6 +38,26 @@ class ForestTests(unittest.TestCase):
         p=self.service.plan(body);self.assertEqual(p['selected'],810)
         trees=p['graph_selection']['trees'];self.assertEqual(len(trees),810)
         self.assertEqual(len({a['id'] for tree in trees for a in tree['articles']}),810)
+    def test_saved_forest_reuse_requires_exact_evidence_dates_and_rules(self):
+        from unittest.mock import patch
+        from news_atlas.wiki.forest import prepare
+        from news_atlas.wiki.evidence import graph_options
+        rows=[row(title='Tesla factory earnings update',suffix='cached')]
+        body=self.body(rows);cfg=graph_options(body['graph_settings'])
+        first=prepare(self.news,'NASDAQ:TSLA',body['graph_universe'],cfg,None)
+        with patch('news_atlas.wiki.forest.build_cached',side_effect=AssertionError('unexpected graph rebuild')):
+            reused=prepare(self.news,'NASDAQ:TSLA',body['graph_universe'],cfg,None,cached=first[2])
+            self.assertEqual(reused,first)
+        import copy
+        for variant in ['date','rule','content','separate']:
+            fresh=copy.deepcopy(body);settings=copy.deepcopy(cfg);dates=None
+            if variant=='date':dates={'start':'2026-01-01','end':'2026-12-31'}
+            if variant=='rule':settings['exploration']['branchLimit']=6
+            if variant=='separate':fresh['graph_universe']['separate']=True
+            if variant=='content':self.body([{**rows[0],'title':'Changed evidence'}])
+            with patch('news_atlas.wiki.forest.build_cached',side_effect=ValueError('cache invalidated')):
+                with self.assertRaisesRegex(ValueError,'cache invalidated'):
+                    prepare(self.news,'NASDAQ:TSLA',fresh['graph_universe'],settings,dates,cached=first[2])
     def test_no_duplicate_tree_call_and_same_stock_boundary(self):
         rows=[row(title='Tesla factory production earnings '+str(i),suffix=str(i)) for i in range(3)]
         body=self.body(rows);p=self.service.plan(body)

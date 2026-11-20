@@ -1,5 +1,11 @@
 # LLM Wiki 執行與維護
 
+## 2026-11-20 — Entry alignment and preparation reuse
+
+Entering Wiki follows the confirmed News graph instrument and loads its existing Wiki; a matching news DB without a Wiki is preselected for creation. A remembered Wiki from another stock cannot override that identity. Unsubmitted search text is ignored. Opening Wiki alone never starts model work.
+
+Root preparation persists a fingerprint over the actual source content, channels, dates, stock, graph/exploration settings, separation and algorithm/cache version. An exact match reuses saved tree membership; any changed input rebuilds it. Current extraction credit and pending work are still evaluated normally. The first plan without a fingerprint rebuilds once. Enqueue decodes the large configuration only once. The UI reports preparation stage and elapsed seconds, without implying model progress. See [design details](references/unslop-20261120.md) and [measured validation](TESTING.md).
+
 ## 2026-11-20 — Parallel tree workers and consistent progress
 
 Graph root incremental updates support **1 / 3 / 5 / 10 concurrent workers**. This is a concurrency limit, not a promised speed multiplier. Other grouping methods and manual review remain serial. Every worker uses the job's selected model/effort and owns a different tree; segments within a tree execute in order. Fair scheduling processes at most one tree per lane before giving other stocks/classification a turn. There is one parent job, shared append-only Wiki and transactional publication, rather than separate Wikis per worker.

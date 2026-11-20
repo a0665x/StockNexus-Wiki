@@ -1,5 +1,9 @@
 # NVDA annual research — November 20, 2026
 
+## Current observation after workbench deployment
+
+The annual controller is **blocked**, reporting “Associated classification did not complete; no retry”. A classification timed out after 600 seconds with completed batches preserved; the latest research is cancelled. Published Wiki is **v231**. No stock had queued/running model or research jobs at the pre-deployment audit. The workbench update preserved data and did not resume this workflow. Inspect `data/private/nvda-research-20261120/workflow.json` before any recovery; historical running observations below are superseded. Current Git work is on `llm_wiki_unslop`, with the earlier baseline committed as `86f06a7`; no push was made.
+
 The user authorized a full local service restart, annual NVDA data acquisition, L1 processing with 6.2 Sol, and two L2 studies. This run does not resume other stocks or erase existing results. Git remains `llm_wiki` at `228f6a7`, with the document-import follow-up and onboarding documentation uncommitted. No push was made.
 
 ## Latest transition: user-selected three workers

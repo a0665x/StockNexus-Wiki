@@ -81,7 +81,7 @@
   $('wikiResizeLeft').setAttribute('aria-label',t('調整左側寬度','Resize left panel'));$('wikiResizeRight').setAttribute('aria-label',t('調整右側寬度','Resize right panel'));$('wikiResizeTimeline').setAttribute('aria-label',t('調整圖表高度','Resize chart height'));$('wikiResizeChanges').setAttribute('aria-label',t('調整版本變更高度','Resize version changes'));$('wikiSettingsClose').setAttribute('aria-label',t('關閉設定','Close settings'));
   $('wikiModelNote').textContent=t('思考深度取自目前登入的模型目錄；更換模型不重抽已完成新聞。','Reasoning choices come from your model catalog. Changing model reuses completed evidence.');
   strategyNote();modelChoices();savedChoices();versionChoices();selection();sliderLabel();paintPlan();activity();render();if(selectedDetail)details(selectedDetail,selectedEdge);
-  if(!panel.hidden)$('relationOpen').textContent=t('⚙ Wiki 設定','⚙ Wiki settings');
+  if(!panel.hidden)$('relationOpen').textContent=t('Wiki 設定','Wiki settings');
  }
  function syncGraphUniverse(){const news=hooks.selection('global');if(news.graph_universe?.articles?.length&&news.graph_universe.ticker===current().split(':')[1]){graphUniverse=news.graph_universe;graphSettings=news.graph_settings;}}
  function strategyNote(){const notes={lexical:['先依詞彙重疊組合新聞，再找相關舊觀點。','Group by word overlap, then retrieve related existing viewpoints.'],chronological:['依新聞日期由早至晚，逐組建立脈絡。','Process news oldest first in adjacent date groups.'],root:['從完整新聞圖譜自動採樣 root，直到涵蓋此日期範圍全部新聞；跳過重複覆蓋，包含未渲染與孤立節點。整棵樹送入模型，區間外成員僅作脈絡；超出輸入容量才分段。','Automatically sample roots over the complete News graph until every article in the Wiki date range is covered, including unrendered and isolated nodes. Skip redundant coverage. Send the whole tree; outside-range members are context. Split only for input capacity.'],fusion:['優先相關但不同來源的新聞，保留分歧及各自的證據邊界。','Prefer related news from different sources; preserve disagreements and their evidence boundaries.']};$('wikiStrategyNote').textContent=t(...notes[$('wikiStrategy').value])+' '+t('所有方式共用同一觀點庫；切換不會清空已整理內容。','All methods share one opinion store; switching keeps completed work.');$('wikiEvidenceSize').disabled=$('wikiStrategy').value==='root';$('wikiWorkers').disabled=$('wikiStrategy').value!=='root'||$('wikiOperation').value==='review';if($('wikiStrategy').value==='root')$('wikiStrategyNote').textContent+=' '+(graphUniverse?.articles?.length?t(`新聞圖譜完整範圍：${graphUniverse.articles.length} 篇。無需手動點選。`,`Full News universe: ${graphUniverse.articles.length} articles. No manual selection needed.`):t('請先載入此股票的新聞圖譜。','Load the News graph for this stock first.'));dirtySettings();}
@@ -346,7 +346,7 @@
   if(!subset.length){graph?.graphData({nodes:[],links:[]});return;}
   try{
    if(!graph){
-    graph=root.ForceGraph3D()($('wikiCanvas')).backgroundColor('#080f1a').showNavInfo(false).nodeId('id')
+    graph=root.ForceGraph3D()($('wikiCanvas')).backgroundColor('#141617').showNavInfo(false).nodeId('id')
      .nodeColor(nodeColor)
      .nodeVal(nodeSize).nodeLabel(nodeTooltip).onEngineTick(shapeArguments)
      .linkLabel(l=>el('span',relationName(l.edge.relation_type)).outerHTML).linkColor(linkColor).linkOpacity(.65).linkDirectionalArrowLength(3).linkDirectionalArrowRelPos(1).linkWidth(linkWidth)
@@ -548,8 +548,16 @@
   try{
    const [nextInfo,catalog]=await Promise.all([api('status'),api('models').catch(error=>{if(!initialized)throw error;return {models};})]);info=nextInfo;catalogAt=Date.now();
    models=catalog.models;modelChoices();
+   // The graph's confirmed identity wins over a remembered Wiki from another
+   // stock. A search-field draft is deliberately not used here.
+   const news=hooks.selection('global').search||{};
+   const matching=(info.news_databases||[]).find(x=>x.ticker===news.ticker||x.instrument.split(':')[1]===news.ticker);
+   const newsInstrument=news.instrument||matching?.instrument;
+   const aligned=newsInstrument&&(info.instruments.some(x=>x.instrument===newsInstrument)||(info.news_databases||[]).some(x=>x.instrument===newsInstrument))?newsInstrument:null;
    if(!initialized){
-    const saved=root.AtlasWorkspace?.state.wiki||JSON.parse(localStorage.getItem('stocknexus.wikiRuntime')||'null');
+    const remembered=root.AtlasWorkspace?.state.wiki||JSON.parse(localStorage.getItem('stocknexus.wikiRuntime')||'null');
+    const saved=!aligned||remembered?.instrument===aligned?remembered:null;
+    if(aligned){savedChoices(true);$('wikiSaved').value=info.instruments.some(x=>x.instrument===aligned)?aligned:'';instrumentChoices(aligned);}
     savedChoices(true);if(saved?.instrument){$('wikiSaved').value=info.instruments.some(x=>x.instrument===saved.instrument)?saved.instrument:'';instrumentChoices(saved.instrument);}
     else if(!current()){const id=hooks.selection('global').search?.instrument;const existing=info.instruments.find(x=>x.instrument===id)||info.instruments.filter(x=>x.version>0).sort((a,b)=>b.version-a.version)[0];if(existing){$('wikiSaved').value=existing.instrument;instrumentChoices(existing.instrument);}}
     savedChoices();
@@ -557,13 +565,16 @@
     if(saved&&Object.keys(saved.controls||{}).length){const before=String(query());restoreRuntime(saved);if(String(query())!==before&&info.instruments.some(x=>x.instrument===current()))await load();else render();if(saved.selected){const n=data?.nodes.find(n=>n.id===saved.selected);if(n){details(n);if(n.kind!=='ArticleRevision'&&n.layer!=='L2')await openViewpoint(n);}}if(saved.camera){fitPending=false;graph?.cameraPosition(saved.camera);}}
     else if(!data){const preferred=catalog.default_model+'|medium';if([...$('wikiModel').options].some(o=>o.value===preferred))$('wikiModel').value=preferred;}
     initialized=true;
+   }else if(aligned&&aligned!==current()){
+    clearStock();savedChoices(true);$('wikiSaved').value=info.instruments.some(x=>x.instrument===aligned)?aligned:'';instrumentChoices(aligned);
+    if($('wikiSaved').value)await load(true);
    }else{savedChoices();if(data)poll();else if(info.instruments.some(x=>x.instrument===current()))await load();}
    if(selected?.trees?.length)rootSelection=selected;syncGraphUniverse();strategyNote();schedulePreview();saveRuntime();
    if(info.bridge_ready&&!$('wikiStatus').classList.contains('error'))status('');if(!info.bridge_ready)status(t('模型橋接尚未就緒；啟動前請檢查 Chat 服務。','Model bridge is not ready; check the Chat service before starting.'),true);
   }catch(e){status(e.message,true);}
   clearInterval(pollTimer);pollTimer=setInterval(poll,2000);$('wikiBack').focus();
  }
- function hide(e){e?.preventDefault();saveRuntime();panel.hidden=true;dialog.close();clearInterval(pollTimer);clearTimeout(previewTimer);invalidate();request++;graph?.pauseAnimation();hooks.visible(false);$('relationOpen').textContent=root.AtlasI18n?.t('⚙ 關聯設定')||'⚙ Edge settings';open.focus();}
+ function hide(e){e?.preventDefault();saveRuntime();panel.hidden=true;dialog.close();clearInterval(pollTimer);clearTimeout(previewTimer);invalidate();request++;graph?.pauseAnimation();hooks.visible(false);$('relationOpen').textContent=root.AtlasI18n?.t('關聯設定')||'Edge settings';open.focus();}
  $('wikiSaved').addEventListener('focus',()=>refreshCatalog(true));root.addEventListener('focus',()=>refreshCatalog(true));
  open.onclick=show;$('wikiBack').onclick=hide;
  $('relationOpen').addEventListener('click',e=>{if(panel.hidden)return;e.preventDefault();e.stopImmediatePropagation();appliedSettings=appliedSettings||draftSettings();syncGraphUniverse();strategyNote();dialog.showModal();},true);
@@ -578,14 +589,16 @@
  function selectVersion(){researchRun=null;clearTimeout(revealTimer);$('wikiLayer').value='L1';render();root.dispatchEvent(new CustomEvent('atlas-wiki-research-clear'));return load();}
  for(const id of ['wikiVersion','wikiViewStart','wikiViewEnd'])$(id).onchange=()=>id==='wikiVersion'?selectVersion():load();
  $('wikiStart').onclick=async()=>{
-  if(busy||$('wikiStart').disabled)return;busy=true;const mine=generation,ident=current();activity();
+  if(busy||$('wikiStart').disabled)return;busy=true;const mine=generation,ident=current(),started=Date.now();activity();
+  let phase=t('核對新聞與建立分組','Checking news and grouping');
+  const preparing=setInterval(()=>{if(mine===generation)status(phase+' · '+Math.floor((Date.now()-started)/1000)+t(' 秒',' s'),false,true);},1000);
   status(t('正在核對快取中的新聞範圍與已完成證據…','Checking cached news and completed evidence…'),false,true);
   try{
    const value=await api('plan',requestBody());if(mine!==generation||ident!==current()||panel.hidden)return;plan=value;
-   status(t('正在排入尚未完成的整理工作…','Queuing remaining work…'),false,true);
+   phase=t('排入尚未完成的工作','Queuing remaining work');status(phase,false,true);
    const job=await api('jobs',{plan_id:value.plan_id,continuous:$('wikiContinuous').checked,classify_missing:true});if(mine!==generation||ident!==current()||panel.hidden)return;
-   invalidate();$('wikiVersion').value='';await load();status(job.status==='noop'?job.message:t('工作已排入佇列，可隨時停止。','Work queued. Stop at any time.'));
-  }catch(e){if(mine===generation)status(e.message,true);}finally{busy=false;$('wikiStatus').classList.remove('wiki-working');$('wikiStatus').setAttribute('aria-busy','false');activity();}
+   invalidate();phase=t('載入已保存成果','Loading saved results');$('wikiVersion').value='';await load();status(job.status==='noop'?job.message:t('工作已排入佇列，可隨時停止。','Work queued. Stop at any time.'));
+  }catch(e){if(mine===generation)status(e.message,true);}finally{clearInterval(preparing);busy=false;$('wikiStatus').classList.remove('wiki-working');$('wikiStatus').setAttribute('aria-busy','false');activity();}
  };
 
  $('wikiExport').onclick=()=>{if(!data)return;return buttonAction($('wikiExport'),t('正在匯出…','Exporting…'),async()=>{const result=await api('markdown?'+new URLSearchParams({instrument:data.instrument,version:data.version}));const url=URL.createObjectURL(new Blob([result.markdown],{type:'text/markdown;charset=utf-8'})),a=el('a');a.href=url;a.download=data.instrument.replace(':','-')+'-wiki.md';a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);},t('已產生 Markdown，下載已交給瀏覽器。','Markdown generated; download handed to the browser.'));};

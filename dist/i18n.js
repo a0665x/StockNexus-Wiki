@@ -53,7 +53,7 @@
     '標題規則最少共同詞數':'Minimum shared terms for title rule',
     '優先連接有證據的孤立點':'Prioritize isolated nodes with qualifying evidence',
 
-"⚙ 關聯設定":"\u2699 Edge settings",
+"關聯設定":"\u2699 Edge settings",
 "連線如何成立？":"What makes an edge?",
 "只重算已載入新聞的連線，不重新抓新聞；沒有連線的孤立節點始終保留。":"Rebuilds edges from loaded news without fetching. Isolated news nodes always remain.",
 "目前使用可解釋文字規則。沒有 embedding；產業分類不參與加權，時間大小焦點也不改變 edge。":"Uses explainable text rules. No embeddings or industry weighting. The node-size date focus does not change edges.",

@@ -1,5 +1,13 @@
 # 變更與驗證 log
 
+## 2026-11-20 — Unslop research workbench and persistent Chat
+
+Applied the user-approved graphite workbench across News, Wiki, Chat, settings and documents with restrained teal, consistent typography/controls, compact worker progress and responsive history rows. Installed and pinned unslop by Damir Sokolovsky; attribution and reproduction instructions are in the [design record](references/unslop-20261120.md).
+
+Wiki now opens the existing stock matching the confirmed News graph, ignoring unsubmitted search drafts. Preparation reuses exact saved forest membership and displays real stages/elapsed time. Chat conversations persist across reload/restart, can be reopened and continued, and have a confirmed delete action. Histories are separated by browser owner and News/Wiki surface. Earlier memory-only conversations are not recoverable.
+
+Dedicated branch: `llm_wiki_unslop`, following baseline `86f06a7`. Deployed to the existing Tailscale service with database backup and rollback image. Tests and measured preparation scope are in [TESTING](TESTING.md). NVDA v231 remains published, but annual processing was already stopped by a classification failure/cancellation and was not resumed during deployment.
+
 ## 2026-11-20 — Parallel L1 tree workers
 
 Added bounded 1/3/5/10 Graph root workers, independent bridge calls with parent cancellation, per-lane progress, and transactional segment checkpoints for explicit resume. Progress now leads with completed trees, retains article coverage and opens each worker's frozen tree. Cross-machine merge preserves checkpoints with local version mapping. The user selected three GPT-6.1 Sol workers for NVDA L1. Validation: 94 Wiki tests, 13 Node tests and ten browser checks; see [TESTING](TESTING.md) and [runtime contract](WIKI_RUNTIME.md). Deployment observations are recorded in CURRENT_STATE separately.
