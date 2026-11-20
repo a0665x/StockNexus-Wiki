@@ -1,4 +1,5 @@
 """Bounded tree workers. Shared publication stays transactional and append-only."""
+from .trace import span, emit, job_fields, admitted, job_state, error_fields
 import concurrent.futures
 import itertools
 import json
@@ -50,7 +51,7 @@ def process(service, store, max_groups=None):
         job = dict(row)
         job['payload'] = json.loads(job['payload'])
         db.execute("UPDATE jobs SET status='running',updated_at=? WHERE id=?", (now(), job['id']))
-    service.active = (store, job['id'])
+    service.active = (store, job['id']);admitted(store,job)
     halt = threading.Event()
     context_guard = threading.Condition()
     held = set()
@@ -73,12 +74,12 @@ def process(service, store, max_groups=None):
                 # rounds consume only pending targets; no tree has two owners.
                 if max_groups is not None and completed >= max_groups:
                     break
-                with queue_guard:
+                with span(store,'tree_dispatch',**job_fields(store,job),worker=slot), queue_guard:
                     tree = next(trees, None)
                 if tree is None:
                     break
                 info = tree[0][1]
-                worker_job = {**job, 'call_id': uuid.uuid4().hex}
+                worker_job = {**job, 'worker':slot, 'call_id': uuid.uuid4().hex}
                 state(store, job, slot, status='running', model=job['payload']['model'],
                       root_id=info['root_id'], tree=info['group'], total_trees=info['groups'],
                       title=tree[0][0][0]['title'], parts=len(tree), completed_parts=0,
@@ -93,6 +94,7 @@ def process(service, store, max_groups=None):
                         with store.connection() as db:
                             saved = db.execute('SELECT 1 FROM wiki_segments WHERE key=?', (checkpoint,)).fetchone()
                         if saved:
+                            emit(store,'state','checkpoint',**job_fields(store,job),worker=slot,root_id=meta['root_id'],part=meta['part'],status='reused')
                             state(store, job, slot, completed_parts=meta['part'], stage='reused')
                             continue
                         article = {**group[0], '_evidence':group, '_market':{}, '_group':meta,
@@ -101,7 +103,7 @@ def process(service, store, max_groups=None):
                         # Workers may share evidence, but never concurrently use
                         # the same mutable opinion revision as an update base.
                         claimed = set()
-                        with context_guard:
+                        with span(store,'context_wait',**job_fields(store,job),worker=slot,root_id=meta['root_id'],part=meta['part']), context_guard:
                             while running(service, store, job) and not halt.is_set():
                                 context = store.context({**article,'summary':' '.join(a['title']+' '+a['summary'][:1500] for a in group)})
                                 claimed = {n['id'] for n in context if n['kind'] != 'ArticleRevision'}
@@ -109,7 +111,8 @@ def process(service, store, max_groups=None):
                                     held.update(claimed)
                                     break
                                 state(store, job, slot, stage='waiting_context')
-                                context_guard.wait(.25)
+                                with span(store,'context_lock_wait',**job_fields(store,job),worker=slot):
+                                    context_guard.wait(.25)
                             else:
                                 return
                         try:
@@ -123,11 +126,12 @@ def process(service, store, max_groups=None):
                                     return
                                 stage = 'repairing' if attempt else 'compiling'
                                 state(store, job, slot, stage=stage, part=meta['part'])
-                                output = service.runner(store, worker_job, article, context)
+                                output = service.run_model(store, worker_job, article, context)
                                 if not isinstance(output, dict) or not isinstance(output.get('usage',{}), dict):
                                     raise ValueError('LLM回覆格式錯誤')
                                 try:
-                                    validate_proposal(article, output.get('proposal'), context)
+                                    with span(store,'validate',**job_fields(store,job),worker=slot):
+                                        validate_proposal(article, output.get('proposal'), context)
                                 except ValueError as error:
                                     store.reject(job, article, output.get('proposal'), error, output.get('usage',{}))
                                     if attempt:
@@ -168,6 +172,7 @@ def process(service, store, max_groups=None):
             db.execute("UPDATE jobs SET status=CASE WHEN done>=json_array_length(payload,'$.revisions') THEN 'completed' ELSE 'queued' END,updated_at=? WHERE id=? AND status='running'", (now(),job['id']))
         service.wake.set()
     except Exception as error:
+        emit(store,'error','job',**job_fields(store,job),**error_fields(error))
         with service.lock, store.connection() as db:
             db.execute('BEGIN IMMEDIATE')
             changed = db.execute("UPDATE jobs SET status='failed',error=?,updated_at=? WHERE id=? AND status='running'", (str(error)[:600],now(),job['id'])).rowcount
@@ -176,4 +181,5 @@ def process(service, store, max_groups=None):
                 cfg.update(enabled=False,catch_up=False)
                 db.execute('INSERT OR REPLACE INTO metadata VALUES (?,?)', ('config',json.dumps(cfg)))
     finally:
+        job_state(store,job)
         service.active = None

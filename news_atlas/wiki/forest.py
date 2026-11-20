@@ -32,7 +32,15 @@ def in_range(a,dates):
     day=(a.get('published_at') or '')[:10]
     return not dates or bool(day and dates['start']<=day<=dates['end'])
 
+from .trace import span
+
 def prepare(news,ident,universe,graph_settings,dates,*,cached=None):
+    with span(news,'prepare_forest',instrument=ident) as metrics:
+        result=_prepare(news,ident,universe,graph_settings,dates,cached=cached)
+        metrics.update(cache_hit=result[2] is cached,trees=len(result[2]['trees']),target_articles=len(result[0]))
+        return result
+
+def _prepare(news,ident,universe,graph_settings,dates,*,cached=None):
     raw=universe_rows(news,ident,universe);store=select(news,ident.split(':')[1])
     channels=store.list_channels()
     from ..graph_cache import VERSION

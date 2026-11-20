@@ -3,6 +3,7 @@
 No research object is an ingestion source. Legacy L1 nodes are wrapped without rewriting
 history. Local deployment has one trusted owner; clients cannot supply an owner.
 """
+from .trace import span, emit, job_fields, admitted, job_state, error_fields, timed
 import datetime as dt
 import json
 import os
@@ -291,6 +292,7 @@ def validate_fusion(proposal,b):
 class Research:
     def __init__(self,store):self.store=store
 
+    @timed('research_prepare')
     def prepare(self,body,clock=None):
         with self.store.connection() as db:
             db.execute('BEGIN IMMEDIATE')
@@ -298,6 +300,7 @@ class Research:
             b=bundle(db,lens);snapshot='snapshot-'+digest(b)
             return lens,b,snapshot
 
+    @timed('research_query')
     def query(self,body):
         with self.store.connection() as db:
             if db.execute("SELECT 1 FROM jobs WHERE status IN ('queued','running')").fetchone() or db.execute("SELECT 1 FROM research_jobs WHERE json_extract(payload,'$.operation')='classify_l1' AND status IN ('queued','running')").fetchone():
@@ -459,7 +462,7 @@ class Research:
             comparing=p.get('operation')=='compare_viewpoints'
             if not comparing:b=obj(db,p['snapshot'],'snapshot')
             db.execute("UPDATE research_jobs SET status='running',updated_at=? WHERE id=?",(now(),job['id']))
-        service.active=(self.store,job['id'])
+        service.active=(self.store,job['id']);admitted(self.store,job)
         try:
             if comparing:
                 from .comparison import complete
@@ -468,13 +471,14 @@ class Research:
             if not b['opinions']:
                 response={'proposal':{'claims':[],'summary':[],'support':[],'counter':[],'narrative':[],'gaps':['沒有符合硬條件的 L1；未放寬篩選']},'usage':{}}
             else:
-                response=service.runner(self.store,{'id':job['id'],'payload':{**p,'operation':'research_fusion','languages':['zh-Hant']}},{'research_bundle':b},[])
+                response=service.run_model(self.store,{'id':job['id'],'payload':{**p,'operation':'research_fusion','languages':['zh-Hant']}},{'research_bundle':b},[])
             with self.store.connection() as db:put(db,'model_receipt',{'job_id':job['id'],'phase':'fusion','usage':response.get('usage',{}),'recorded_at':now()},ident=job['id']+':fusion')
-            result=validate_fusion(response['proposal'],b)
+            with span(self.store,'research_validate',**job_fields(self.store,job)):
+                result=validate_fusion(response['proposal'],b)
             if any(c['type']=='inference' for c in result['claims']):
                 # One bounded semantic check only for new synthesis. Exact L1 excerpts do
                 # not consume another call. A rejection keeps the last successful result.
-                checked=service.runner(self.store,{'id':job['id'],'payload':{**p,'operation':'research_review','languages':['zh-Hant']}},{'research_bundle':b,'candidate':result},[])
+                checked=service.run_model(self.store,{'id':job['id'],'payload':{**p,'operation':'research_review','languages':['zh-Hant']}},{'research_bundle':b,'candidate':result},[])
                 with self.store.connection() as db:put(db,'model_receipt',{'job_id':job['id'],'phase':'semantic_review','usage':checked.get('usage',{}),'recorded_at':now()},ident=job['id']+':review')
                 audit=checked.get('proposal',{})
                 if audit.get('assessment')!='pass' or set(audit.get('checked_claim_ids',[]))!={c['id'] for c in result['claims']} or any(i.get('severity')=='error' for i in audit.get('issues',[])):
@@ -485,7 +489,7 @@ class Research:
                     if type(value)==int:totals[key]=totals.get(key,0)+value
                 response['usage']=totals
 
-            with self.store.connection() as db:
+            with span(self.store,'research_publish',**job_fields(self.store,job)), self.store.connection() as db:
                 db.execute('BEGIN IMMEDIATE')
                 if db.execute('SELECT status FROM research_jobs WHERE id=?',(job['id'],)).fetchone()[0]!='running':return
                 run={'snapshot':p['snapshot'],'result':result,'model':p['model'],'reasoning_effort':p['reasoning_effort'],'usage':response.get('usage',{}),'created_at':now(),'schema':SCHEMA,'input_hash':b['input_hash']}
@@ -497,11 +501,14 @@ class Research:
                     put(db,'lens_revision',s,ident=s['revision']);self._save(db,s)
                 db.execute("UPDATE research_jobs SET status='completed',payload=?,updated_at=? WHERE id=?",(encode(p),now(),job['id']))
         except Exception as error:
+            emit(self.store,'error','job',**job_fields(self.store,job),**error_fields(error))
             with self.store.connection() as db:
                 db.execute("UPDATE research_jobs SET status='failed',error=?,updated_at=? WHERE id=?",(str(error)[:600],now(),job['id']))
                 if p.get('lens_id'):
                     s=self._lens(db,p['lens_id']);s['last_error']=str(error)[:600];self._save(db,s)
-        finally:service.active=None
+        finally:
+            job_state(self.store,job,'research_jobs')
+            service.active=None
 
 
 def handle_research(handler,service,path,params,can_write):

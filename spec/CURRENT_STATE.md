@@ -1,6 +1,12 @@
 # Current handoff — 2026-11-20 (Asia/Taipei)
 
-## Latest update: unslop workbench, saved Chat and faster preparation
+## Latest update: Wiki execution logs enabled
+
+Added correlated, rotating private stage logs under `data/private/wiki-trace/` and a command-line report. Preparation, L1 worker context/dispatch/model/validation/publication, classification, L2 fusion and its separate semantic review can now be traced by job/call ID. The bridge emits 15-second heartbeats during a live call. Read [observability](WIKI_OBSERVABILITY.md) for commands, retention and limits; old model timing cannot be reconstructed.
+
+Read-only pre-deployment audit found no queued/running Wiki or research jobs across stocks. Deployment is healthy on image `988b34c0aca7f40eca9993087ea85848d7061c1116129b4005e586a82b1a5451` and preserves the prior image as `news-atlas:before-wiki-trace-20261120`; no model job or annual controller was resumed. Both trace files were verified at 0600. A zero-article preview produced a measured `plan` event with no job submission; the bridge log contains startup only, confirming no inference was used for the smoke test. This follow-up stays on `llm_wiki_unslop`, after UI commit `e05f5e4`, and is separate from the redesign. Test results: 101 Wiki, 24 research, 23 Chat/bridge. The NVDA annual stopped/v231 status below remains relevant; do not infer completion from service readiness.
+
+## Earlier update: unslop workbench, saved Chat and faster preparation
 
 The approved graphite/teal workbench is deployed at https://ubuntu.tail9e662c.ts.net:8765/. Wiki entry follows the confirmed News graph stock and automatically opens its existing result. Chat now has persistent per-browser history, reopening/continuation and confirmed deletion. Preparation reuses an exact matching saved forest and shows stages/elapsed time. See the [design and behavior record](references/unslop-20261120.md) and [validation](TESTING.md).
 

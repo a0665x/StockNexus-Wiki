@@ -1,5 +1,7 @@
 # LLM Wiki 執行與維護
 
+完整階段追查、保留期限與耗時解讀見 [Wiki observability](WIKI_OBSERVABILITY.md)。
+
 ## 2026-11-20 — Entry alignment and preparation reuse
 
 Entering Wiki follows the confirmed News graph instrument and loads its existing Wiki; a matching news DB without a Wiki is preselected for creation. A remembered Wiki from another stock cannot override that identity. Unsubmitted search text is ignored. Opening Wiki alone never starts model work.

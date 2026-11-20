@@ -6,6 +6,7 @@ import {homedir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 import {Codex} from '@openai/codex-sdk';
 import {createWikiCompiler} from './wiki.mjs';
+import {createWikiTrace} from './wiki-trace.mjs';
 import {createHistory} from './history.mjs';
 import {modelCatalog,WIKI_DEFAULT_MODEL} from './models.mjs';
 const ROOT=resolve(dirname(fileURLToPath(import.meta.url)),'..');
@@ -23,10 +24,11 @@ export function researchEvidence(run,days=7,clock=Date.now()){
 
 async function body(req){let size=0,chunks=[];for await(const c of req){size+=c.length;if(size>32*1024*1024)throw fail('Context too large',413);chunks.push(c);}try{return JSON.parse(Buffer.concat(chunks));}catch{throw fail('Invalid JSON');}}
 function send(res,status,data){res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(data));}
-export function createService({makeThread,makeWikiThread,wikiModel=WIKI_DEFAULT_MODEL,listModels,historyPath}={}){
+export function createService({makeThread,makeWikiThread,wikiModel=WIKI_DEFAULT_MODEL,listModels,historyPath,wikiTracePath}={}){
  // Wiki batches use the lightweight families advertised by the installed catalog.
  const lightweight=m=>/(?:^|[-_.])(sol|luna|mini|nano)(?:[-_.]|$)/i.test(m.id);
- const wiki=createWikiCompiler(makeWikiThread,{validateModel:listModels?async (model,effort)=>{const m=(await listModels()).models.find(m=>m.id===model);if(!m||!lightweight(m))throw fail('Selected model is not in the Codex catalog',400);if(effort&&m.reasoning?.length&&!m.reasoning.some(r=>(r.reasoningEffort||r.effort||r)===effort))throw fail('Unsupported reasoning effort for selected model',400);}:null});
+ const wikiTrace=createWikiTrace(wikiTracePath);wikiTrace({event:'state',stage:'service',status:'started'});
+ const wiki=createWikiCompiler(makeWikiThread,{trace:wikiTrace,validateModel:listModels?async (model,effort)=>{const m=(await listModels()).models.find(m=>m.id===model);if(!m||!lightweight(m))throw fail('Selected model is not in the Codex catalog',400);if(effort&&m.reasoning?.length&&!m.reasoning.some(r=>(r.reasoningEffort||r.effort||r)===effort))throw fail('Unsupported reasoning effort for selected model',400);}:null});
  const history=createHistory(historyPath);
  const sessions=new Map();
  const pending=new Map();
@@ -175,7 +177,7 @@ async function main(){
  try{await lstat(socket);await unlink(socket);}catch(e){if(e.code!=='ENOENT')throw e;}
  const wikiModel=WIKI_DEFAULT_MODEL;
  const listModels=modelCatalog(join(ROOT,'node_modules/.bin/codex'),{...process.env,CODEX_HOME:home});
- const service=createService({wikiModel,listModels,historyPath:join(dirname(socket),'chat-history.json'),makeWikiThread:(model,effort)=>{
+ const service=createService({wikiModel,listModels,historyPath:join(dirname(socket),'chat-history.json'),wikiTracePath:join(dirname(socket),'wiki-trace/bridge.jsonl'),makeWikiThread:(model,effort)=>{
   const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>['PATH','HOME','USER','LANG','SSL_CERT_FILE','HTTPS_PROXY','HTTP_PROXY','NO_PROXY'].includes(k)));
   env.CODEX_HOME=home;
   return new Codex({env,config:{features:{shell_tool:false},mcp_servers:{},cli_auth_credentials_store:'file'}}).startThread({model,workingDirectory:join(home,'work'),skipGitRepoCheck:true,sandboxMode:'read-only',approvalPolicy:'never',webSearchMode:'disabled',modelReasoningEffort:effort||'low'});

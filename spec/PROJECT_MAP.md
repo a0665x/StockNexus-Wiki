@@ -14,6 +14,8 @@
 
 2026-11-20 Web UI、Wiki 選股、準備快取與 Chat 歷史：[unslop 改版契約](references/unslop-20261120.md)。
 
+Wiki 耗時與錯誤追查：[執行 Log 與診斷](WIKI_OBSERVABILITY.md)。
+
 ## 新 session 的最短閱讀路徑
 
 1. 先讀本頁、[開發協作偏好](ai-dev-experience-preferences.md) 與 [目前功能狀態](CURRENT_STATE.md)，再讀相關領域。需要操作／啟動時讀 [標準流程](WORKFLOWS.md) 與 [RUNTIME.md](RUNTIME.md)。不要先掃描資料庫或大型 vendor bundle。

@@ -65,6 +65,8 @@ def migrate_legacy(data):
         path.parent.rename(dest)
 
 
+from .trace import timed
+
 class WikiStore:
     def __init__(self, root, ident, fixture=False):
         self.instrument=instrument(ident)
@@ -129,6 +131,7 @@ class WikiStore:
     def configure(self,value):
         with self.connection() as db: db.execute('INSERT OR REPLACE INTO metadata VALUES (?,?)',('config',encode(value)))
 
+    @timed('ingest')
     def ingest(self, rows):
         with self.connection() as db:
             stamp=now()
@@ -153,6 +156,7 @@ class WikiStore:
             known={r[0] for r in db.execute('SELECT DISTINCT revision FROM extractions')}
         return [r for r in rows if r['revision_id'] not in known]
 
+    @timed('enqueue')
     def enqueue(self,model,limit=10000,daily_limit=None,revision_ids=None,operation='update'):
         with self.connection() as db:
             db.execute('BEGIN IMMEDIATE')
@@ -182,6 +186,7 @@ class WikiStore:
             db.execute('INSERT INTO calls VALUES (?,?,?,?)',(uuid.uuid4().hex,now()[:10],job['id'],revision))
         return True
 
+    @timed('context')
     def context(self,article):
         terms=lambda text:set(re.findall(r'[a-z0-9_]+|[\u4e00-\u9fff]',text.lower()))
         words=terms(article['title']+' '+article['summary'][:2000])
@@ -216,6 +221,7 @@ class WikiStore:
             related=[n for _,_,n in heapq.nlargest(4,candidates,key=lambda x:x[:2])]
         return [{k:n[k] for k in ('id','kind','title','scope','summary','assessment','content_hash','url','published_at','provider') if k in n} for n in [*selected[:12-len(related)],*related]]
 
+    @timed('publish')
     def publish(self,job,article,proposal,context,usage):
         nodes,edges=validate_proposal(article,proposal,context)
         evidence=article.get('_evidence',[article]);covered=article.get('_covered_articles',evidence)
@@ -272,6 +278,7 @@ class WikiStore:
             self.receipt(db,job,article,usage,'published')
         return True
 
+    @timed('reject')
     def reject(self,job,article,proposal,error,usage):
         # Rejected responses consume tokens too; keep evidence for diagnosis, never graph publication.
         with self.connection() as db:

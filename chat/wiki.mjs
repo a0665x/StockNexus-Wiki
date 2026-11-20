@@ -1,4 +1,5 @@
 /* Private Unix-socket compiler. No browser session, tools, or DB access in model turns. */
+import {randomUUID} from 'node:crypto';
 const object=properties=>({type:'object',additionalProperties:false,properties,required:Object.keys(properties)});
 const text={type:'string'};
 const comparisonSchema=object({verdict:{enum:['similar','conflicting','different_scope','insufficient']},summary:text,reason:text,citations:{type:'array',items:text}});
@@ -32,7 +33,7 @@ const PROMPT=[CLASSIFICATION_PROMPT, 'When article._taxonomy exists, include cla
  'Preserve old knowledge: propose UPDATES/CONTRADICTS where warranted, never delete or overwrite. The host creates source article citation links. Return only the required JSON.'
 ].join('\n');
 function schemaFor(languages,count=1,taxonomy=null){const schema=structuredClone(outputSchema);const cap=Math.min(60,Math.max(8,count*3));schema.properties.nodes.maxItems=cap;schema.properties.relations.maxItems=cap*2;const assessment=schema.properties.nodes.items.properties.assessment;assessment.properties.topic={enum:['revenue','operations','costs','market','trading','other']};assessment.properties.evidence={enum:['supported','mixed','insufficient']};assessment.required.push('topic','evidence');const node=schema.properties.nodes.items;node.properties.opinion_metadata=object({claim_type:{enum:['reported_claim','fact_excerpt','inference','hypothesis']},conditions:{type:'array',maxItems:8,items:text},horizon:text,change_reason:text});node.required.push('opinion_metadata');if(taxonomy){node.properties.classification=object(classificationFields);node.required.push('classification');}node.properties.translations=object(Object.fromEntries(languages.map(lang=>[lang,object({title:text,summary:text,rationale:text})])));node.required.push('translations');const relation=schema.properties.relations.items;relation.properties.translations=object(Object.fromEntries(languages.map(lang=>[lang,object({rationale:text})])));relation.required.push('translations');return schema;}
-export function createWikiCompiler(makeThread,{validateModel}={}){
+export function createWikiCompiler(makeThread,{validateModel,trace=()=>{}}={}){
  const active=new Map();
  return {
   cancel(id){for(const [key,value] of active)if(key===id||value.parent===id)value.controller.abort();},
@@ -47,19 +48,38 @@ export function createWikiCompiler(makeThread,{validateModel}={}){
    // Keep this below the Python compiler's 640-second socket deadline.
    let timedOut=false;
    const timer=setTimeout(()=>{if(!controller.signal.aborted){timedOut=true;controller.abort();}},600000);
+   const base={job_id:b.parent_job_id||b.job_id,call_id:/^[a-f0-9]{32}$/.test(b.trace_id||'')?b.trace_id:randomUUID().replaceAll('-',''),instrument:b.instrument,model:b.model,reasoning_effort:b.reasoning_effort||null,operation:b.operation||'update',repair:!!b.repair};
+   const report=row=>{try{trace({...base,...row});}catch{/* Observability must not fail model work. */}};
+   const started=performance.now();let phase='catalog',phaseStarted=started;
+   const elapsed=()=>Math.round((performance.now()-phaseStarted)*1000)/1000;
+   const begin=name=>{phase=name;phaseStarted=performance.now();report({event:'begin',stage:name});};
+   const end=fields=>report({event:'end',stage:phase,elapsed_ms:elapsed(),...fields});
+   const heartbeat=setInterval(()=>report({event:'heartbeat',stage:phase,elapsed_ms:elapsed(),active_calls:active.size}),15000);
+   report({event:'begin',stage:'bridge_call'});
+   begin('catalog');
    try{
     if(validateModel)await validateModel(b.model,b.reasoning_effort);
+    end();
     if(controller.signal.aborted)throw Error('Wiki compilation cancelled or timed out');
     const comparison=b.operation==='compare_viewpoints';const research=b.operation==='research_fusion';const review=b.operation==='research_review';const classification=b.operation==='classify_l1';
+    begin('sdk_run');
+    report({event:'input',stage:phase,input_bytes:Buffer.byteLength(JSON.stringify(b)),evidence_count:b.article._evidence?.length||0,context_count:b.context.length,languages:b.languages||['zh-Hant','en'],active_calls:active.size});
     const result=await makeThread(b.model,b.reasoning_effort).run((comparison?comparisonPrompt:classification?CLASSIFICATION_PROMPT:review?REVIEW_PROMPT:research?RESEARCH_PROMPT:PROMPT)+'\n'+JSON.stringify({instrument:b.instrument,article:b.article,existing_pages:b.context,operation:b.operation||'update',languages:b.languages||['zh-Hant','en'],validation_feedback:b.repair||null}),{outputSchema:comparison?comparisonSchema:classification?classifierSchema:review?reviewSchema:research?researchSchema:schemaFor(b.languages||['zh-Hant','en'],b.article._evidence?.length||1,b.article._taxonomy),signal:controller.signal});
+    end({usage:Object.fromEntries(Object.entries(result.usage||{}).filter(([k,v])=>['input_tokens','output_tokens','cached_input_tokens'].includes(k)&&Number.isInteger(v))),output_chars:typeof result.finalResponse==='string'?result.finalResponse.length:0});
+    begin('parse_response');
     if(controller.signal.aborted)throw Error('Wiki compilation cancelled or timed out');
     if((result.items||[]).some(i=>!['agent_message','reasoning'].includes(i.type)))throw Error('Unexpected tool use; Wiki proposal rejected');
     if(typeof result.finalResponse!=='string'||result.finalResponse.length>500000)throw Error('Wiki response exceeds output limit');
-    return {proposal:JSON.parse(result.finalResponse),usage:result.usage||{}};
+    const proposal=JSON.parse(result.finalResponse);end();
+    report({event:'end',stage:'bridge_call',elapsed_ms:Math.round((performance.now()-started)*1000)/1000});
+    return {proposal,usage:result.usage||{}};
    }catch(error){
+    const failure={error_type:error.name,error_code:timedOut?'timeout':controller.signal.aborted?'cancelled':phase==='parse_response'?'invalid_response':/429|quota|usage limit/i.test(error.message||'')?'quota':/401|unauthorized|login|refresh token/i.test(error.message||'')?'authentication':'sdk_error'};
+    report({event:'error',stage:phase,elapsed_ms:elapsed(),...failure});
+    report({event:'error',stage:'bridge_call',elapsed_ms:Math.round((performance.now()-started)*1000)/1000,...failure});
     if(controller.signal.aborted)throw Error(timedOut?'Wiki compilation timed out after 600 seconds; completed batches are preserved.':'Wiki compilation cancelled');
     throw error;
-   }finally{clearTimeout(timer);active.delete(b.job_id);}
+   }finally{clearInterval(heartbeat);clearTimeout(timer);active.delete(b.job_id);}
   }
  };
 }

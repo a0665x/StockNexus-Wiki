@@ -14,11 +14,14 @@ from .workbench import settings, batches, usage_summary, news_day
 
 from .evidence import OPTION_KEYS, selected_graph_rows, bounded_groups, cached_market
 
+from .trace import span, timed, emit, job_fields, admitted, job_state, error_fields
+
 log=logging.getLogger(__name__)
 
 class WikiService:
     def __init__(self,news,runner=None,start_worker=True):
         self.news=news;self.data_root=getattr(news,'data_root',news.path.parent);migrate_legacy(self.data_root);self.root=self.data_root/'llm_wiki'
+        emit(self,'state','service',status='started')
         self.runner=runner or self.bridge
         self._coverage_cache={};self._coverage_lock=threading.RLock()
         self.plans={};self.lock=threading.RLock();self.stop=threading.Event();self.wake=threading.Event()
@@ -62,8 +65,24 @@ class WikiService:
         except (OSError,json.JSONDecodeError) as error: raise RuntimeError('LLM橋接無法連線；請檢查 Chat 服務及登入狀態') from error
         finally: conn.close()
 
+    def run_model(self,store,job,article,context):
+        # A distinct correlation ID per attempt; parent cancellation keeps job identity.
+        call_id=uuid.uuid4().hex
+        job={**job,'trace_id':call_id}
+        meta=article.get('_group',{})
+        with span(store,'model_call',**job_fields(store,job),call_id=call_id,
+                  worker=job.get('worker'),root_id=meta.get('root_id'),part=meta.get('part'),
+                  repair=bool(job.get('repair')),evidence_count=len(article.get('_evidence',[])),
+                  context_count=len(context),input_bytes=len(json.dumps([{k:v for k,v in article.items() if k not in ('_covered_articles','_checkpoint')},context]).encode())) as metrics:
+            result=self.runner(store,job,article,context)
+            if isinstance(result,dict):
+                metrics['usage']={k:v for k,v in (result.get('usage') or {}).items() if k in ('input_tokens','output_tokens','cached_input_tokens') and type(v)==int}
+                proposal=result.get('proposal',{})
+                if isinstance(proposal,dict):metrics['counts']={k:len(proposal[k]) for k in ('nodes','relations','claims','opinions') if isinstance(proposal.get(k),list)}
+            return result
+
     def bridge(self,store,job,article,context):
-        return self.bridge_request('/wiki/compile',{'job_id':job.get('call_id',job['id']),'parent_job_id':job['id'],'instrument':store.instrument,'model':job['payload']['model'],'article':{k:v for k,v in article.items() if k not in ('_covered_articles','_checkpoint')},'context':context,'operation':job['payload'].get('operation','update'),'repair':job.get('repair'),**{k:job['payload'].get(k) for k in ('reasoning_effort','languages')}},timeout=640)
+        return self.bridge_request('/wiki/compile',{'job_id':job.get('call_id',job['id']),'parent_job_id':job['id'],'trace_id':job.get('trace_id'),'instrument':store.instrument,'model':job['payload']['model'],'article':{k:v for k,v in article.items() if k not in ('_covered_articles','_checkpoint')},'context':context,'operation':job['payload'].get('operation','update'),'repair':job.get('repair'),**{k:job['payload'].get(k) for k in ('reasoning_effort','languages')}},timeout=640)
 
     def news_catalog(self):
         """Only nonempty, explicitly identified news DBs; never guess exchanges."""
@@ -138,6 +157,7 @@ class WikiService:
                 rows.extend(capture(json.loads(r[0])) for r in found)
         return rows
 
+    @timed('plan')
     def plan(self,body):
         model=self.options(body);options=settings(body);store=self.store(body.get('instrument'))
         operation=body.get('operation','update')
@@ -208,6 +228,7 @@ class WikiService:
         dated=sorted(news_day(a['published_at']) for a in rows if a['published_at'])
         return {'date_bounds':{'start':dated[0],'end':dated[-1]} if dated else None,'graph_selection':options.get('graph_selection'),'grouping_edges':len(options['graph_edges']),'usage':usage_summary(store,(dates or {}).get('start'),(dates or {}).get('end')),**{k:options[k] for k in ('workers','reasoning_effort','languages','evidence_size','strategy')},'daily_used':used,'plan_id':plan['id'],'instrument':store.instrument,'base_version':base,'selected':len(rows),'pending':pending,'next_batch':pending,'reused':len(rows)-len(unseen),'model':model,'date_range':dates,'operation':operation,'watch_sources':subscriptions,'expires_in':600,'note':'只處理本次日期範圍；增量模式跨模型重用既有成果，不受新聞edge設定與渲染數影響。局部校正需另行明確選擇，仍會消耗token。'}
 
+    @timed('enqueue_request')
     def start(self,body):
         if not isinstance(body.get('continuous',False),bool) or not isinstance(body.get('classify_missing',False),bool): raise ValueError('無效持續維護設定')
         with self.lock:
@@ -238,6 +259,7 @@ class WikiService:
             self.plans.pop(plan['id'],None);self.wake.set()
         return {'job_id':ident,'instrument':store.instrument}
 
+    @timed('settings_apply')
     def apply(self,body):
         # Validate/rebuild before cancellation: a bad setting must leave the old work alive.
         if not isinstance(body.get('continuous',False),bool):raise ValueError('無效持續維護設定')
@@ -436,7 +458,7 @@ class WikiService:
             if not raw: return
             job=dict(raw);job['payload']=json.loads(job['payload'])
             db.execute("UPDATE jobs SET status='running',updated_at=? WHERE id=?",(now(),job['id']))
-        self.active=(store,job['id'])
+        self.active=(store,job['id']);admitted(store,job)
         try:
             with store.connection() as db:
                 rows=[json.loads(r[0]) for r in db.execute('SELECT payload FROM articles WHERE id IN (SELECT value FROM json_each(?))',(json.dumps(job['payload']['revisions']),))]
@@ -463,7 +485,8 @@ class WikiService:
                     if job['payload'].get('operation')!='review' and db.execute('SELECT 1 FROM extractions WHERE revision=?',(revision,)).fetchone(): continue
                     pass
                 if not store.reserve_call(job,revision): return
-                context=store.context({**article,'summary':' '.join(a['title']+' '+a['summary'][:1500] for a in group)})
+                with span(store,'context_resolve',**job_fields(store,job),root_id=group_info.get('root_id'),part=group_info.get('part')):
+                    context=store.context({**article,'summary':' '.join(a['title']+' '+a['summary'][:1500] for a in group)})
                 refs=[n['id'] for n in context if n['kind']=='ArticleRevision']
                 with store.connection() as db:
                     from .research import taxonomy
@@ -474,10 +497,11 @@ class WikiService:
                     db.execute("UPDATE jobs SET payload=json_set(payload,'$.current_title',?,'$.current_date',?,'$.current_size',?,'$.group_info',json(?)) WHERE id=?",(article['title'],article['published_at'],len(group),json.dumps(group_info),job['id']))
                 for attempt in range(2):
                     store.stage(job,'repairing' if attempt else 'compiling',revision)
-                    output=self.runner(store,job,article,context)
+                    output=self.run_model(store,job,article,context)
                     if not isinstance(output,dict) or not isinstance(output.get('usage',{}),dict): raise ValueError('LLM回覆格式錯誤')
                     try:
-                        validate_proposal(article,output.get('proposal'),context)
+                        with span(store,'validate',**job_fields(store,job)):
+                            validate_proposal(article,output.get('proposal'),context)
                         if job['payload'].get('operation')=='review':
                             targets={n['id'] for n in context}
                             revised={r['source'] for r in output.get('proposal',{}).get('relations',[]) if r.get('type')=='UPDATES' and r.get('target') in targets}
@@ -511,6 +535,7 @@ class WikiService:
             if store.config().get('catch_up'):self.wake.set()
             log.info('wiki_job completed instrument=%s job=%s',store.instrument,job['id'])
         except Exception as error:
+            emit(store,'error','job',**job_fields(store,job),**error_fields(error))
             with self.lock:
                 with store.connection() as db:
                     # A restart must never observe terminal failure with catch-up
@@ -523,7 +548,9 @@ class WikiService:
                         cfg['enabled']=False;cfg['catch_up']=False
                         db.execute('INSERT OR REPLACE INTO metadata VALUES (?,?)',('config',json.dumps(cfg)))
             log.warning('wiki_job failed instrument=%s job=%s error_type=%s',store.instrument,job['id'],type(error).__name__)
-        finally: self.active=None
+        finally:
+            job_state(store,job)
+            self.active=None
 
     def tick(self,max_groups=None):
         for store in self.stores():
@@ -539,6 +566,10 @@ class WikiService:
                     with candidate.connection() as db:
                         l1_busy=l1_busy or bool(db.execute("SELECT 1 FROM jobs WHERE status IN ('queued','running')").fetchone()) or bool(db.execute("SELECT 1 FROM research_jobs WHERE json_extract(payload,'$.operation')='classify_l1' AND status IN ('queued','running')").fetchone())
                 if not l1_busy:research.refresh_live();research.process(self)
+                else:
+                    with store.connection() as db:
+                        waiting=db.execute("SELECT id FROM research_jobs WHERE status='queued' AND COALESCE(json_extract(payload,'$.operation'),'')!='classify_l1'").fetchall()
+                    for row in waiting:emit(store,'state','research_deferred',instrument=store.instrument,job_id=row['id'],reason='l1_or_classification_pending')
 
     def loop(self):
         while not self.stop.is_set():

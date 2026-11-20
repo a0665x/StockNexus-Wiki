@@ -1,5 +1,13 @@
 # 測試與驗收
 
+## 2026-11-20 — Wiki execution observability
+
+- Initial red loop: `python3 -m unittest discover -s tests -p test_wiki_trace.py -k test_stage_log -q` failed because the real tree-worker/model/publication path produced no durable stage trace. A controlled 25 ms model delay was otherwise unaccounted for. After instrumentation the same assertion passes and attributes the delay to `model_call`.
+- Full Wiki suite: **101 passed** (includes five focused tracing tests). Real threaded workers share a job but have distinct call IDs; failures retain safe source locations and terminal states; private file mode, rotation, concurrent JSONL writes, missing-log storage, report parsing and separate L2 fusion/review are covered. No paid inference. One initial sandbox-only socket denial was rerun with host socket permission.
+- Research suite: **24 passed**. Node Chat/bridge suite: **23 passed**, including stage correlation, usage, redaction, failure isolation, bounded files and in-flight heartbeat cleanup. Model calls use test fixtures. Final Python tracing tests reran successfully after adding explicit context-lock wait timing.
+- Existing NVDA receipts were inspected read-only: 45 prior L1 receipts, median input/output 23,130/6,823 tokens, zero rejected receipts; classification later reached the 600-second call deadline. These facts establish workload and failure, not historical stage percentages. See [observability contract](WIKI_OBSERVABILITY.md).
+- Production smoke: healthy image and ready bridge, both JSONL files at 0600, zero-article preview traced at 485 ms, no model call/job submitted. Documentation link verification and whitespace checks pass. Deployment and current job state are recorded separately in CURRENT_STATE. Logging does not change prompts, models, retries, graph schemas or published evidence.
+
 ## 2026-11-20 — Unslop workbench, history and preparation
 
 - Wiki Python suite (`python3 -m unittest discover -s tests -p 'test_wiki*.py' -q`): **96 passed**. Exact forest reuse and invalidation cover changed content, dates, grouping settings and source separation; worker checkpoints remain covered.

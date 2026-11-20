@@ -101,7 +101,7 @@ def enqueue(db,body):
     return {'job_id':ident,'status':'queued'}
 
 def complete(service,store,job,p):
-    response=service.runner(store,{'id':job['id'],'payload':p},{'viewpoints':p['pair']},[])
+    response=service.run_model(store,{'id':job['id'],'payload':p},{'viewpoints':p['pair']},[])
     report=response.get('proposal',{});refs=report.get('citations')
     if report.get('verdict') not in VERDICTS or not all(isinstance(report.get(k),str) and 0<len(report[k])<=4000 for k in ('summary','reason')):
         raise ValueError('Invalid comparison proposal')

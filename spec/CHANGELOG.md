@@ -1,5 +1,9 @@
 # 變更與驗證 log
 
+## 2026-11-20 — Correlated Wiki execution logs
+
+Added bounded private JSONL traces for preparation, worker dispatch/context waits, model calls, validation/publication, classification and L2 synthesis/review. Python and the host bridge share job/call IDs; bridge heartbeats distinguish a live wait from a completed call. Safe errors preserve category and source locations without copying prompts, evidence or credentials. Added `scripts/wiki_trace_report.py` for stock/job summaries and unfinished spans. Model policies and research results are unchanged. See [runtime contract and measured baseline](WIKI_OBSERVABILITY.md) and [tests](TESTING.md).
+
 ## 2026-11-20 — Unslop research workbench and persistent Chat
 
 Applied the user-approved graphite workbench across News, Wiki, Chat, settings and documents with restrained teal, consistent typography/controls, compact worker progress and responsive history rows. Installed and pinned unslop by Damir Sokolovsky; attribution and reproduction instructions are in the [design record](references/unslop-20261120.md).

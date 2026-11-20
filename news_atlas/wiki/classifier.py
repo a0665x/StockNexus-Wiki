@@ -3,6 +3,7 @@
 Backfill is explicitly queued by catch-up. Reads do not spend tokens. A classification
 batch is atomic; failures require an explicit retry and never overwrite old revisions.
 """
+from .trace import span, emit, job_fields, admitted, job_state, error_fields
 import json
 import datetime as dt
 import uuid
@@ -129,38 +130,43 @@ def process(store,service):
         r=db.execute("SELECT * FROM research_jobs WHERE status='queued' AND json_extract(payload,'$.operation')='classify_l1' ORDER BY created_at LIMIT 1").fetchone()
         if not r:return
         job=dict(r);p=json.loads(job['payload']);known=assignments(db,p['taxonomy']['revision_id'])
-        ids=[i for i in p['opinion_ids'] if i not in known][:12]
-        graph={'nodes':[json.loads(r[0]) for r in db.execute('SELECT payload FROM nodes')],'edges':[json.loads(r[0]) for r in db.execute('SELECT payload FROM edges')]}
-        byid={n['id']:n for n in graph['nodes']};membership=groups(graph);nodes=[];size=0
-        for i in ids:
-            if i not in byid:continue
-            n={**byid[i],'dependencies':[]};budget=0
-            for dep in membership.get(i,[]):
-                if dep==i:continue
-                value=byid[dep];budget+=len(encode(value))
-                if budget>18000:break
-                n['dependencies'].append(value)
-            n['dependency_context_truncated']=len(n['dependencies'])<len(membership.get(i,[]))-1
-            length=len(encode(n))
-            if nodes and size+length>65000:break
-            nodes.append(n);size+=length
-        if not nodes:db.execute("UPDATE research_jobs SET status='completed',payload=json_set(payload,'$.done',?),updated_at=? WHERE id=?",(p['total'],now(),job['id']));return
-        p['current_title']=nodes[0]['title'];p['current_size']=len(nodes)
-        db.execute("UPDATE research_jobs SET status='running',payload=?,updated_at=? WHERE id=?",(encode(p),now(),job['id']))
-    service.active=(store,job['id'])
+        with span(store,'classification_prepare',**job_fields(store,job)):
+            ids=[i for i in p['opinion_ids'] if i not in known][:12]
+            graph={'nodes':[json.loads(r[0]) for r in db.execute('SELECT payload FROM nodes')],'edges':[json.loads(r[0]) for r in db.execute('SELECT payload FROM edges')]}
+            byid={n['id']:n for n in graph['nodes']};membership=groups(graph);nodes=[];size=0
+            for i in ids:
+                if i not in byid:continue
+                n={**byid[i],'dependencies':[]};budget=0
+                for dep in membership.get(i,[]):
+                    if dep==i:continue
+                    value=byid[dep];budget+=len(encode(value))
+                    if budget>18000:break
+                    n['dependencies'].append(value)
+                n['dependency_context_truncated']=len(n['dependencies'])<len(membership.get(i,[]))-1
+                length=len(encode(n))
+                if nodes and size+length>65000:break
+                nodes.append(n);size+=length
+            if not nodes:db.execute("UPDATE research_jobs SET status='completed',payload=json_set(payload,'$.done',?),updated_at=? WHERE id=?",(p['total'],now(),job['id']));return
+            p['current_title']=nodes[0]['title'];p['current_size']=len(nodes)
+            db.execute("UPDATE research_jobs SET status='running',payload=?,updated_at=? WHERE id=?",(encode(p),now(),job['id']))
+    service.active=(store,job['id']);admitted(store,job)
     try:
-        response=service.runner(store,{'id':job['id'],'payload':p},{'opinions':nodes,'taxonomy':p['taxonomy']},[])
+        response=service.run_model(store,{'id':job['id'],'payload':p},{'opinions':nodes,'taxonomy':p['taxonomy']},[])
         p['usage']={k:p.get('usage',{}).get(k,0)+v for k,v in response.get('usage',{}).items() if type(v)==int and v>=0}
         with store.connection() as db:put(db,'model_receipt',{'job_id':job['id'],'phase':'classify_l1','usage':response.get('usage',{}),'recorded_at':now()})
-        rows=response.get('proposal',{}).get('opinions',[])
-        if len(rows)!=len(nodes) or {x.get('opinion_revision') for x in rows}!={n['id'] for n in nodes}:raise ValueError('Classification must cover each exact L1 revision once')
-        byid={n['id']:n for n in nodes};records=[validate({k:v for k,v in x.items() if k!='opinion_revision'},byid[x['opinion_revision']],p['taxonomy']) for x in rows]
-        with store.connection() as db:
+        with span(store,'classification_validate',**job_fields(store,job)):
+            rows=response.get('proposal',{}).get('opinions',[])
+            if len(rows)!=len(nodes) or {x.get('opinion_revision') for x in rows}!={n['id'] for n in nodes}:raise ValueError('Classification must cover each exact L1 revision once')
+            byid={n['id']:n for n in nodes};records=[validate({k:v for k,v in x.items() if k!='opinion_revision'},byid[x['opinion_revision']],p['taxonomy']) for x in rows]
+        with span(store,'classification_publish',**job_fields(store,job)), store.connection() as db:
             db.execute('BEGIN IMMEDIATE')
             if db.execute('SELECT status FROM research_jobs WHERE id=?',(job['id'],)).fetchone()[0]!='running':return
             for record in records:save(db,record)
             p['done']+=len(nodes)
             db.execute('UPDATE research_jobs SET status=?,payload=?,updated_at=? WHERE id=?',('completed' if p['done']>=p['total'] else 'queued',encode(p),now(),job['id']))
     except Exception as e:
+        emit(store,'error','job',**job_fields(store,job),**error_fields(e))
         with store.connection() as db:db.execute("UPDATE research_jobs SET status='failed',error=?,updated_at=? WHERE id=? AND status='running'",(str(e)[:600],now(),job['id']))
-    finally:service.active=None
+    finally:
+        job_state(store,job,'research_jobs')
+        service.active=None
