@@ -1,5 +1,16 @@
 # 測試與驗收
 
+## November 20, 2026 — Wiki timeline, comparison and workspace
+
+| Test boundary | Result |
+| --- | --- |
+| `tests/browser_wiki_timeline.py` | Passed with Chromium mouse, wheel, keyboard and emulated touch at 1223 × 914 and 390 × 844. The journey includes a graph refresh while the mouse button is held on Energy, two-way pan, bar activation, panel move, corner resize, minimize, reopen, reload, modal reading width and focus return. |
+| Existing browser regression suites | The Wiki reader passed 50 checks, Wiki layout passed 51, published-result feedback passed 11 and L2 argument shapes passed 13. The real-HTTP L2 fixture displayed its saved report while the L1 tool was minimized. A second fresh browser profile restored the host workspace's News selection, Wiki controls and split sizes. |
+| Python and JavaScript | All 369 Python tests passed, including validation of worker count, research run and pane bounds. All 21 Node test entries for `tests/test_*.cjs` and `tests/wiki-cache.test.mjs` passed. |
+| Source index | CodeGraph 1.6.3 indexed 201 files, 4,051 nodes and 15,210 edges with zero pending changes and zero parse errors at handoff. A new MCP connection returned source for the Wiki timeline. A separate read-only SQLite connection observed a file addition, symbol rename and removal after 1.45, 0.99 and 1.00 seconds respectively during this run. |
+
+The [English scenario and runtime record](references/wiki-timeline-workbench.md) includes the before-and-after evidence and the production read-only smoke.
+
 ## November 20, 2026 — Cached switching and bounded L1 backfill
 
 The [English acceptance matrix](references/wiki-cache-classifier-20261120.md) links each user journey to an executable test. These runs used isolated storage and controlled model replies, except for the explicitly identified production GETs.

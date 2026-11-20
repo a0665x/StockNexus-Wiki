@@ -25,7 +25,7 @@ def read(store):
 
 def save(store,section,value):
     if section not in ('news','wiki') or not isinstance(value,dict):raise ValueError('Invalid workspace section')
-    allowed={'news':{'draft','snapshot','camera'},'wiki':{'instrument','controls','layout','root_selection','graph_universe','graph_settings','camera','root','selected'}}[section]
+    allowed={'news':{'draft','snapshot','camera'},'wiki':{'instrument','research_run','controls','layout','root_selection','graph_universe','graph_settings','camera','root','selected'}}[section]
     if set(value)-allowed:raise ValueError('Unknown workspace fields')
     if section=='news':
         if 'snapshot' in value:value['snapshot']=validate_snapshot(value['snapshot'])
@@ -35,12 +35,19 @@ def save(store,section,value):
             if len(json.dumps(draft))>4000:raise ValueError('Search draft too large')
     else:
         if value.get('instrument'):instrument(value['instrument'])
+        run_id=value.get('research_run')
+        if run_id is not None and (not isinstance(run_id,str) or not 0<len(run_id)<=150):
+            raise ValueError('Invalid saved research run')
         controls=value.get('controls',{})
-        keys={'wikiLayer','wikiScope','wikiModel','wikiOperation','wikiRange','wikiStartDate','wikiEndDate','wikiRangeStart','wikiRangeEnd','wikiVersion','wikiKind','wikiRelation','wikiBudget','wikiAssessment','wikiLanguages','wikiEvidenceSize','wikiStrategy','wikiContinuous'}
+        keys={'wikiLayer','wikiScope','wikiModel','wikiOperation','wikiRange','wikiStartDate','wikiEndDate','wikiRangeStart','wikiRangeEnd','wikiVersion','wikiKind','wikiRelation','wikiBudget','wikiAssessment','wikiLanguages','wikiEvidenceSize','wikiStrategy','wikiContinuous','wikiWorkers'}
         if not isinstance(controls,dict) or set(controls)-keys or any(not isinstance(v,(str,bool,int,float)) or len(str(v))>150 for v in controls.values()):raise ValueError('Invalid Wiki controls')
+        if 'wikiWorkers' in controls and str(controls['wikiWorkers']) not in ('1','3','5','10'):
+            raise ValueError('Invalid saved worker count')
         layout=value.get('layout')
         if layout is not None:
-            if not isinstance(layout,dict) or set(layout)-{'left','right','bottom','live'} or any(type(v) not in (int,float) or not (64 if k=='live' else 140 if k=='bottom' else 220)<=v<=(340 if k=='live' else 700 if k=='bottom' else 620) for k,v in layout.items()):raise ValueError('Invalid Wiki layout')
+            limits={'left':(220,620),'right':(220,620),'bottom':(140,700),'live':(64,340),'changes':(64,340)}
+            if not isinstance(layout,dict) or set(layout)-limits.keys() or any(type(v) not in (int,float) or not limits[k][0]<=v<=limits[k][1] for k,v in layout.items()):
+                raise ValueError('Invalid Wiki layout')
         selection=value.get('root_selection')
         if selection is not None:
             if not isinstance(selection,dict) or set(selection)-{'ticker','trees'} or not isinstance(selection.get('trees'),list) or len(selection['trees'])>10:raise ValueError('Invalid saved roots')

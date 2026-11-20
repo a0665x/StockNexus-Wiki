@@ -1,6 +1,10 @@
 # Current handoff — 2026-11-20 (Asia/Taipei)
 
-## Latest update on November 20
+## Latest update on November 20 — Wiki timeline workbench
+
+The local branch `llm_wiki_unslop` contains the floating chart, reversible classification filters, horizontal pan and the wider comparison reader. Wiki workspace persistence accepts the version pane height, worker control and saved L2 run. CodeGraph 1.6.3 indexes this checkout, including the hand-written frontend. See the [UI acceptance record](references/wiki-timeline-workbench.md), [verification ledger](TESTING.md) and [CodeGraph commands](PROJECT_MAP.md#using-this-checkouts-codegraph-index).
+
+## Earlier on November 20 — Wiki cache and classifier
 
 The branch `llm_wiki_unslop` now includes News-to-Wiki background reads, exact-scope caching, incremental graph updates and bounded L1 classification recovery. The shared-evidence size comparison and Given/When/Then scenarios are in the [English acceptance record](references/wiki-cache-classifier-20261120.md).
 

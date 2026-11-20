@@ -1,5 +1,9 @@
 # 變更與驗證 log
 
+## 2026-11-20 — Wiki chart navigation and local CodeGraph
+
+The timeline detaches, resizes and minimizes. Series toggles, chart reset and pointer capture support returning to all categories and panning a zoomed interval. The comparison reader, filters and wordmark share the graphite workbench styling. Host workspace validation now accepts the controls already emitted by the Wiki. The repository has a local CodeGraph index and a frontend-aware discovery configuration. [Browser acceptance](references/wiki-timeline-workbench.md) · [CodeGraph onboarding](PROJECT_MAP.md#using-this-checkouts-codegraph-index)
+
 ## 2026-11-20 — Conditional Wiki reads and isolated classification failures
 
 News warms the matching published Wiki. A tab can display a saved scope during refresh, coalesce in-flight reads and apply graph differences after publication. Compact worker status suppresses repeated forest and configuration transfers. L1 backfill shares equivalent premises and quotes, limits input by UTF-8 bytes, and records outstanding opinions when a split child fails. The host launch probe now uses the same inexpensive capabilities GET as Docker. See [acceptance, measurements and follow-up](references/wiki-cache-classifier-20261120.md).

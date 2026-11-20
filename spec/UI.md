@@ -1,5 +1,7 @@
 # 前端互動與狀態
 
+The [Wiki timeline and comparison reader](references/wiki-timeline-workbench.md) defines chart filtering, pan, zoom, docking, window state and responsive controls.
+
 入口：[PROJECT_MAP.md](PROJECT_MAP.md)。實作索引：[ARCHITECTURE.md](ARCHITECTURE.md)。回歸合約：[BEHAVIOR_CONTRACTS.md](references/BEHAVIOR_CONTRACTS.md)。
 
 ## app.js 的狀態邊界

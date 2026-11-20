@@ -1,5 +1,9 @@
 # AI 開發協作與互動驗證偏好
 
+## Wiki chart controls and reading space, November 20
+
+The user wants a movable, resizable timeline that minimizes to a square graph tool, reversible classification selection and horizontal pan after zoom. Use named icons for familiar controls, center toolbar labels and give comparison text room to breathe. Verify the physical gestures in a real browser. [Accepted behavior and test evidence](references/wiki-timeline-workbench.md)
+
 ## Wiki navigation and classifier recovery, November 20
 
 The user requested background loading for the stock being explored, a responsive cached return, incremental updates, less repeated evidence, and failures confined to small classification batches. Record Given/When/Then scenarios, actual results, measurement limits and remaining directions in the English spec. [Accepted behavior and verification](references/wiki-cache-classifier-20261120.md)

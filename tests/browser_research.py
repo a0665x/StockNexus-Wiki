@@ -83,6 +83,7 @@ def main():
      time.sleep(.2)
      assert js("$('wikiLive').getBoundingClientRect().height")>before_height+35
      assert js("AtlasWiki.graph()===sharedWikiGraph&&sharedWikiGraph.graphData().nodes[0]===originalWikiNodes[0]")
+     click('wikiTimelineFold')
      # Delay the real runs route; assert visible state even while research sidebar is closed.
      js("window.layerFetch=fetch;window.holdRuns=true;window.failRuns=false;window.releaseRuns=null;window.fetch=async(u,o)=>{if(String(u).includes('/research/runs?')){if(holdRuns)await new Promise(r=>releaseRuns=r);if(failRuns)return new Response(JSON.stringify({error:'Controlled runs outage'}),{status:503});}return layerFetch(u,o)}")
      choose('wikiLayer',1)
@@ -156,6 +157,7 @@ def main():
      click('researchOpen');wait("!$('researchSubmit').disabled")
      print('PASS graph progress and completed-result read recovery without new model jobs',flush=True)
      assert js("$('researchResult').textContent.includes('價格動能')&&$('researchResult').textContent.includes('來源陳述')")
+     assert js("$('researchResult').getBoundingClientRect().height>80&&!$('wikiTimelineLauncher').getClientRects().length"), 'L2 report stays readable with the L1 chart minimized'
      js("[...$('researchResult').querySelectorAll('summary')].find(n=>n.textContent==='查看依據與條件').click()")
      assert js("!!$('researchResult').querySelector('blockquote')&&!!$('researchResult').querySelector('a[href^=\"https://\"]')")
      js("[...$('researchResult').querySelectorAll('button')].find(n=>n.textContent==='持續追蹤').id='fixtureSave'")
@@ -181,6 +183,7 @@ def main():
      js("$('wikiLayer').value='both';$('wikiLayer').dispatchEvent(new Event('change'))")
      assert js("sharedWikiGraph.graphData().nodes.some(n=>n.layer==='L1')&&sharedWikiGraph.graphData().nodes.some(n=>n.layer==='L2')")
      js("$('wikiLayer').value='L1';$('wikiLayer').dispatchEvent(new Event('change'))")
+     assert js("$('wikiTimelineLauncher').getBoundingClientRect().width>0"), 'returning to L1 restores its minimized timeline control'
      assert js("AtlasWiki.runtime.state().selected_node===null&&AtlasWiki.runtime.state().scope_ids.every(id=>sharedWikiGraph.graphData().nodes.some(n=>n.id===id&&n.layer!=='L2'))")
      js("$('wikiVersion').value='1';$('wikiVersion').dispatchEvent(new Event('change'))")
      wait("AtlasWiki.runtime.state().research_run===null")

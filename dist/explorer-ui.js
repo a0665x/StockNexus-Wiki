@@ -2,6 +2,26 @@
 (function(root){
   const read=(key,fallback=null)=>{try{return JSON.parse(localStorage.getItem('graphnews.'+key))??fallback;}catch{return fallback;}};
   const write=(key,value)=>{try{if(value===null)localStorage.removeItem('graphnews.'+key);else localStorage.setItem('graphnews.'+key,JSON.stringify(value));return true;}catch{return false;}};
+  const iconPaths={
+    chart:'M3 4v16h18 M7 15v-4 M12 15V6 M17 15V9',
+    reset:'M9 4 4 9l5 5 M5 9h9a6 6 0 0 1 0 12',
+    expand:'M9 4H4v5 M15 4h5v5 M20 15v5h-5 M9 20H4v-5',
+    dock:'M3 4h18v16H3z M3 14h18',
+    minimize:'M5 16h14', close:'m6 6 12 12 M18 6 6 18',
+    previous:'m14 5-7 7 7 7', next:'m10 5 7 7-7 7',
+    search:'M16 10a6 6 0 1 1-12 0 6 6 0 0 1 12 0z M15 15l6 6'
+  };
+  function icon(name){
+    const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');
+    const path=document.createElementNS(ns,'path');
+    svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');
+    svg.setAttribute('class','workbench-icon');path.setAttribute('d',iconPaths[name]);
+    svg.append(path);return svg;
+  }
+  function labelIcon(button,name,label){
+    button.replaceChildren(icon(name));button.title=label;button.setAttribute('aria-label',label);
+    button.classList.add('icon-control');return button;
+  }
   function jsonTree(container,value){
     const doc=container.ownerDocument||document;
     function field(key,val){
@@ -173,5 +193,5 @@
     }
     show(page);return {show};
   }
-  const api={read,write,jsonTree,pagedRows,initKey,initSearch,initFloatingPanel,initSourcePanel,initTimePanel,initResize};root.AtlasUI=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
+  const api={read,write,icon,labelIcon,jsonTree,pagedRows,initKey,initSearch,initFloatingPanel,initSourcePanel,initTimePanel,initResize};root.AtlasUI=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);
