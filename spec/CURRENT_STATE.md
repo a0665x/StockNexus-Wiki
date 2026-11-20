@@ -1,6 +1,130 @@
+# Current handoff — 2026-11-20 (Asia/Taipei)
+
+## Workbench release handoff
+
+Use `main` for new work. The corresponding release branch is `llm_wiki_unslop`. To check the release on a later checkout, run `git rev-parse HEAD` and `git merge-base --is-ancestor origin/llm_wiki_unslop origin/main` after refreshing remote refs. An exit code of zero confirms that the fetched main includes the tip of the fetched feature branch.
+
+News and Wiki share a left-aligned, resizable ribbon logo. Drag the bottom edge or focus it and use the arrow keys. The News source and time tools use centered database and curve-lens icons. The English acceptance record links to executable browser tests, deployment checks and the existing controls for cache, workers, Chat and document import. [Header and icon behavior](references/wiki-timeline-workbench.md#resizing-the-shared-header) · [Feature-to-test index](TESTING.md#workbench-release-verification)
+
+For a research task, read the current stock's job ledger before continuing it. Historical NVDA and TSLA publication numbers below are dated observations. [NVDA research handoff](references/nvda-research-20261120.md)
+
+## Earlier on November 20 — News and Wiki floating tools
+
+The source filter, time and size focus, and citation timeline can move across their workbenches. Each minimized icon can move independently. The replaceable header PNG lives at `dist/stocknexus-wiki.png`. [Interaction and replacement instructions](references/wiki-timeline-workbench.md) · [Browser verification](TESTING.md)
+
+## Earlier on November 20 — Wiki timeline workbench
+
+The local branch `llm_wiki_unslop` contains the floating chart, reversible classification filters, horizontal pan and the wider comparison reader. Wiki workspace persistence accepts the version pane height, worker control and saved L2 run. CodeGraph 1.6.3 indexes this checkout, including the hand-written frontend. See the [UI acceptance record](references/wiki-timeline-workbench.md), [verification ledger](TESTING.md) and [CodeGraph commands](PROJECT_MAP.md#using-this-checkouts-codegraph-index).
+
+## Earlier on November 20 — Wiki cache and classifier
+
+The branch `llm_wiki_unslop` now includes News-to-Wiki background reads, exact-scope caching, incremental graph updates and bounded L1 classification recovery. The shared-evidence size comparison and Given/When/Then scenarios are in the [English acceptance record](references/wiki-cache-classifier-20261120.md).
+
+Production HTTPS returned **NASDAQ:NVDA v231** with 1,893 nodes and 1,353 edges for October 7 through November 7, 2026. The [current verification ledger](TESTING.md) records response sizes and deployment recovery. The pre-deployment check covered 18 Wiki databases with zero queued/running model jobs and no enabled maintenance or catch-up. The existing annual controller remains stopped and the new policy takes effect on a subsequent authorized job. The normal launcher completed on healthy image `0fdac2459b0eb1db3208de7b072a50863d59d86669eeeb09c55041ead395c4df`. The rollback image is `news-atlas:before-wiki-cache-20261120`. A fresh Chromium profile on Tailscale rendered 800 of 1,893 loaded NVDA nodes and received a full graph followed by an unchanged acknowledgement, with zero model submissions or browser errors.
+
+## Earlier update: Wiki execution logs enabled
+
+Added correlated, rotating private stage logs under `data/private/wiki-trace/` and a command-line report. Preparation, L1 worker context/dispatch/model/validation/publication, classification, L2 fusion and its separate semantic review can now be traced by job/call ID. The bridge emits 15-second heartbeats during a live call. Read [observability](WIKI_OBSERVABILITY.md) for commands, retention and limits; old model timing cannot be reconstructed.
+
+Read-only pre-deployment audit found no queued/running Wiki or research jobs across stocks. Deployment is healthy on image `988b34c0aca7f40eca9993087ea85848d7061c1116129b4005e586a82b1a5451` and preserves the prior image as `news-atlas:before-wiki-trace-20261120`; no model job or annual controller was resumed. Both trace files were verified at 0600. A zero-article preview produced a measured `plan` event with no job submission; the bridge log contains startup only, confirming no inference was used for the smoke test. This follow-up stays on `llm_wiki_unslop`, after UI commit `e05f5e4`, and is separate from the redesign. Test results: 101 Wiki, 24 research, 23 Chat/bridge. The NVDA annual stopped/v231 status below remains relevant; do not infer completion from service readiness.
+
+## Earlier update: unslop workbench, saved Chat and faster preparation
+
+The approved graphite/teal workbench is deployed at https://ubuntu.tail9e662c.ts.net:8765/. Wiki entry follows the confirmed News graph stock and automatically opens its existing result. Chat now has persistent per-browser history, reopening/continuation and confirmed deletion. Preparation reuses an exact matching saved forest and shows stages/elapsed time. See the [design and behavior record](references/unslop-20261120.md) and [validation](TESTING.md).
+
+Git branch is **`llm_wiki_unslop`**. Commit `86f06a7` preserves the earlier document/parallel-worker baseline; the following dedicated workbench commit contains this request. No push was requested or performed. The global unslop skill is pinned and attributed in the design record.
+
+Production rebuilt successfully with image `2a3c2f8e544a04bb2c5bb4d83a603b47cc8c02b87826fa1d2af8345c8c07da26`; rollback image `news-atlas:before-unslop-20261120` is retained. SQLite backup: `data/private/unslop-20261120/nvda-before-ui.sqlite3`. Before restart, every stock had no queued/running model job or research. The container and Chat/Wiki bridge are healthy; served CSS/JS match checkout. Actual Tailscale UI automatically selected **NASDAQ:NVDA v231**, and its Chat history expanded with an accurate empty state. No paid inference was submitted for this smoke test.
+
+**NVDA annual processing is currently stopped, not complete.** The private controller is `blocked` with “Associated classification did not complete; no retry”. A classification timed out at 600 seconds after preserving completed batches; the latest research was cancelled. Published v231 remains available. This UI deployment did not restart the controller or replay model jobs. Inspect the live private ledger before recovery; historical running/three-lane observations below are not current status.
+
+## Earlier update: three NVDA tree workers deployed
+
+The user explicitly chose **3 GPT-6.1 Sol workers**. Parallel root incremental processing is deployed at https://ubuntu.tail9e662c.ts.net:8765/ with selectable concurrency 1/3/5/10, expandable individual segment bars, and completed-tree primary progress. Article coverage remains secondary; tree ordinal is identity, not completed work. Concurrency is not a promised speed multiplier. Checkpointed publication preserves completed segments; shared mutable opinion context is serialized and parent cancellation reaches all lanes.
+
+The prior L1 job was explicitly stopped at **v184**, its SQLite snapshot and workflow ledger backed up, and the annual controller resumed with parent job `36b0116765f94ae9b066dda22a0efec0`. The first partition reuses 1,424/9,000 article revisions. Production UI verified three simultaneous `gpt-6.1-sol` lanes, each with saved segments, and new publication through **v188**. The snapshot showed **23/1,170 completed trees**; progress is live, so inspect the ledger rather than replaying these values. The second 1,755-record partition and two L2 studies remain pending; L2 retains `gpt-6.2-sol` high. At that observation, annual processing was still in progress; the latest stopped state above supersedes it.
+
+Deployment preserved data/routes and retained image `news-atlas:before-workers-20261120`. A production progress-read 503 was traced to sorting 28.7 MB of frozen job payloads in the container's 32 MB `/tmp`. An additive `jobs_created` timestamp index was applied to NVDA without interrupting work; the source initializer now ensures the index for future/older databases. The running image contains the parallel feature; this final initializer addition takes effect on the next normal rebuild, while the equivalent NVDA schema migration is already active. See [tests](TESTING.md) and [runtime contract](WIKI_RUNTIME.md). At that stage no commit or push had been made; the branch and baseline commit above supersede that Git status.
+
+## Earlier actions in this session
+
+- **Git:** fetched `origin --prune`; local `llm_wiki` and `origin/llm_wiki` both point to `228f6a7`. The checkout was clean before the onboarding update. The current working tree now contains documentation, tests and the document-import follow-up described below; no commit or push has been made. `origin/main` remains `eefcd81` and does not include the November 19 feature.
+- **November 19 update:** `47d7510` added versioned document collections and graphs; `6ffc35d` added Web UI JSONL upload and an agent prompt; `228f6a7` made a single article path sufficient for a validated handoff. The feature is already available in local source. See the English [document import contract](DOCUMENT_IMPORT.md) for the customer journey, owners, limits and testing route.
+- **Feature boundary:** documents use `/documents` and `graph/<collection>/documents.sqlite3`. An external agent prepares JSONL; import and graph browsing do not run a model. Imported L1/L2 claims remain in document collections, separate from the stock Wiki pipeline. Raw PDF/Word upload and a fully English document page are not implemented.
+- **Confirmed follow-up:** the skill reads article content and supplies supported cross-article links. Multiple articles share a collection graph; force-layout distance is not semantic similarity or chronology. Untitled/undated articles use display labels and unknown dates. Added a blank-filename fallback, optional `links[].rationale` validation/storage, literal reason display and a layout explanation. The portable skill now specifies the semantic pass, leaves unsupported pairs disconnected, and avoids guessing dates. Existing JSONL without rationales remains compatible; new rationale exports require this updated schema.
+- **November 18 update:** `54f24c3` added saved L1/L2 viewpoint comparisons, expanded agent graph/revision access, Wiki progress/stop controls, per-turn Chat model choice, date/snapshot handling and clearer full-data/single-stock merging. Existing contracts remain in [API](API.md), [DATA_MERGE](DATA_MERGE.md) and [WIKI_RUNTIME](WIKI_RUNTIME.md). These changes are not all revalidated by the document smoke test.
+- **Fresh verification:** the document-import suite now passes 6 tests, including heading-free/undated same-title articles, preserved identity and original body, relation rationales and blank-filename fallback. Real Chromium also passed converter → validator → upload → one graph with an explained cross-article link and an unrelated retained node, plus all earlier upload/revision/reload checks. Skill validation and JavaScript syntax passed. Earlier in this session, 4 agent-workflow/viewpoint-comparison tests passed with Python 3.13 SQLite `ResourceWarning`s. Commands and scope are in [TESTING](TESTING.md).
+- **Running service (updated):** at the user's explicit restart request, rebuilt with `./run.sh up --non-interactive` and restarted the host Chat bridge. The container is healthy; `/documents` now returns 200 with bytes matching the checkout, `/api/capabilities` returns 200, and Chat/Wiki report ready. Previous image retained as `news-atlas:before-documents-20261120`. Existing data and network routes were preserved. The earlier 404 observation is superseded.
+- **NVDA annual research:** the user authorized `gpt-6.2-sol` L1 and two L2 studies (panic selling; future drawdown magnitude/duration). Model availability was verified against the live catalog. Fixed news scope: 2025-11-20 through 2026-11-19 UTC, 10,755 provider article records after acquisition. Massive has stored complete coverage for all 365 days; Google/Yahoo remain partial RSS snapshots. Price cache contains 250 sessions through November 18; November 19 was not returned. A finite controller has started the first annual L1 partition (9,000 records: 1,066 reused, 7,934 pending), with the remaining 1,755 records queued as the second partition. It will save both L2 studies only after extraction/classification complete. A new committed L1 version **131** was observed at 00:23 UTC, confirming real publication after restart. This is **in progress**, not a completed research result. See [execution handoff](references/nvda-research-20261120.md) and its private ledger before resuming anything.
+- **Next action:** inspect the live workflow ledger and actual published versions; do not replay jobs from this historical text. Real customer-file extraction quality and large document datasets remain unverified. L2 currently reasons over selected L1 evidence and does not consume the raw price cache as a quantitative forecasting series.
+
+
+# Historical handoff — 2026-11-18
+
+資料夾匯入支援全 data、單股 graph 或單股 llm_wiki。相同快照表頭會再核對成員與連線；Wiki 可手動選擇兩筆 L1／L2 做模型比對，保留原始修訂與私人研究封存。見 [資料合併](DATA_MERGE.md)。
+
+新聞搜尋的自訂日期與快捷鍵均限制在一個日曆年的 UTC 含首尾區間。搜尋完成預設儲存目前勾選來源的圖譜快照。快照寫入成功後，進度條將所有已完成來源讀回的新聞計入 DB 既有，包含圖上隱藏的來源。快照只收錄勾選來源，來源錯誤與日期缺口獨立保留。
+
+Wiki 左欄「檢視完整 L1 圖譜」可固定版本逐頁查看節點、入邊與出邊。L1 更新與手動重審保留歷史修訂，L2 依研究問題保存與刷新。Chat 可按回合切換模型並接續 thread。Wiki 採主機 Codex 目錄中的 Sol、Luna、Mini、Nano 系列。Agent 路徑與驗收見 [API](API.md)。此工作樹交接不代表部署版本。
+
+兩個停止入口共用股票層級的 L1 停止操作，整理日期在工作或監看中鎖定。每次工作分別顯示已提交篇數／觀點數及估計剩餘時間。見 [Wiki 執行與維護](WIKI_RUNTIME.md)。L1 詳情可分開查看指向該修訂的支持與反證，L1 + L2 圖包含研究快照所保存的關係與精確引用。切換語系保留關係類型的篩選值。
+
+# 最新交接：2026-11-16 保存／續跑核對
+
+程式與既有部署紀錄已在 `llm_wiki`，本次只補文件，不重啟、不更動年度工作。L1／L2 完成結果會自動提交；立即取消可能丟棄尚未提交推論，大樹中斷仍可能重算未完成樹的已發布分段。安全暫停與持久分段 checkpoint 尚未實作；詳細邊界與後續 BDD 見 [WIKI_RUNTIME](WIKI_RUNTIME.md)「保存與中斷邊界」。下方 11/14 執行與測試是歷史驗證，本次沒有重新宣稱批次即時進度。
+
+# 最新交接：2026-11-14 DB context API
+
+新增 `/api/context/catalog|news|related|prices|l1|l2` 與 Chat `read_database`；獨立技能在 [stocknexus-research-api](../skills/stocknexus-research-api/SKILL.md)。查詢重用既有 DB，不啟動模型／抓新聞／初始化空庫。L1 使用既有 as-known EvidenceBundle；價格為目前快取 vintage；L2 保存快照與當期新聞不可混淆。
+
+驗證：35 Python context/research 測試、7 Chat proxy 安全測試、14 Node Chat 測試通過；真 Chromium `browser_chat_database.py` 驗證空圖仍能讀 DB 並回傳工具結果。正式 NVDA 以新 Handler 隔離埠做唯讀 HTTP 驗證；不重啟、不消耗模型。技能驗證與 spec links 通過。使用者明確授權本次部署後，已重建正式 8765（程式 `5826c59`、建置來源 `7994d7e`），並重啟 host Chat bridge。正式 catalog/news/prices/l1/l2 均 HTTP 200，NVDA 查詢約 0.05–0.65 秒。真 Chromium 經 Tailscale 驗證 Chat 已連線、context/news 同源 GET 200。年度 L1 以原 universe hash、2025-11-14 至 2026-11-13、gpt-6.1-sol/medium 接續；持久恢復紀錄在原 private ledger，沒有清除 revisions 或擴大日期。未送真實付費 Chat 問題，模型回答品質仍由使用者測試。
+
 # 目前狀態
 
-## 有效交接：下一個 session 先讀這裡（2026-11-08）
+## 已部署：Tailscale Chat（2026-11-14）
+
+0b069a5 已在使用者明確同意暫停 L1 後部署。exact HTTPS Origin＋Tailscale Serve 使用者 allowlist 已啟用；正式 Chromium 經 Tailscale 顯示已連線並完成情境同步，未發送付費模型提問。7 Python／13 Node／Chromium 拒絕連線測試先前通過，見 CHAT_AGENT。年度 L1 保留成果，依部署前工作紀錄接續 medium；即時進度以 private ledger 為準。
+
+
+## 最新交接：股票身分綁定（2026-11-14）
+
+既有 Wiki 股票鎖定；新建改由非空新聞 DB 下拉選取。伺服器 news_db 模式不使用主頁別股輸入；過期／錯股 graph 回應不得覆寫選取。見 WIKI_RUNTIME、API。新增 configure 閒置模型設定路徑避免單改 reasoning 重建全年圖譜；有活動 extraction/classification 時拒絕。
+
+本輪驗證：87 項 Wiki Python、9 項 Graph storage、9 項 Chromium 身分切換檢查通過；新增資料範圍、快照身分、空庫與模型設定邊界測試。舊 browser_wiki.py 因假設自動預覽而在 planRelease 步驟失敗，未宣稱全套舊 UI 驗收通過。本輪以 browser_wiki_identity.py 測實際 DOM 互動、即時回饋及晚回應。
+
+正式確認 14 個非空新聞 DB；一年來源取得仍有供應商缺口。年度批次於 2026-11-13T17:20Z 因模型用量上限停止，既有成果保留；本次使用者指定後續 gpt-6.1-sol/medium，取代下方 high 歷史設定。即時結果以 private l1-batch.json 為準，不依歷史行列重送工作。程式 04f79b8 已部署並推送 llm_wiki；HTTP JS SHA256 相符。正式 Chromium 切換 SNDK 鎖定與新建 14 DB 選項通過。14 股 medium 設定已由公開 API 保存；使用者再次要求啟動且舊額度重試時間已過後，執行一次有界接續，先 NVDA、成功新發布後放行其餘，並保留之前失敗歷史；詳見本批 references。
+
+
+## 最新本機交接：年度資料與研究（2026-11-14）
+
+本次新授權更新既存有效股票與指定研究名單，共 14 個：NVDA、AMD、AAPL、TSLA、SpaceX/SPCX、META、VIX、QQQ、ASML、AMZN、RDW、SNDK、GOOGL、TSM。固定 UTC 2025-11-14→2026-11-13，行情至美國 11/12 完整交易日；gpt-6.1-sol/high、Graph root、增量 update。保留既有資料與 revisions，不恢復舊七股 heartbeat。先讀 `data/private/annual-research-20261114/l1-batch.json` 與取得紀錄；不要依舊進度重送工作。
+
+Git 已從 8285c09 fast-forward 到 f63e896 並部署，24 Python + 12 Node 測試通過，HTTP 靜態資產核對成功。AMD 已實際由 v27 發布到 v28；14 股來源取得與有界補抓已完成一輪（仍有來源缺口）；年度 L1 尚在處理，不宣稱全部完成。市場研究、來源身分、BDD 邊界、報告與續作見 [本輪交接](references/annual-research-batch-20261114.md)。以下「待部署」與其他主機的空庫觀察是歷史狀態，不能覆蓋此處的本輪實測；下次仍須查即時 runtime。
+
+## 最新待部署修正（2026-11-10）
+
+已補上已發布成果入口、被篩選隱藏的空圖說明、首次載入失敗後恢復，以及版本變更上邊界拖曳。正式查核時 GOOGL 有 611 個節點紀錄／v47，工作 running，保存的分類篩選為 __pending；沒有清庫或重送模型。隔離 Chrome 11 項新檢查與 48 項既有布局檢查通過；連同下方 root 閱讀功能建置待部署，目前正式服務仍未重啟。
+
+## 待部署：工作樹閱讀入口（2026-11-09）
+
+目前 root 可跳回 News 並高亮凍結成員的功能已實作，15 項隔離瀏覽器檢查與 11 項相關後端測試通過（低預算補強另重跑 8 項 forest 測試），容器映像已建置。正式工作仍 running（查核時 root 12/100、done270），為避免中斷與重做，尚未重啟部署；使用者需選擇更新時機。這個入口不改去重／工作／模型設定；快照成員與目前連線的差異會明示。
+
+## 最新本機觀察：smoke test 後（2026-11-09）
+
+使用者已重新建立 GOOGL 新聞／Wiki；下方空資料起點僅為先前清庫當時紀錄。兩次 Graph medium 工作第一段 12 篇都在約 120 秒失敗；已修正橋接為統一 600 秒上限並區分取消／逾時，11 項隔離 Node 測試通過。未清除這次新資料，也未自動重送模型。詳見 TESTING 的 medium root 紀錄。
+
+## 有效交接：本機 smoke test 起點（2026-11-09）
+
+- 本機實際專案為 `/home/nvidia/Desktop/AI_WS/stocknexus-wiki`，分支 `llm_wiki`，程式版本 `8285c09`；本輪只整理文件與重置資料，未修改產品程式。環境提示中的 `news-atlas` 路徑已過時。
+- 已核對共享 L1／Classifier／Taxonomy／Lens L2、研究進度與既有結果讀取恢復。修正文件中過時的四分類／純 Thesis 統計描述，以及漏寫的 root 每段 12 篇限制；目前契約見 CALCULATION_METHODS、WIKI_RUNTIME、RESEARCH_LAYERS。
+- **使用者明確要求刪除全部 DB 供 smoke test**：停止服務後刪除 58 個專案資料庫及 WAL／SHM 等檔案，共 1,642,643,456 bytes，包含舊備份、新聞／價格／關聯、Wiki／研究與 workspace；清除衍生圖布局。保留登入憑證與非 DB 紀錄，不另留 DB 備份。舊工作與舊成果不再接續。
+- 已重新啟動 localhost:8765，Chat bridge ready。實測新聞、coverage、attempts、snapshots 均 0；Wiki instruments 為空陣列，workspace 為空物件。啟動會建立空 schema DB，不能用「有 DB 檔」判定舊資料殘留。
+- 24 項研究／健康後端測試，以及隔離真實 HTTP／Chrome 研究流程測試通過；沒有啟動正式模型工作。實際來源搜尋與模型品質 smoke test 留待使用者操作，見 [SMOKE_TEST](SMOKE_TEST.md)。
+- 瀏覽器記憶體與偏好獨立於 DB；先關閉舊分頁，以無痕視窗或新 profile 開始。不要讓舊頁把記憶中的 workspace 再存回。這次新測試不沿用下方歷史主機的日期、股票與工作進度。
+
+## 歷史交接：其他主機的 2026-11-08 紀錄（非本機即時狀態）
+
+以下是保留的歷史證據；本機資料與下一步以最上方 2026-11-09 交接為準。
 
 - **最新交付**：README.md／README.en.md 分開中英文、頂端互連，各自嵌入最新有明確輸出與箭頭的流程圖；移除影片介紹，聚焦問題與操作。研究進度／目錄不再掃描匯入整份新聞；L2 中央同步顯示排隊／整合／載入與等待秒數，讀取暫時失敗保留 job 並恢復，不重跑模型。隔離 Chromium 回歸及 23 項研究測試通過；2026-11-07 16:09:48 UTC 更新部署 healthy，HTTP JS/CSS 與原始碼相同。正式 HTTPS 瀏覽器已驗證 GOOGL 5 個既有 L2 節點可載入；詳細證據見 TESTING。
 - **本輪正式研究觀察**：GOOGL「動能」既有工作於 15:52:50 UTC 完成（約 67 秒），含 5 個 L2 claims／20 筆入選 L1 claims；唯讀瀏覽器可載入全部 5 個 L2 節點。截圖期間中央缺進度已重現；無法由截圖證明該正式工作曾永久卡住。額外驗證並修正已完成結果 GET 失敗會遺失追蹤的路徑。本輪沒有新增付費模型工作，也未清理資料；停止的 L1／年度工作保持停止。
@@ -73,3 +197,21 @@
 ## 維護入口
 
 開始修改先讀 [協作偏好](ai-dev-experience-preferences.md)，再讀任務規格與 [互動事故經驗](references/lesson-20261106-interaction-and-delivery.md)。所有公式、範圍與完成條件從 [CALCULATION_METHODS](CALCULATION_METHODS.md) 查找；不要從截圖推測運算定義。
+
+### 2026-11-10 L2 論證閱讀更新（尚待部署）
+
+已在前端加入 saved support/counter 分支（青綠菱形／橙色方塊）、精確 L1 引用聚焦、節點類型／分類色標與雙語提示。無引用分支不建立；純投影不改保存資料、不呼叫模型。細節見 RESEARCH_LAYERS，11 項新瀏覽器檢查通過；既有工作不為此次 UI 更新中斷。
+
+同輪 48 項版面／手勢與完整研究 HTTP／Chrome 回歸通過，更新映像已建置；正式服務仍未重啟，不能把原始碼完成當作已部署。
+
+### 2026-11-10 後續閱讀與 Chat 整合（已部署）
+
+固定文字圖例已改為當前可見 mesh 的立體縮圖；英文分類及 L2 入口、新 URL 語系已修正。Chat 安全 Markdown 表格完成，新增唯讀 read_research MCP，從 DB API 讀取完整 L2/L1 引用及近期／快照時間水位。BDD、既有 Chat／研究回歸及一次真實模型隔離抽查完成；細節與限制見 [CHAT_RESEARCH_BDD](CHAT_RESEARCH_BDD.md)。在確認正式模型槽閒置後，已用標準啟動器更新 frontend 容器及 host bridge。健康、HTTP 資產雜湊、正式頁面英文分類／L2 入口及立體圖例 PASS；DB／設定保留，未啟動新的整理工作。此交接取代上方歷史待部署狀態。
+
+### 2026-11-10 L2 側欄語系補強（已部署）
+
+完整展開側欄、保存歷史、忙碌 tooltip、排隊／執行秒數、中斷／重連／恢復的介面訊息改由 L2 自有語系流程呈現；原始研究問題與來源內容保留語言。載入狀態使用獨立狀態值。`browser_research_locale.py` 10 項檢查及 `browser_wiki_reading.py`、`browser_research.py` 通過；前者包含修正前確實失敗的忙碌案例，未呼叫模型。模型槽閒置後發布，HTTP 資產雜湊與本地一致，正式 Chrome 英文左欄無殘留中文介面與 JS 錯誤；正式服務未人工建立忙碌工作，該狀態以隔離測試驗證。
+
+### 2026-11-11 研究問題目錄（已部署）
+
+L2 左側新增多面向篩選與問題搜尋，納入已完成未另保存的結果，已保存版本歷史不重複列卡。圖上方、節點提示明示研究問題。面向依問題文字規則產生，舊資料只讀補足、不重跑模型；目前沒有手動改面向或多問題同圖，細節見 RESEARCH_LAYERS。24 項研究測試、語系／篩選測試、真實 HTTP/Chrome 研究流程與論證圖回歸通過。模型槽閒置時發布，正式頁面已讀取既有 GOOGL 結果並驗證目錄→圖中問題一致、中英往返無 JS 錯誤；測試阻擋 workspace/API 寫入，未變更使用者偏好或建立研究。Live 與 pinned 同一結果仍是兩張不同保存模式的卡片，面向數量以卡片計。

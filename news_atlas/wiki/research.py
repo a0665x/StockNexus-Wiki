@@ -3,6 +3,7 @@
 No research object is an ingestion source. Legacy L1 nodes are wrapped without rewriting
 history. Local deployment has one trusted owner; clients cannot supply an owner.
 """
+from .trace import span, emit, job_fields, admitted, job_state, error_fields, timed
 import datetime as dt
 import json
 import os
@@ -122,6 +123,20 @@ def allowed(ast,text,labels):
     if op=='not':return not allowed(ast['arg'],text,labels)
     return (all if op=='and' else any)(allowed(a,text,labels) for a in ast['args'])
 
+# Browsing metadata only: never a retrieval constraint or model confidence.
+RESEARCH_FACETS = (
+    ('investment', r'投資|資本支出|回報|capex|investment|return on'),
+    ('growth', r'需求|成長|增長|營收|銷售|demand|growth|revenue|sales'),
+    ('profitability', r'獲利|盈利|利潤|毛利|成本|profit|margin|cost|earnings'),
+    ('valuation', r'估值|股價|目標價|看漲|看跌|valuation|price|bullish|bearish'),
+    ('risk', r'風險|監管|法規|訴訟|risk|regulat|litigation'),
+    ('competition', r'競爭|護城河|市占|competition|competitive|moat|market share'),
+    ('momentum', r'動能|趨勢|momentum|trend'),
+)
+
+def research_facets(lens):
+    return [key for key, pattern in RESEARCH_FACETS if re.search(pattern, lens.get('query',''), re.I)] or ['general']
+
 def parse_lens(body,stock,tax,clock=None):
     if 'owner' in body or 'owner_id' in body:raise ValueError('owner 由服務端決定')
     q=body.get('query','').strip()
@@ -143,7 +158,7 @@ def parse_lens(body,stock,tax,clock=None):
     if exclusions:ast={'op':'and','args':[ast,*[{'op':'not','arg':{'op':'text','value':x}} for x in exclusions]]}
     soft=[t['id'] for t in tax['terms'] if any(matches(q,a) for a in [t['label'],*t['aliases']])]
     momentum=bool(re.search(r'動能|momentum',q,re.I))
-    return {'schema':SCHEMA,'instrument':stock,'query':q,'normalized_question':q,'filter_ast':ast,'soft_terms':soft,
+    return {'schema':SCHEMA,'instrument':stock,'query':q,'normalized_question':q,'research_facets':research_facets({'query':q}),'facet_method':'question_keywords_v1','filter_ast':ast,'soft_terms':soft,
             'dimensions':['analysis.narrative_momentum','analysis.price_momentum'] if momentum else ['analysis.fundamentals'],
             'time_policy':{'lookback_days':days,'cutoff_mode':'fixed' if body.get('as_of') else 'rolling_now','fixed_as_of':body.get('as_of'),'window_basis':'published_at','horizon_sessions':20},
             'time_spec':{'start':(cutoff-dt.timedelta(days=days)).isoformat(),'end':cutoff.isoformat(),'as_of':cutoff.isoformat(),'temporal_mode':'as_known','timezone':'UTC'},
@@ -277,6 +292,7 @@ def validate_fusion(proposal,b):
 class Research:
     def __init__(self,store):self.store=store
 
+    @timed('research_prepare')
     def prepare(self,body,clock=None):
         with self.store.connection() as db:
             db.execute('BEGIN IMMEDIATE')
@@ -284,6 +300,7 @@ class Research:
             b=bundle(db,lens);snapshot='snapshot-'+digest(b)
             return lens,b,snapshot
 
+    @timed('research_query')
     def query(self,body):
         with self.store.connection() as db:
             if db.execute("SELECT 1 FROM jobs WHERE status IN ('queued','running')").fetchone() or db.execute("SELECT 1 FROM research_jobs WHERE json_extract(payload,'$.operation')='classify_l1' AND status IN ('queued','running')").fetchone():
@@ -349,7 +366,11 @@ class Research:
     def read(self,kind,ident=None):
         with self.store.connection() as db:
             if kind=='runs':
-                return {'runs':[{'id':r['id'],'created_at':r['created_at']} for r in db.execute("SELECT id,created_at FROM research_objects WHERE kind='run' AND owner=? ORDER BY created_at DESC LIMIT 20",(OWNER,))]}
+                runs=[]
+                for row in db.execute("SELECT id,created_at,payload FROM research_objects WHERE kind='run' AND owner=? ORDER BY created_at DESC,id DESC",(OWNER,)):
+                    run=json.loads(row['payload']);snapshot=obj(db,run['snapshot'],'snapshot');lens=snapshot['lens']
+                    runs.append({'id':row['id'],'created_at':row['created_at'],'lens':{**lens,'research_facets':lens.get('research_facets') or research_facets(lens)},'claim_count':len(run['result']['claims'])})
+                return {'runs':runs}
             if kind=='run':
                 r=obj(db,ident,'run');b=obj(db,r['snapshot'],'snapshot')
                 return {**r,'bundle':b,'current_epochs':epochs(db)}
@@ -364,7 +385,7 @@ class Research:
             if kind=='lenses':
                 state=epochs(db);out=[]
                 for r in db.execute('SELECT payload FROM research_lenses WHERE owner=? ORDER BY updated_at DESC',(OWNER,)):
-                    s=json.loads(r[0]);stale=s['checked_epochs']!=state or instant(s['checked_at']).date()!=instant(now()).date() or bool(state['pending'])
+                    s=json.loads(r[0]);s['lens']['research_facets']=s['lens'].get('research_facets') or research_facets(s['lens']);stale=s['checked_epochs']!=state or instant(s['checked_at']).date()!=instant(now()).date() or bool(state['pending'])
                     s['refresh_state']='pinned' if s['mode']=='pinned' else 'failed' if s.get('last_error') else 'stale' if stale else 'fresh';out.append(s)
                 return {'lenses':out,'epochs':state}
         raise ValueError('未知研究讀取操作')
@@ -437,20 +458,27 @@ class Research:
             db.execute('BEGIN IMMEDIATE')
             r=db.execute("SELECT * FROM research_jobs WHERE status='queued' AND COALESCE(json_extract(payload,'$.operation'),'')!='classify_l1' ORDER BY created_at LIMIT 1").fetchone()
             if not r:return
-            job=dict(r);p=json.loads(job['payload']);b=obj(db,p['snapshot'],'snapshot')
+            job=dict(r);p=json.loads(job['payload'])
+            comparing=p.get('operation')=='compare_viewpoints'
+            if not comparing:b=obj(db,p['snapshot'],'snapshot')
             db.execute("UPDATE research_jobs SET status='running',updated_at=? WHERE id=?",(now(),job['id']))
-        service.active=(self.store,job['id'])
+        service.active=(self.store,job['id']);admitted(self.store,job)
         try:
+            if comparing:
+                from .comparison import complete
+                complete(service,self.store,job,p)
+                return
             if not b['opinions']:
                 response={'proposal':{'claims':[],'summary':[],'support':[],'counter':[],'narrative':[],'gaps':['沒有符合硬條件的 L1；未放寬篩選']},'usage':{}}
             else:
-                response=service.runner(self.store,{'id':job['id'],'payload':{**p,'operation':'research_fusion','languages':['zh-Hant']}},{'research_bundle':b},[])
+                response=service.run_model(self.store,{'id':job['id'],'payload':{**p,'operation':'research_fusion','languages':['zh-Hant']}},{'research_bundle':b},[])
             with self.store.connection() as db:put(db,'model_receipt',{'job_id':job['id'],'phase':'fusion','usage':response.get('usage',{}),'recorded_at':now()},ident=job['id']+':fusion')
-            result=validate_fusion(response['proposal'],b)
+            with span(self.store,'research_validate',**job_fields(self.store,job)):
+                result=validate_fusion(response['proposal'],b)
             if any(c['type']=='inference' for c in result['claims']):
                 # One bounded semantic check only for new synthesis. Exact L1 excerpts do
                 # not consume another call. A rejection keeps the last successful result.
-                checked=service.runner(self.store,{'id':job['id'],'payload':{**p,'operation':'research_review','languages':['zh-Hant']}},{'research_bundle':b,'candidate':result},[])
+                checked=service.run_model(self.store,{'id':job['id'],'payload':{**p,'operation':'research_review','languages':['zh-Hant']}},{'research_bundle':b,'candidate':result},[])
                 with self.store.connection() as db:put(db,'model_receipt',{'job_id':job['id'],'phase':'semantic_review','usage':checked.get('usage',{}),'recorded_at':now()},ident=job['id']+':review')
                 audit=checked.get('proposal',{})
                 if audit.get('assessment')!='pass' or set(audit.get('checked_claim_ids',[]))!={c['id'] for c in result['claims']} or any(i.get('severity')=='error' for i in audit.get('issues',[])):
@@ -461,7 +489,7 @@ class Research:
                     if type(value)==int:totals[key]=totals.get(key,0)+value
                 response['usage']=totals
 
-            with self.store.connection() as db:
+            with span(self.store,'research_publish',**job_fields(self.store,job)), self.store.connection() as db:
                 db.execute('BEGIN IMMEDIATE')
                 if db.execute('SELECT status FROM research_jobs WHERE id=?',(job['id'],)).fetchone()[0]!='running':return
                 run={'snapshot':p['snapshot'],'result':result,'model':p['model'],'reasoning_effort':p['reasoning_effort'],'usage':response.get('usage',{}),'created_at':now(),'schema':SCHEMA,'input_hash':b['input_hash']}
@@ -473,11 +501,14 @@ class Research:
                     put(db,'lens_revision',s,ident=s['revision']);self._save(db,s)
                 db.execute("UPDATE research_jobs SET status='completed',payload=?,updated_at=? WHERE id=?",(encode(p),now(),job['id']))
         except Exception as error:
+            emit(self.store,'error','job',**job_fields(self.store,job),**error_fields(error))
             with self.store.connection() as db:
                 db.execute("UPDATE research_jobs SET status='failed',error=?,updated_at=? WHERE id=?",(str(error)[:600],now(),job['id']))
                 if p.get('lens_id'):
                     s=self._lens(db,p['lens_id']);s['last_error']=str(error)[:600];self._save(db,s)
-        finally:service.active=None
+        finally:
+            job_state(self.store,job,'research_jobs')
+            service.active=None
 
 
 def handle_research(handler,service,path,params,can_write):
@@ -494,17 +525,36 @@ def handle_research(handler,service,path,params,can_write):
     from .store import instrument, folder_name
     stock=instrument(body.get('instrument',''))
     if not (service.root/folder_name(stock)/'wiki.sqlite3').exists():raise ValueError('請先建立此股票的 L1 Wiki')
-    if path in ('query','refresh','availability'):
+    if path in ('query','refresh','compare','availability'):
         active=[s.instrument for s in service.stores() if any(j['status'] in ('queued','running') for j in s.jobs())]
         for s in service.stores():
             with s.connection() as db:
                 if db.execute("SELECT 1 FROM research_jobs WHERE json_extract(payload,'$.operation')='classify_l1' AND status IN ('queued','running')").fetchone() and s.instrument not in active:active.append(s.instrument)
         if path=='availability':
             with service.store(stock).connection() as db:
-                job=db.execute("SELECT id,status FROM research_jobs WHERE owner=? AND coalesce(json_extract(payload,'$.operation'),'')!='classify_l1' AND status IN ('queued','running') ORDER BY created_at LIMIT 1",(OWNER,)).fetchone()
+                job=db.execute("SELECT id,status FROM research_jobs WHERE owner=? AND coalesce(json_extract(payload,'$.operation'),'') NOT IN ('classify_l1','compare_viewpoints') AND status IN ('queued','running') ORDER BY created_at LIMIT 1",(OWNER,)).fetchone()
             handler.json_response(200,{'busy':bool(active),'instruments':active,'active_job':dict(job) if job else None});return
         if active:raise ValueError('請先停止 L1 資料補足，再開始進階觀點分析：'+', '.join(active))
     research=Research(service.store(stock))
+    if path in ('compare','comparison-candidates','comparisons','comparison'):
+        from .comparison import candidates, enqueue
+        with research.store.connection() as db:
+            if path=='compare' and handler.command=='POST':
+                result=enqueue(db,body)
+            elif handler.command=='GET' and path=='comparison-candidates':
+                result=candidates(db,body.get('q',''),int(body.get('offset',0)))
+            elif handler.command=='GET' and path=='comparisons':
+                result={'jobs':[dict(r) for r in db.execute("""SELECT id,status,created_at,error,
+                    json_extract(payload,'$.comparison_id') comparison_id,
+                    json_extract(payload,'$.pair[0].statement') first_statement,
+                    json_extract(payload,'$.pair[1].statement') second_statement
+                    FROM research_jobs WHERE owner=? AND json_extract(payload,'$.operation')='compare_viewpoints'
+                    ORDER BY created_at DESC LIMIT 50 OFFSET ?""",(OWNER,max(0,int(body.get('offset',0)))))]}
+            elif handler.command=='GET' and path=='comparison':
+                result=obj(db,body.get('id'),'viewpoint_comparison')
+            else:raise ValueError('Unsupported comparison request')
+        if path=='compare':service.wake.set()
+        handler.json_response(202 if result.get('status')=='queued' else 200,result);return
     # Progress/catalog reads use committed Wiki data. Reingesting the full news
     # corpus on every poll delays both the UI and the model worker. Result and
     # live-lens reads retain the source observation needed for freshness checks.

@@ -8,6 +8,8 @@ data/
     GOOGL/news-atlas.sqlite3.graphs.sqlite3
     GOOGL/news-atlas.sqlite3.pairs.sqlite3
     _unassigned/news-atlas.sqlite3
+    <collection>/documents.sqlite3
+    <collection>/imports/<source>/<sha256>.jsonl
     .layout-v1.json
   llm_wiki/GOOGL/wiki.sqlite3
   private/                  # 共用憑證、Chat socket/log、遷移備份
@@ -15,6 +17,8 @@ data/
 ```
 
 ## 路由
+
+Document collections use their own `documents.sqlite3` and normalized JSONL archives, keyed by collection/source/node ID. They do not require a ticker and do not write to stock Wiki databases. Contract and transfer workflow: [DOCUMENT_IMPORT](DOCUMENT_IMPORT.md).
 
 GraphRepository 是服務入口；Store 保持單庫介面供測試／離線工具使用。repository.path 是 NEWS_ATLAS_DB 的憑證定位相容入口，不代表根目錄仍有新聞 DB。正式讀寫使用 for_ticker/for_query 取得請求專屬 Store，不能改共用全域股票或由文章標題猜 ticker。
 

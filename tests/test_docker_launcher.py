@@ -32,7 +32,7 @@ class DockerLaunchTests(unittest.TestCase):
         self.assertEqual(len(commands),2)
         preview,merge=map(shlex.split,commands)
         self.assertEqual(preview,[*merge,'--dry-run'])
-        self.assertEqual(merge,[str(d.ROOT/'merge_data.sh'),'--from','/media/usb/data','--to',str(data)])
+        self.assertEqual(merge,[str(d.ROOT/'merge_data.sh'),'--from','../incoming/data','--to',str(data)])
 
     def test_fixed_project_ignores_environment_project_names(self):
         self.assertEqual(d.COMPOSE[-2:],['-p','news-atlas'])
@@ -105,13 +105,16 @@ class DockerLaunchTests(unittest.TestCase):
 
     def test_real_terminal_tailscale_choice_confirmation_and_urls(self):
         import os,pty,select,subprocess,sys,time
+        scratch=tempfile.TemporaryDirectory()
+        self.addCleanup(scratch.cleanup)
         master,slave=pty.openpty()
         code='''
 from scripts import docker_launch as d
 from pathlib import Path
+from tempfile import gettempdir
 from unittest.mock import MagicMock
 healthy={'id':'one','labels':{'com.docker.compose.service':'atlas'},'state':{'Running':True,'Health':{'Status':'healthy'}}}
-d.preflight=lambda:([healthy],Path('/tmp'), '127.0.0.1')
+d.preflight=lambda:([healthy],Path(gettempdir()), '127.0.0.1')
 d.storage_paths.choose_path=lambda current,*args,**kwargs:current
 d.host_checks=lambda data:None
 d.shutil.which=lambda value:'/fake/'+value
@@ -125,7 +128,8 @@ opener=MagicMock();opener.open.return_value=response
 d.urllib.request.build_opener=lambda *args:opener
 raise SystemExit(d.main(['up']))
 '''
-        child=subprocess.Popen([sys.executable,'-u','-c',code],stdin=slave,stdout=slave,stderr=slave,cwd=d.ROOT,start_new_session=True)
+        child=subprocess.Popen([sys.executable,'-u','-c',code],stdin=slave,stdout=slave,stderr=slave,
+                               cwd=d.ROOT,start_new_session=True,env={**os.environ,'TMPDIR':scratch.name})
         output=bytearray()
         def until(needle):
             deadline=time.monotonic()+5

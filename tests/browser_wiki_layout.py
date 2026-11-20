@@ -90,6 +90,7 @@ def main():
               const factory=ForceGraph3D;window.ForceGraph3D=(...args)=>{window.fixtureWikiRenderer=factory(...args);return fixtureWikiRenderer;};window.wikiCalls=[];window.planRelease=null;window.deferPlan=false;window.failGraph=false;window.deferPoll=false;window.pollRelease=null;
               window.fixtureWiki={instrument:'NASDAQ:TSLA',version:1,versions:[{version:1,created_at:'2026-11-04T00:00:00Z'}],nodes:[{id:'a',kind:'ArticleRevision',title:'Fixture evidence',summary:'Evidence only',url:'https://example.test',status:'source'},{id:'b',kind:'Claim',title:'<img src=x onerror=alert(1)> Claim',scope:'fixture',summary:'待判讀',status:'proposed',citations:[{article_revision_id:'a',field:'title',start:0,end:7,quote:'Fixture'}]}],edges:[{source:{stable_id:'a',kind:'ArticleRevision'},target:{stable_id:'b',kind:'Claim'},relation_type:'SUPPORTS',status:'proposed',rationale:'Fixture',evidence_refs:[]}],total_nodes:2,config:{enabled:false},jobs:[],truncated:false};
               fixtureWiki.coverage={instrument:'NASDAQ:TSLA',scope_total:10,scope_done:2,scope_pending:8,review_done:0,review_total:2,daily_calls:2,daily_limit:20,captured_revisions:10,extracted_revisions:2,storage:'llm_wiki/TSLA/wiki.sqlite3',subscriptions:[],rejected_responses:0,note:'分母為已確認範圍'};
+              fixtureWiki.opinion_index=[{...fixtureWiki.nodes[1],dates:['2026-11-04']}];
               fixtureWiki.perspectives={categories:{direct:1},theses:[],total_theses:0,note:'模型局部觀點彙整，未以股價驗證'};fixtureWiki.nodes[1].assessment={category:'direct',rationale:'營運線索，未測試股價',status:'unverified'};
               const prior=window.fetch;window.fetch=async(url,options)=>{
                 if(!url.startsWith('/api/wiki/'))return prior(url,options);
@@ -102,7 +103,7 @@ def main():
                   const body=JSON.parse(options.body);value={plan_id:'plan',instrument:body.instrument,selected:body.articles.length,pending:1,next_batch:1,reused:0,model:body.model,daily_limit:body.daily_limit,watch_sources:[],note:'Fixture'};
                 }
                 else if(url.includes('/graph?')){if(failGraph){failGraph=false;throw Error('Temporary graph 503');}value=fixtureWiki;}
-                else if(url.endsWith('/cancel')){fixtureWiki.jobs=[];value={status:'cancelled'};}
+                else if(url.endsWith('/stop')){value={cancelled_jobs:fixtureWiki.jobs.map(j=>j.id)};fixtureWiki.jobs=[];fixtureWiki.config.enabled=false;fixtureWiki.config.catch_up=false;}
                 else if(url.endsWith('/configure')){fixtureWiki.config.enabled=false;value=fixtureWiki.config;}
                 else if(url.endsWith('/apply'))value={status:'saved',resumed:false};
                 else if(url.includes('/node?'))value={...fixtureWiki.nodes[1],kind:'Thesis'};
@@ -212,7 +213,10 @@ def main():
             js("Array.from($('wikiTimeline').querySelectorAll('rect')).find(r=>r.dataset.category==='analysis.fact_check').id='fixtureTaxBar'")
             click('fixtureTaxBar')
             check('bar selection synchronizes dropdown graph and opinion detail',"$('wikiAssessment').value==='analysis.fact_check'&&fixtureWikiRenderer.graphData().nodes.map(n=>n.id).sort().join(',')==='a,b'&&$('wikiDetail').querySelectorAll('.wiki-viewpoint').length===1&&wikiCalls.filter(c=>c.body).length===writesBefore")
-            js("$('wikiAssessment').value='';$('wikiAssessment').dispatchEvent(new Event('change'));window.toolbarBefore=document.querySelector('.wiki-toolbar').getBoundingClientRect().toJSON();window.canvasBefore=$('wikiCanvas').getBoundingClientRect().toJSON()")
+            js("$('wikiAssessment').value='';$('wikiAssessment').dispatchEvent(new Event('change'));$('wikiAssessment').scrollIntoView({block:'nearest'})")
+            # Let the preceding filter and its ResizeObservers settle before measuring a new interaction.
+            js("new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))")
+            js("window.toolbarBefore=document.querySelector('.wiki-toolbar').getBoundingClientRect().toJSON();window.canvasBefore=$('wikiCanvas').getBoundingClientRect().toJSON()")
             click('wikiAssessment')
             check('native dropdown opens without a second menu or layout shift',"document.activeElement===$('wikiAssessment')&&!$('wikiClassLegend')&&$('wikiAssessment').size<=1&&JSON.stringify(document.querySelector('.wiki-toolbar').getBoundingClientRect().toJSON())===JSON.stringify(toolbarBefore)&&JSON.stringify($('wikiCanvas').getBoundingClientRect().toJSON())===JSON.stringify(canvasBefore)")
             call('Input.dispatchKeyEvent',{'type':'keyDown','key':'Escape','code':'Escape','windowsVirtualKeyCode':27})
@@ -223,18 +227,21 @@ def main():
             slow_action('wikiExport','/markdown?',True)
             check('failed export is retryable and has explicit error',"!$('wikiExport').disabled&&$('wikiExport').getAttribute('aria-busy')==='false'&&$('wikiStatus').textContent==='Controlled slow failure'")
             js("fixtureWiki.config.enabled=true;await AtlasWiki.refresh()")
-            slow_action('wikiPause','/configure')
+            slow_action('wikiPause','/stop')
             check('pause settles with visible completion',"!$('wikiPause').disabled&&$('wikiStatus').textContent.includes('已停止')")
-            js("fixtureWiki.jobs=[{id:'active',status:'running',done:0,payload:{revisions:['a'],model:'fixture',stage:'compiling'}}];await AtlasWiki.refresh()")
-            slow_action('wikiStop','/cancel',True)
+            js("fixtureWiki.jobs=[{id:'active',status:'running',created_at:new Date(Date.now()-60000).toISOString(),done:1,payload:{revisions:['a','b'],model:'fixture',stage:'compiling'}}];await AtlasWiki.refresh()")
+            check('progress counts the fixed job target and reports an ETA',"$('wikiLive').textContent.includes('50.00%')&&$('wikiLive').textContent.includes('約剩')")
+            check('running maintenance fixes date inputs and sliders',"['wikiRange','wikiStartDate','wikiEndDate','wikiRangeStart','wikiRangeEnd'].every(id=>$(id).disabled)&&!$('wikiPause').hidden")
+            slow_action('wikiStop','/stop',True)
             check('failed stop remains retryable with existing graph',"!$('wikiStop').disabled&&$('wikiStatus').textContent==='Controlled slow failure'&&fixtureWikiRenderer.graphData().nodes.length>0")
             js("window.staleRelease=null;window.captureStale=true;const priorPollFetch=fetch;window.fetch=async(u,o)=>{const r=await priorPollFetch(u,o);if(captureStale&&String(u).includes('/jobs?')){captureStale=false;await new Promise(resolve=>staleRelease=resolve);}return r}")
             for _ in range(100):
                 if js('staleRelease!==null'):break
                 time.sleep(.05)
             check('a pre-cancel status response is held in flight',"staleRelease!==null")
-            slow_action('wikiStop','/cancel')
+            slow_action('wikiStop','/stop')
             js('staleRelease()');time.sleep(.25)
+            check('date range unlocks after confirmed stop',"!$('wikiRange').disabled&&$('wikiPause').hidden")
             check('stop retains graph and reports completion',"!$('wikiStop')&&fixtureWikiRenderer.graphData().nodes.length>0&&$('wikiStatus').textContent.includes('已停止')")
             click('relationOpen')
             js("$('wikiStrategy').value='chronological';$('wikiStrategy').dispatchEvent(new Event('input'))")

@@ -161,6 +161,36 @@ class WikiTests(unittest.TestCase):
             store.cancel(job['id']);return {'proposal':proposal(a)}
         self.service.runner=late;g=self.start()
         self.assertEqual(g['version'],0);self.assertEqual(g['jobs'][0]['status'],'cancelled')
+    def test_stop_maintenance_is_scoped_idempotent_and_rejects_late_publication(self):
+        self.start()
+        version=self.store.graph()['version']
+        ident=self.store.instrument
+        aborted=[]
+        self.service.bridge_request=lambda path,body,timeout:aborted.append(body['job_id'])
+        def late(store,job,article,context):
+            with store.connection() as db:
+                for key,operation in [('classifier','classify_l1'),('lens','research')]:
+                    db.execute('INSERT INTO research_jobs VALUES (?,?,?,?,?,?,NULL)',
+                               (key,'local','queued',now(),now(),encode({'operation':operation})))
+            result=self.service.stop_maintenance({'instrument':ident})
+            self.assertCountEqual(result['cancelled_jobs'],[job['id'],'classifier'])
+            self.assertCountEqual(aborted,result['cancelled_jobs'])
+            return {'proposal':proposal(article)}
+        self.service.runner=late
+        plan=self.plan([row(suffix='next')])
+        self.service.start({'plan_id':plan['plan_id'],'continuous':True})
+        self.service.process(self.store)
+        self.assertEqual(self.store.graph()['version'],version)
+        self.assertEqual(self.store.jobs()[0]['status'],'cancelled')
+        self.assertFalse(self.store.config()['catch_up'])
+        self.assertFalse(self.store.config()['enabled'])
+        with self.store.connection() as db:
+            self.assertEqual(db.execute("SELECT status FROM research_jobs WHERE id='lens'").fetchone()[0],'queued')
+        self.store.configure({**self.store.config(),'enabled':True})
+        self.assertEqual(self.service.stop_maintenance({'instrument':ident})['cancelled_jobs'],[])
+        self.assertFalse(self.store.config()['enabled'])
+        self.assertEqual(self.service.stop_maintenance({'instrument':ident})['cancelled_jobs'],[])
+
     def test_legacy_limits_do_not_stop_processing(self):
         p=self.service.plan({'instrument':'NASDAQ:TSLA','model':'fixture','batch_size':5,'daily_limit':1,'articles':[row(suffix=str(i)) for i in range(3)]})
         self.service.start({'plan_id':p['plan_id'],'continuous':True});self.service.tick();self.service.tick()

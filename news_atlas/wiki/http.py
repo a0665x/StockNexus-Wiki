@@ -36,7 +36,12 @@ def handle(handler):
             if not (service.root/folder_name(ident)/'wiki.sqlite3').exists(): raise ValueError('此股票尚未建立Wiki')
             store=service.store(ident)
             version=params.get('version',[None])[0]
-            if path=='graph': data={**store.graph(version,params.get('as_of',[None])[0],start=params.get('start',[None])[0],end=params.get('end',[None])[0]),'coverage':service.coverage(store)}
+            if path=='graph' and params.get('sync')==['1']:
+                data=service.graph_views.read(store,params)
+            elif path=='jobs' and params.get('view')==['compact']:
+                from .view_sync import view_state
+                data=view_state(service,store,params.get('config_token',[None])[0])
+            elif path=='graph': data={**store.graph(version,params.get('as_of',[None])[0],start=params.get('start',[None])[0],end=params.get('end',[None])[0]),'coverage':service.coverage(store)}
             elif path=='jobs':
                 with store.connection() as db: latest=db.execute('SELECT COALESCE(max(version),0) FROM versions').fetchone()[0]
                 with store.connection() as db:
@@ -65,9 +70,12 @@ def handle(handler):
         if handler.headers.get('Content-Type','').split(';')[0]!='application/json' or not 0<length<=32*1024*1024: raise ValueError('無效Wiki請求大小')
         body=json.loads(handler.rfile.read(length))
         if not isinstance(body,dict): raise ValueError('需要JSON object')
-        action={'plan':service.plan,'apply':service.apply,'jobs':service.start,'configure':service.configure,'cancel':service.cancel,'resume':service.resume}.get(path)
+        action={'plan':service.plan,'apply':service.apply,'jobs':service.start,'configure':service.configure,'cancel':service.cancel,'stop':service.stop_maintenance,'resume':service.resume}.get(path)
         if not action: handler.json_response(404,{'error':'Unknown Wiki endpoint'});return
         handler.json_response(202 if path=='jobs' else 200,action(body))
+    except (BrokenPipeError, ConnectionResetError):
+        # The client left while a completed response was being written.
+        return
     except (ValueError,TypeError,KeyError) as error: handler.json_response(400,{'error':str(error)})
     except Exception:
         logging.getLogger(__name__).exception('Wiki API request failed path=%s',path)

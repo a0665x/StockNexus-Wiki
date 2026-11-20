@@ -83,6 +83,7 @@ def main():
      time.sleep(.2)
      assert js("$('wikiLive').getBoundingClientRect().height")>before_height+35
      assert js("AtlasWiki.graph()===sharedWikiGraph&&sharedWikiGraph.graphData().nodes[0]===originalWikiNodes[0]")
+     click('wikiTimelineFold')
      # Delay the real runs route; assert visible state even while research sidebar is closed.
      js("window.layerFetch=fetch;window.holdRuns=true;window.failRuns=false;window.releaseRuns=null;window.fetch=async(u,o)=>{if(String(u).includes('/research/runs?')){if(holdRuns)await new Promise(r=>releaseRuns=r);if(failRuns)return new Response(JSON.stringify({error:'Controlled runs outage'}),{status:503});}return layerFetch(u,o)}")
      choose('wikiLayer',1)
@@ -98,6 +99,7 @@ def main():
      wait("$('wikiResearchStatus').textContent.includes('尚未建立')")
      choose('wikiLayer',0)
      js('holdRuns=true;releaseRuns=null');choose('wikiLayer',1);wait('releaseRuns!==null')
+     js('holdRuns=false')  # Keep the old layer response pending; allow the new catalog read.
      click('researchOpen');wait("!$('researchStatus').classList.contains('research-working')")
      assert js("$('wikiResearchStatus').hidden"), 'entering research must clear superseded layer loading state'
      js('holdRuns=false;releaseRuns()');choose('wikiLayer',0);click('researchBack')
@@ -155,11 +157,12 @@ def main():
      click('researchOpen');wait("!$('researchSubmit').disabled")
      print('PASS graph progress and completed-result read recovery without new model jobs',flush=True)
      assert js("$('researchResult').textContent.includes('價格動能')&&$('researchResult').textContent.includes('來源陳述')")
+     assert js("$('researchResult').getBoundingClientRect().height>80&&!$('wikiTimelineLauncher').getClientRects().length"), 'L2 report stays readable with the L1 chart minimized'
      js("[...$('researchResult').querySelectorAll('summary')].find(n=>n.textContent==='查看依據與條件').click()")
      assert js("!!$('researchResult').querySelector('blockquote')&&!!$('researchResult').querySelector('a[href^=\"https://\"]')")
      js("[...$('researchResult').querySelectorAll('button')].find(n=>n.textContent==='持續追蹤').id='fixtureSave'")
      measure('fixtureSave')
-     wait("$('researchSaved').textContent.includes('動能')")
+     wait("[...$('researchSaved').querySelectorAll('button')].some(n=>n.textContent==='更新')")
      js("[...$('researchSaved').querySelectorAll('button')].find(n=>n.textContent==='更新').id='fixtureRefresh'")
      measure('fixtureRefresh')
      wait("$('researchStatus').textContent.includes('證據未變')")
@@ -170,6 +173,8 @@ def main():
      assert js("fetch('/api/wiki/research/lenses?instrument=NASDAQ:TSLA&owner=other').then(r=>r.status)")==400
      wait("AtlasWiki.graph().graphData().nodes.some(n=>n.layer==='L2')")
      assert js("AtlasWiki.graph()===sharedWikiGraph")
+     assert js("document.querySelector('.wiki-research-question').textContent.includes('動能')")
+     assert js("!!document.querySelector('#researchFacets [data-facet=momentum]')")
      js("window.l2Node=sharedWikiGraph.graphData().nodes.find(n=>n.layer==='L2');AtlasWiki.selectNode(l2Node.id)")
      assert js("AtlasWiki.runtime.state().selected_node.layer==='L2'&&AtlasWiki.runtime.data().edges.some(e=>e.relation_type==='DERIVED_FROM')")
      assert js("sharedWikiGraph.nodeLabel()({title:'<img src=x onerror=alert(1)>',layer:'L2'}).includes('&lt;img')")
@@ -178,6 +183,7 @@ def main():
      js("$('wikiLayer').value='both';$('wikiLayer').dispatchEvent(new Event('change'))")
      assert js("sharedWikiGraph.graphData().nodes.some(n=>n.layer==='L1')&&sharedWikiGraph.graphData().nodes.some(n=>n.layer==='L2')")
      js("$('wikiLayer').value='L1';$('wikiLayer').dispatchEvent(new Event('change'))")
+     assert js("$('wikiTimelineLauncher').getBoundingClientRect().width>0"), 'returning to L1 restores its minimized timeline control'
      assert js("AtlasWiki.runtime.state().selected_node===null&&AtlasWiki.runtime.state().scope_ids.every(id=>sharedWikiGraph.graphData().nodes.some(n=>n.id===id&&n.layer!=='L2'))")
      js("$('wikiVersion').value='1';$('wikiVersion').dispatchEvent(new Event('change'))")
      wait("AtlasWiki.runtime.state().research_run===null")
@@ -196,10 +202,18 @@ def main():
      js("$('researchBack').click();$('researchOpen').click()")
      wait("$('researchSubmit').disabled&&$('researchStatus').textContent.includes('等待')")
      wiki.store('NASDAQ:AMD')
-     js("$('researchBack').click();$('wikiInstrument').value='NASDAQ:AMD';$('wikiInstrument').dispatchEvent(new Event('change'));$('researchOpen').click()")
+     js("$('researchBack').click();$('wikiSaved').focus()")
+     wait("[...$('wikiSaved').options].some(o=>o.value==='NASDAQ:AMD')")
+     choose('wikiSaved',js("[...$('wikiSaved').options].findIndex(o=>o.value==='NASDAQ:AMD')"))
+     wait("$('wikiInstrument').value==='NASDAQ:AMD'")
+     js("$('researchOpen').click()")
      wait("$('researchStock').textContent==='NASDAQ:AMD'")
      assert js("!$('researchResult').textContent.includes('Tesla earnings')&&!$('researchResult').textContent.includes('來源陳述')")
-     js("$('researchBack').click();$('wikiInstrument').value='NASDAQ:TSLA';$('wikiInstrument').dispatchEvent(new Event('change'));$('researchOpen').click()")
+     js("$('researchBack').click();$('wikiSaved').focus()")
+     wait("[...$('wikiSaved').options].some(o=>o.value==='NASDAQ:TSLA')")
+     choose('wikiSaved',js("[...$('wikiSaved').options].findIndex(o=>o.value==='NASDAQ:TSLA')"))
+     wait("$('wikiInstrument').value==='NASDAQ:TSLA'")
+     js("$('researchOpen').click()")
      wait("$('researchSaved').textContent.includes('動能')&&$('researchSubmit').disabled")
      from news_atlas.wiki.research import Research
      Research(paused).process(wiki)

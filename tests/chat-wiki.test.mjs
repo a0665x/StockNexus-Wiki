@@ -15,7 +15,7 @@ test('Wiki rejects tool use and malformed output; releases busy state',async()=>
 });
 test('Wiki single flight cancellation prevents late result',async()=>{
  let release;const compiler=createWikiCompiler(()=>({run:()=>new Promise(r=>{release=r;})}));
- const pending=compiler.run(input);await assert.rejects(compiler.run({...input,job_id:'b'.repeat(32)}),/busy/);
+ const pending=compiler.run(input);await assert.rejects(compiler.run(input),/busy/);
  compiler.cancel(input.job_id);release({items:[],finalResponse:'{}'});await assert.rejects(pending,/cancelled/);
 });
 
@@ -73,4 +73,59 @@ test('research fusion shares model lock and has a distinct claim registry schema
   return {finalResponse:JSON.stringify({claims:[],summary:[],support:[],counter:[],narrative:[],gaps:[]}),items:[]};
  }}));
  await compiler.run({...input,operation:'research_fusion',reasoning_effort:'high',article:{research_bundle:{opinions:[]}}});assert.ok(seen);
+});
+
+test('medium root segment can finish after two minutes without being aborted',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ let release,signal;
+ const compiler=createWikiCompiler(()=>({run:(_,options)=>{signal=options.signal;return new Promise(r=>{release=r;});}}));
+ const pending=compiler.run({...input,reasoning_effort:'medium',article:{_evidence:Array.from({length:12},()=>({title:'Example'}))}});
+ t.mock.timers.tick(120001);
+ const aborted=signal.aborted;
+ release({items:[],finalResponse:'{"nodes":[],"relations":[]}'});
+ const outcome=await pending.then(()=>null,e=>e);
+ assert.equal(aborted,false,'a medium 12-article root segment must not inherit the short interactive timeout');
+ assert.equal(outcome,null);
+});
+
+test('Wiki deadline reports timeout distinctly and releases the model slot',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ let calls=0;
+ const compiler=createWikiCompiler(()=>({run:(_,options)=>{
+  if(calls++)return Promise.resolve({items:[],finalResponse:'{}'});
+  return new Promise((resolve,reject)=>options.signal.addEventListener('abort',()=>reject(Error('The operation was aborted')),{once:true}));
+ }}));
+ const pending=compiler.run({...input,reasoning_effort:'medium'});
+ const rejected=assert.rejects(pending,/Wiki compilation timed out after 600 seconds/);
+ t.mock.timers.tick(600000);await rejected;
+ await compiler.run(input);
+});
+
+test('comparison uses the verdict contract and the selected model',async()=>{
+ const compiler=createWikiCompiler((model,effort)=>({run:async(prompt,{outputSchema})=>{
+  assert.equal(model,'fixture');assert.equal(effort,'medium');
+  assert.match(prompt,/Compare exactly the two/);
+  assert.deepEqual(outputSchema.properties.verdict.enum,['similar','conflicting','different_scope','insufficient']);
+  return {finalResponse:JSON.stringify({verdict:'insufficient',summary:'More evidence needed',reason:'Different periods',citations:[]})};
+ }}));
+ const response=await compiler.run({...input,operation:'compare_viewpoints',reasoning_effort:'medium',article:{viewpoints:[]}});
+ assert.equal(response.proposal.verdict,'insufficient');
+});
+
+test('ten independent slots, capacity bound and parent cancellation',async()=>{
+ const releases=[];const compiler=createWikiCompiler(()=>({run:()=>new Promise(r=>releases.push(r))}));
+ const parent='f'.repeat(32),pending=Array.from({length:10},(_,i)=>compiler.run({...input,job_id:i.toString(16).repeat(32),parent_job_id:parent}));
+ await assert.rejects(compiler.run({...input,job_id:'e'.repeat(32)}),/capacity/);
+ compiler.cancel(parent);releases.forEach(r=>r({items:[],finalResponse:'{}'}));
+ const results=await Promise.allSettled(pending);assert.ok(results.every(r=>r.status==='rejected'&&/cancelled/.test(r.reason.message)));
+ assert.deepEqual((await (async()=>{const p=compiler.run(input);releases.at(-1)({items:[],finalResponse:'{}'});return p;})()).proposal,{});
+});
+
+test('backfill prompt resolves shared evidence and identifies invalid batch output',async()=>{
+ const compiler=createWikiCompiler(()=>({run:async(prompt)=>{
+  assert.match(prompt,/article\.nodes keys are revision IDs/);
+  assert.match(prompt,/zero-based indices/);
+  return {items:[],finalResponse:'[truncated'};
+ }}));
+ await assert.rejects(compiler.run({...input,operation:'classify_l1',article:{opinions:[{id:'a'}],nodes:{a:{}}}}),/Invalid Wiki classification response/);
 });

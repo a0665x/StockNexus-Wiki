@@ -1,0 +1,4 @@
+interface:
+  display_name: "StockNexus Research API"
+  short_description: "Read stock news, price moves and existing L1/L2 evidence"
+  default_prompt: "Use $stocknexus-research-api to query the server for stock evidence and explain the observed price move."

@@ -8,6 +8,7 @@ RUN groupadd --gid 1000 atlas && useradd --uid 1000 --gid atlas --no-create-home
     && mkdir /app/data && chown atlas:atlas /app/data
 COPY server.py ./
 COPY news_atlas/ ./news_atlas/
+COPY skills/stocknexus-document-import/scripts/document_records.py ./skills/stocknexus-document-import/scripts/
 COPY dist/ ./dist/
 COPY schema/ ./schema/
 USER atlas

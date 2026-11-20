@@ -21,13 +21,17 @@ class WorkspaceTests(unittest.TestCase):
         save(other,'wiki',{'controls':{'wikiModel':'fixture|low'}})
         self.assertEqual(read(other)['news'],state['news'])
     def test_wiki_pane_dimensions_persist_and_validate(self):
-        layout={'left':350,'right':410,'bottom':320}
-        save(self.store,'wiki',{'instrument':'NASDAQ:TSLA','layout':layout})
-        self.assertEqual(read(Store(self.store.path))['wiki']['layout'],layout)
-        for invalid in ({'left':True},{'bottom':float('nan')},{'right':float('inf')},{'left':100},{'right':900},{'bottom':0},{'extra':280},[]):
+        layout={'left':350,'right':410,'bottom':320,'changes':220,'live':100}
+        state={'instrument':'NASDAQ:TSLA','layout':layout,'controls':{'wikiWorkers':'3'},'research_run':'run-example'}
+        save(self.store,'wiki',state)
+        self.assertEqual(read(Store(self.store.path))['wiki'],state)
+        for invalid in ({'left':True},{'bottom':float('nan')},{'right':float('inf')},{'left':100},{'right':900},{'bottom':0},{'changes':400},{'extra':280},[]):
             with self.subTest(layout=invalid),self.assertRaises(ValueError):
                 save(self.store,'wiki',{'layout':invalid})
         self.assertEqual(read(self.store)['wiki']['layout'],layout)
+        for invalid in ({'research_run':{}},{'controls':{'wikiWorkers':'20'}}):
+            with self.subTest(value=invalid),self.assertRaises(ValueError):
+                save(self.store,'wiki',invalid)
 
     def test_exchange_symbol_routes_to_existing_provider_symbol(self):
         req=normalize_request({'instrument':'NASDAQ:GOOGL','ticker':'GOOGL','sources':['google'],'query':''})

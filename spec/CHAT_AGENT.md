@@ -25,8 +25,17 @@ Install Node.js 20+ and run `npm ci`. Authenticate with the host Codex account f
 `./run.sh chat start|stop|status` controls the bridge; `./run.sh up` starts it when
 installed and `down` stops it. Without dependencies, news still works and the
 launcher reports the missing chat prerequisite. `data/private/chat.log` contains
-service diagnostics. Chat is currently for `http://127.0.0.1:8765` or localhost;
-LAN/Tailscale chat needs an explicit authentication design before being enabled.
+service diagnostics. Chat defaults to `http://127.0.0.1:8765` or localhost.
+Optional Tailscale Serve access requires both `NEWS_ATLAS_CHAT_ORIGINS` (exact HTTPS
+origins) and `NEWS_ATLAS_CHAT_TAILSCALE_USERS` (explicit login identities). Requests
+must arrive through the trusted local proxy, match Host and Origin, and carry the
+Serve-supplied `Tailscale-User-Login`; cross-site and arbitrary remote peers remain
+rejected. Keep the backend loopback-bound and the Serve endpoint private, without
+Funnel. See [Tailscale Serve identity headers](https://tailscale.com/docs/features/tailscale-serve).
+This uses existing browser session capabilities; MCP routes remain inaccessible.
+
+A failed submitted message displays its error beside the question, restores the
+prompt for retry, and clears busy state. No silent retry of model turns.
 
 The bridge has an isolated configuration/work directory under
 `~/.local/state/stocknexus-wiki/chat`. Its auth.json links to the existing host
@@ -35,7 +44,7 @@ Shell tools and web search
 are disabled; the SDK runs read-only with no interactive approvals. Prompts and
 news sent to the signed-in model are not local inference. SDK conversation records
 may persist in that isolated home; New chat starts a fresh thread, not deletion of
-old stored records. Browser chat messages are in memory and reset on refresh.
+old stored records. Application chat history now persists across refresh/restart for the same browser owner; see the November 20 update below. Older in-memory conversations cannot be reconstructed.
 
 ## UI contract
 
@@ -129,3 +138,31 @@ acknowledgement must not overwrite a completed/stopped stream status.
 
 Regression: [browser_chat_language.py](../tests/browser_chat_language.py);
 causes and test boundaries: [language runtime incident](references/lesson-20261106-language-runtime.md).
+
+## 2026-11-10 研究讀取與格式
+
+工具現在包含 get_state/read_news/read_edges/read_wiki/**read_research**/act（早期四／五工具描述已被此清單取代）。read_research 透過瀏覽器唯讀 ack 取得 DB 保存快照，獨立於 GPU 範圍；使用者選取或股票改變時拒絕晚回應。日期、來源去重、舊快照及模型驗證限制見 [BDD](CHAT_RESEARCH_BDD.md)。Chat Markdown 以安全 DOM 支援表格／粗體／標題／清單／程式碼／HTTP(S) 連結，表格在聊天欄內橫向捲動，來源 HTML 不執行。
+
+
+## 2026-11-14 validation / deployment boundary
+
+7 Python proxy-origin/identity tests and 13 Node Chat tests passed. Chromium
+`browser_chat_failure.py` verified the actual rejected-session flow: adjacent
+error, retained prompt and cleared busy state. Tailscale 8765 Serve configuration
+was inspected and is private (no Funnel on that endpoint). Production HTTPS
+session/turn verification is pending deployment. Automatic review rejected the
+proposed deployment because it would cancel active annual L1 jobs; neither job
+cancellation nor .env changes nor service restart were executed. Request explicit
+approval for that interruption or deploy after those jobs finish; do not bypass.
+
+
+## 2026-11-14：使用者批准後已部署
+
+使用者明確同意暫停 L1 後重啟。0b069a5 已部署，私有 .env 設定指定 HTTPS origin 與 Tailscale 登入身分；沒有把帳號設定提交 Git。正式 Chromium 透過 https://ubuntu.tail9e662c.ts.net:8765 開啟 Chat Agent，session 與情境同步成功，顯示「已連線 · 使用本機登入」。此驗證未送出付費模型問題，使用者自行測試回覆。原年度 L1 以部署前保存的工作／範圍紀錄接續 medium，保留發布成果。上一節自動審核拒絕是歷史狀態，已由這次使用者明確授權解除。
+
+### Database context tool
+`read_database` exposes catalog/news/related/prices/l1/l2 through `/api/context/*` using the authenticated session command/ack path. Unlike read_news/read_wiki it does not depend on loaded graph data. Only GET resources are allowed. Server validates stock/owner/time; the bridge rejects a response if the browser stock changed. Read-only existing research is allowed while L1 owns the model slot. See [API](API.md) and the [skill](../skills/stocknexus-research-api/SKILL.md).
+
+## November 20: persistent conversation history
+
+The history list supports reopen/continue, new chat without erasing old records, and confirmed deletion of app history. The bridge stores private owner-scoped records and resumes only server-owned SDK thread IDs. `/history` and `/conversation` are authenticated POST routes behind the existing proxy boundary. Browser capabilities stay out of workspace sync and exports. News and Wiki have separate lists. See [ownership, limits and deletion scope](references/unslop-20261120.md).

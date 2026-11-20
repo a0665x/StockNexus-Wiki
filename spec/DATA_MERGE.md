@@ -3,11 +3,11 @@
 入口：專案根目錄 `merge_data.sh`（Python 標準函式庫，無須 npm、網路或模型）。來源接受 **data、graph、llm_wiki 或單一股票目錄**；目標可為 data、graph／llm_wiki 分類目錄或對應單股目錄。資料夾層級以標準檔案／目錄名稱辨識。使用可讀取相同 DB 格式的專案版本。
 
 ```bash
-# 預覽：不修改目標資料內容，也不建立備份。
-./merge_data.sh --from /media/usb/data --to ./data --dry-run
+# 步驟 1　加上 --dry-run，只預覽，不寫入目標資料庫。
+./merge_data.sh --from ../incoming/data --to ./data --dry-run
 
-# 正式合併：網頁可保持開啟；先暫停目標股票的 Wiki 工作／持續維護。
-./merge_data.sh --from /media/usb/data --to ./data
+# 步驟 2　確認預覽後，保留相同來源及目標，移除 --dry-run 再執行，才會正式合併。
+./merge_data.sh --from ../incoming/data --to ./data
 ```
 
 Docker／Python 服務與網頁可保持開啟，不需為合併重啟。先在頁面停止欲合併股票的 Wiki 工作／持續維護；工具在鎖內檢查 active jobs 與 enabled/catch_up，忙碌時拒絕，避免兩套寫入交錯。正在搜尋若持有 DB 寫入鎖，可等它完成後重試。腳本不幫使用者關服務或偷偷啟動模型。來源可用 SQLite backup 取得一致副本；不要直接搬正在寫入的主檔而漏掉 WAL。來源若仍在線，工具以 SQLite backup 讀取各資料庫的一致快照；各 DB 之間不是同一瞬間的全域快照。
@@ -29,7 +29,7 @@ Docker／Python 服務與網頁可保持開啟，不需為合併重啟。先在�
 5. 保留目標 Wiki 設定；新股票帶入來源設定但關閉 enabled/catch_up。來源 queued/running 工作改為 interrupted，不會匯入後偷偷啟動。review evidence_epoch 不能跨電腦當成已複查證明，新匯入項目設為 0。
 6. 匯入來源呼叫帳本後，daily_calls 可能包含別台的呼叫；此計數不是目前電腦或帳號週用量。
 
-因此這是「資料取聯集、重複去除、衝突另存」，不是把所有矛盾內容強行變成一份真相。現有 UI 沒有衝突解決頁；可透過報告／SQLite 排查 `merge_conflicts`。
+因此這是「資料取聯集、重複去除、衝突另存」，不是把所有矛盾內容強行變成一份真相。同鍵資料碰撞可由報告／SQLite 排查 `merge_conflicts`。不同修訂對同一命題提出相反結論時，兩份觀點均可保留，語意比對見下節。
 
 ## 寫入、備份與復原
 
@@ -54,14 +54,14 @@ Docker／Python 服務與網頁可保持開啟，不需為合併重啟。先在�
 
 ```bash
 # 只合併 GOOGL 到本地 data（其他股票不動）
-./merge_data.sh --from /media/usb/data/llm_wiki/GOOGL --to ./data --dry-run
-./merge_data.sh --from /media/usb/data/llm_wiki/GOOGL --to ./data
+./merge_data.sh --from ../incoming/data/llm_wiki/GOOGL --to ./data --dry-run
+./merge_data.sh --from ../incoming/data/llm_wiki/GOOGL --to ./data
 
 # 合併所有 Wiki，不碰新聞主 DB
-./merge_data.sh --from /media/usb/data/llm_wiki --to ./data/llm_wiki
+./merge_data.sh --from ../incoming/data/llm_wiki --to ./data/llm_wiki
 
 # 單股直接對單股
-./merge_data.sh --from /media/usb/data/llm_wiki/GOOGL --to ./data/llm_wiki/GOOGL
+./merge_data.sh --from ../incoming/data/llm_wiki/GOOGL --to ./data/llm_wiki/GOOGL
 ```
 
 整個 data 來源仍合併新聞主 DB 與全部 Wiki。單股目錄包含該 Wiki 引用的新聞版本，可獨立閱讀；它不含原新聞主圖的完整搜尋 memberships。不同交易所同 ticker 會拒絕合併，避免混淆。
@@ -69,10 +69,12 @@ Docker／Python 服務與網頁可保持開啟，不需為合併重啟。先在�
 ## Graph 層級辨識
 
 ```bash
-./merge_data.sh --from /media/usb/data/graph/GOOGL --to ./data --dry-run
-./merge_data.sh --from /media/usb/data/graph/GOOGL --to ./data/graph
-./merge_data.sh --from /media/usb/data/graph --to ./data/graph
-./merge_data.sh --from /media/usb/data --to ./data
+./merge_data.sh --from ../incoming/data/graph/GOOGL --to ./data --dry-run
+./merge_data.sh --from ../incoming/data/graph/GOOGL --to ./data
+
+# 其他範圍的預覽範例
+./merge_data.sh --from ../incoming/data/graph --to ./data/graph --dry-run
+./merge_data.sh --from ../incoming/data --to ./data --dry-run
 ```
 
 來源以 DB 檔名、股票 metadata 及標準目錄推導；目標以現有內容和 graph／llm_wiki／ticker 名稱辨識。不存在且無標準名稱的目標預設為 data 根。graph 不能送入 llm_wiki，多股不能送進單股，股票名稱不符會拒絕。無法判定的非標準混合布局會拒絕。
@@ -81,7 +83,7 @@ Docker／Python 服務與網頁可保持開啟，不需為合併重啟。先在�
 
 ## 開著頁面合併後會看到什麼
 
-`./run.sh up` 成功後會印出上述預覽／正式合併範例，使用實際啟動資料路徑及可含空格的 shell 引號。將 `/media/usb/data` 換成自己的 USB 路徑；已選其他磁碟時以印出的 `--to` 為準。
+`./run.sh up` 成功後會印出上述預覽／正式合併範例，使用實際啟動資料路徑及可含空格的 shell 引號。將 `../incoming/data` 換成收到的資料夾路徑（相對或絕對）；已選其他磁碟時以印出的 `--to` 為準。
 
 Wiki 開啟時約每 6 秒重讀股票目錄，視窗／選單取得焦點也會更新。新股票加入下拉選單，已選股票的最新版本會刷新；固定歷史版本仍維持原選擇。模型、日期、選取與 News runtime 不因目錄更新被重設。新匯入股票不會自動搶走目前畫面。
 
@@ -96,3 +98,12 @@ Wiki 開啟時約每 6 秒重讀股票目錄，視窗／選單取得焦點也會
 研究 snapshot 自含證據，私人 L2 封存於 imported owner，不能自動冒充本機 local owner。目標 taxonomy 沿用；完全相同定義的模型 classification 可映射重用，不相容者保留原版，待使用者明確補足；來源撤回事件在本機匯入時才開始可見。完整邊界與回退見 [RESEARCH_LAYERS](RESEARCH_LAYERS.md)。
 
 模型分類補充：匯入的 taxonomy／assignment 原版封存；只有整份 term 定義與 alias 相同，才將模型 assignment 映射至本機 taxonomy revision 並記錄來源 revision，首次可見仍以本機匯入時間為準。重複合併不重複 assignment，不相容定義不覆蓋本機政策。
+
+
+## 合併後的觀點比對
+
+在「LLM Wiki → 觀點比對」依文字搜尋，選取兩筆已保存的 L1 修訂或 L2 claim，再按「使用模型比對並另存摘要」。由此版首次匯入的 L1 會標出 imported；較早未記錄來源的修訂只顯示版本。每筆 L2 顯示 local 或 imported，帶原 run、研究問題、時間窗、精確 L1 前提及引用。雙方可都是 L1、都是 L2，或各一筆。資料夾名稱或 imported 標記不能識別作者身分。
+
+模型依命題、時間、適用條件與證據提供「可合併摘要」「同命題有分歧」「適用範圍不同」或「證據不足」。相近時以一份摘要閱讀，矛盾時並列兩方理由。提出相近或矛盾的判讀，須引用雙方快照內的證據 ID。結果可在比對紀錄重開。兩份原始資料與既有 graph、L2 lens 保留，匯入與搜尋候選均不會啟動模型。比對目前由使用者指定兩筆，沒有背景全圖相似度掃描。
+
+針對相同輸入、模型與推理深度，重複提交會重用工作或已保存結果。模型失敗或引用不存在時，工作可重試。SQLite 主鍵碰撞保留在 merge_conflicts，未通過資料層驗證的內容不會交由模型裁決。

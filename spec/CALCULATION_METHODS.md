@@ -1,6 +1,6 @@
 # 計算方法、範圍與目的
 
-2026-11-06 原始碼查核。此頁是方法索引；實作／邊界以所鏈接模組與測試為準。顯示切片、運算全集與持久資料不可混為同一集合。
+2026-11-06 全頁原始碼查核；2026-11-09 對 8285c09 更新 root 分段及分類統計口徑。此頁是方法索引；實作／邊界以所鏈接模組與測試為準。顯示切片、運算全集與持久資料不可混為同一集合。
 
 ## 新聞與關聯
 
@@ -15,7 +15,7 @@
 - 單 root 展開先過濾邊，再以 BFS、強邊優先，路徑權重為沿途權重乘積；受深度、每分支數、路徑最低權重與每樹上限約束。這不是最強路徑搜尋。多 root 的其他根是屏障，共同非根可同屬多樹。見 [SCHEMA_AND_RULES](references/SCHEMA_AND_RULES.md)、[exploration.py](../news_atlas/exploration.py)。
 - Wiki Graph 以已確認 News 圖的完整 provider/id 範圍和當下規則重建相同圖；不取 GPU 切片，也不要求先點 root。從 Wiki 日期內目標按連線權重總和／ID 選 root；若該根目標已由前樹覆蓋則跳過，否則取整棵樹並扣除新覆蓋目標，直到未覆蓋集合為空。孤立新聞也有單點樹。見 [forest.py](../news_atlas/wiki/forest.py)。
 - 例如 12 個月 News＋1 個月 Wiki：在 12 個月圖上取樹，只有該 1 個月新聞是完成分母；日期外及已完成成員仍可作脈絡。相似樹不重複記分，跨 provider revision 仍按實際引用身份處理。
-- 覆蓋率＝已確認範圍內完成的唯一 revision／該範圍目標 revision；所選日期另有相應計數。每棵樹太大時依輸入字元預算分段，只有所有段成功發布才把本樹目標算完成；不是發出請求就算完成。固定方法批次為 5／10／15／20 篇，Graph 篇數由樹決定。見 [evidence.py](../news_atlas/wiki/evidence.py)、[compiler.py](../news_atlas/wiki/compiler.py)。
+- 覆蓋率＝已確認範圍內完成的唯一 revision／該範圍目標 revision；所選日期另有相應計數。每棵樹依每段最多 12 篇（含共用 anchor）及約 65000 JSON 字元雙界限分段，只有所有段成功發布才把本樹目標算完成；不是發出請求就算完成。固定方法批次為 5／10／15／20 篇，Graph 篇數由樹決定。見 [evidence.py](../news_atlas/wiki/evidence.py)、[compiler.py](../news_atlas/wiki/compiler.py)。
 
 ## 時間與股價大小
 
@@ -28,7 +28,8 @@
 ## Wiki 知識與統計
 
 - 模型提案只可在引用／節點型別／關係範圍驗證後發布。跨新聞 RELATED_TO 要有兩端原文引文與理由；有界檢索不等於全圖重算。版本原子發布，最後十個檢查點可選，原證據及引用保留。
-- 時間圖按 Thesis 最新引用新聞日期計一次，依四類堆疊、最多 60 桶；遵守側欄日期，與 GPU 節點上限分開。歷史修訂有明示，不把 Claim/Event 全算成觀點，也不把色彩當可信度。
+- 分類選單、時間圖及清單共用目前載入圖的 `opinion_index`／taxonomy，以觀點群根計數。Thesis 沿 DEPENDS_ON、反向 SUPPORTS／CONTRADICTS 收集相依成員（每個 Thesis 群最多 200 節點）；未被涵蓋的非 ArticleRevision 節點也建立群，並非只統計 Thesis。見 [classifier.py](../news_atlas/wiki/classifier.py)。
+- 每群取側欄日期範圍內最新引用新聞日，按分類標籤各計一次，最多 60 桶；多標籤總和可大於唯一觀點群數。未分類與尚待分類分開顯示，沒有日期者不畫日期柱。統計與 GPU 可見節點數分開，但受 API 載入圖範圍影響，不能聲稱無條件完整全庫。舊 direct/indirect/low/uncertain assessment 保留於詳情，不再作分類主索引；色彩不代表可信度。
 - 詳情的 current_market 按目前天數及最新本機價格快取重算；生成時 market_evidence 固定保存，兩者不可互相覆寫。token 統計用實際回報與逐批日期歸屬，缺舊帳本時明示不納入。
 - 視覺選取在既有 Wiki 關係三跳內、最多 150 節點高亮；其餘已渲染資料變暗，不造線、不重新排位置。這個閱讀集合不是 Graph 模式的模型工作全集。見 [WIKI_RUNTIME](WIKI_RUNTIME.md)。
 

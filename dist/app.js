@@ -13,6 +13,7 @@ let renderBudget=800,renderedCount=0,renderedEdges=0,articleListPage=0;
 const focusTraceCache=AtlasView.createTraceCache(),previewTraceCache=AtlasView.createTraceCache();
 let graphFailure=null,webglCreationReason='',graphRetryBusy=false;
 let relationActivity={busy:false},searchPhase='',searchStarted=0,operationNotice='',pendingSearchMeta=null,searchClock=null;
+let wikiRootPreview=null;
 let highlightMode='root',graphChannel='',categoryTrace={nodes:new Map(),edges:new Set(),roots:[]};
 let basePayload = {articles:[],relations:[]}, currentView = {articles:[],relations:[]}, sourceStates = {}, saving = false, restoredPositions = new Map();
 const providers = ['google','yahoo','massive'];
@@ -85,7 +86,7 @@ $('graph').addEventListener('webglcontextlost',event=>{event.preventDefault();re
 $('graph').addEventListener('webglcontextrestored',()=>{if(graphFailure?.kind==='context-lost'){graphFailure=null;updateGraphMessage();}},true);
 function initializeGraph(){
 try {
-  graph = ForceGraph3D()($('graph')).backgroundColor('#090f1b').nodeId('id')
+  graph = ForceGraph3D()($('graph')).backgroundColor('#141617').nodeId('id')
     .nodeColor(nodeColor).nodeVal(3).nodeResolution(6).nodeOpacity(.95)
     .linkColor(linkColor).linkWidth(.6).linkOpacity(1)
     .onNodeHover(n => {if(interaction&&interaction.supported!==false)return;setHovered(n);})
@@ -138,7 +139,7 @@ function syncHighlightUI(){
   $('highlightStatus').textContent=AtlasI18n.t(category?(viewMode!=='network'?'分類亮光僅套用 3D；root 選取保留。':!graphChannel?'選擇分類；點擊新聞只查看詳情。':categoryTrace.nodes.size?'分類模式：點擊只查看新聞，不改 root。':'此分類在目前來源沒有新聞。'):'點擊新聞或搜尋 roots');
   if(category&&viewMode==='network'&&graphChannel)$('highlightStatus').textContent+=' '+categoryTrace.nodes.size;
 }
-function setHighlightMode(mode){highlightMode=mode;hovered=null;interaction?.clear();idleFocus?.stop();refreshCategory();syncHighlightUI();renderNetwork();refreshFocus();if(mode==='root')touchFocus();}
+function setHighlightMode(mode){wikiRootPreview=null;highlightMode=mode;hovered=null;interaction?.clear();idleFocus?.stop();refreshCategory();syncHighlightUI();renderNetwork();refreshFocus();if(mode==='root')touchFocus();}
 function clearGraphSelection(){if(highlightMode==='category'&&viewMode==='network'){graphChannel='';$('graphChannel').value='';refreshCategory();syncHighlightUI();refreshFocus();}else clearFocus();}
 $('highlightModeSwitch').onchange=()=>setHighlightMode($('highlightModeSwitch').checked?'category':'root');
 $('graphChannel').onchange=()=>{graphChannel=$('graphChannel').value;refreshCategory();syncHighlightUI();renderNetwork();refreshFocus();};
@@ -148,10 +149,10 @@ function linkColor(l){if(!graphHasHighlight())return l.scope==='cross'?'rgba(244
 function edgeStyle(l){if(!graphHasHighlight())return {color:l.scope==='cross'?'#f4cd84':'#82c8d2',opacity:l.scope==='cross'?.45:.4};return graphTrace().edges.has(AtlasView.identity(l))?{color:'#8cffdc',opacity:Math.max(.05,edgeLight(l))}:{color:'#789bb4',opacity:glowConfig.background*.25};}
 function acquireRoot(n){if(!n||lockedRoots.length||highlightMode==='category'&&viewMode==='network')return;lockedRoots=[n.id];pinnedRoot=n.id;keywordLocked=false;rootSearchState=null;$('rootResults').replaceChildren();refreshFocus();}
 function setHovered(n){const id=n?.id||null;if(hovered!==id){hovered=id;refreshFocus();}touchFocus();showPreview(n);}
-function clearFocus(){rootSearchTicket++;idleFocus?.stop();interaction?.clear();lockedRoots=[];keywordLocked=false;rootSearchState=null;pinnedRoot=null;hovered=null;$('rootResults').replaceChildren();refreshFocus();showPreview(null);if(viewMode==='timeline')renderTimeline();}
+function clearFocus(){const hadWikiPreview=!!wikiRootPreview;wikiRootPreview=null;rootSearchTicket++;idleFocus?.stop();interaction?.clear();lockedRoots=[];keywordLocked=false;rootSearchState=null;pinnedRoot=null;hovered=null;$('rootResults').replaceChildren();refreshFocus();showPreview(null);if(hadWikiPreview&&viewMode==='network')renderNetwork();if(viewMode==='timeline')renderTimeline();}
 function touchFocus(){if(highlightMode!=='category'&&focusRoot()!==null&&!keywordLocked&&!rootSearchBusy)idleFocus?.touch();}
-function refreshFocus(){pinnedRoot=focusRoot();activeTrace=focusTraceCache(focusView.relations,lockedRoots,exploration);candidateTrace=previewTraceCache(relations,!pinnedRoot&&hovered?[hovered]:[],exploration);showTrace(pinnedRoot,activeTrace);if(highlightMode==='category'&&viewMode==='network')$('traceStatus').textContent='';else if(!pinnedRoot&&hovered)$('traceStatus').textContent=AtlasI18n.t('候選 tree 預覽 · 點一下確認 root')+' · '+candidateTrace.nodes.size;glowLayer?.refresh();}
-function showTrace(id,trace){$('traceStatus').textContent=id?`延伸 ${trace.nodes.size-(trace.roots?.length||1)} 個節點 · 最多 ${exploration.depth} 層 · 每節點 ${exploration.branchLimit} 分支`+(trace.truncated?' · 已達顯示上限':''):'';}
+function refreshFocus(){pinnedRoot=focusRoot();activeTrace=wikiRootPreview?wikiPreviewTrace():focusTraceCache(focusView.relations,lockedRoots,exploration);candidateTrace=previewTraceCache(relations,!pinnedRoot&&hovered?[hovered]:[],exploration);showTrace(pinnedRoot,activeTrace);if(highlightMode==='category'&&viewMode==='network')$('traceStatus').textContent='';else if(!pinnedRoot&&hovered)$('traceStatus').textContent=AtlasI18n.t('候選 tree 預覽 · 點一下確認 root')+' · '+candidateTrace.nodes.size;glowLayer?.refresh();}
+function showTrace(id,trace){if(wikiRootPreview){$('traceStatus').textContent=AtlasI18n.language()==='en'?`Wiki tree ${wikiRootPreview.group}/${wikiRootPreview.groups}: ${trace.nodes.size} frozen members · edges use current News settings · click background to exit`:`Wiki 第 ${wikiRootPreview.group}/${wikiRootPreview.groups} 棵樹：${trace.nodes.size} 個工作快照成員 · 連線依目前新聞設定 · 點空白處退出`;return;}$('traceStatus').textContent=id?`延伸 ${trace.nodes.size-(trace.roots?.length||1)} 個節點 · 最多 ${exploration.depth} 層 · 每節點 ${exploration.branchLimit} 分支`+(trace.truncated?' · 已達顯示上限':''):'';}
 function showPreview(n) { const box = $('preview'); box.replaceChildren(); box.hidden = !n; if (!n) return;if(!focusRoot())box.append(el('div',AtlasI18n.t('預覽中 · 點一下進入星系'),'meta')); box.append(el('div', (n.source.publisher || n.source.provider) + ' · ' + (n.display_sources || [n.source.provider]).map(p=>sourceNames[p]).join('／'), 'meta'), el('strong', n.title,'raw'), el('div', date(n.published_at), 'muted')); }
 $('graph').addEventListener('pointermove', e => { const box = $('preview'), r = $('stage').getBoundingClientRect(); if (!box.hidden) { box.style.left = Math.max(8, Math.min(r.width - box.offsetWidth - 8, e.clientX - r.left + 18)) + 'px'; box.style.top = Math.max(8, Math.min(r.height - box.offsetHeight - 8, e.clientY - r.top + 18)) + 'px'; } });
 function evidenceText(edge) {
@@ -159,6 +160,7 @@ function evidenceText(edge) {
   return (edge.evidence || []).map(e => e.entity ? `${e.entity}：${e.source.method === 'provider_ticker' ? AtlasI18n.t('來源標註') : AtlasI18n.t('文章文字')}「${e.source.evidence}」↔ ${e.target.method === 'provider_ticker' ? AtlasI18n.t('來源標註') : AtlasI18n.t('文章文字')}「${e.target.evidence}」` : `共同詞：${(e.title_terms || []).join('、')}；標題相似度 ${e.title_similarity}`).join('；');
 }
 function showArticle(n,pin=true) {
+  if(pin&&wikiRootPreview){wikiRootPreview=null;lockedRoots=[];keywordLocked=false;}
   if(pin)globalThis.AtlasRuntime?.record('article',n.id);
   selected = n.id;if(pin){priceLens?.select(n);if(AtlasTimeline.day(n.published_at)!==null){timeFocus.date=new Date(AtlasTimeline.day(n.published_at)).toISOString().slice(0,10);syncTimeFocus();AtlasUI.write('timeFocus',timeFocus);}acquireRoot(n);touchFocus();if(graph&&viewMode==='network'&&!graph.graphData().nodes.some(a=>a.id===n.id))renderNetwork();}
   const root = $('article'); root.replaceChildren(); const card = el('div', null, 'card selected-news');card.append(el('div',AtlasI18n.t('目前選取新聞'),'selected-news-label'));
@@ -188,21 +190,22 @@ function rebuild(payload,relationUpdate=false) {
   rootSearchTicket++;
   interaction?.clear();
   const previousCount = articles.length;
-  if (payload) {globalThis.scheduleNewsWorkspace?.();basePayload = payload;classificationEpoch++;if(!relationUpdate){viewRevision++;viewRequestedSettings=null;completedRelationViews.clear();if(!restoringRelations){restoredRelationSeed=null;restoredRelationViews=[];}}}
+  if (payload) {if(!relationUpdate)wikiRootPreview=null;globalThis.scheduleNewsWorkspace?.();basePayload = payload;classificationEpoch++;if(!relationUpdate){viewRevision++;viewRequestedSettings=null;completedRelationViews.clear();if(!restoringRelations){restoredRelationSeed=null;restoredRelationViews=[];}}}
   if(basePayload.channel_definitions)channelDefinitions=basePayload.channel_definitions;
   renderChannelFilter();
   currentView = AtlasView.select(basePayload, viewSources(), isSeparate());
   currentView.relations=AtlasView.filterEdges(currentView.relations,exploration);
-  focusView=currentView;refreshCategory();syncHighlightUI();
+  focusView=currentView;if(wikiRootPreview&&[...wikiRootPreview.ids].some(id=>!focusView.articles.some(a=>a.id===id)))wikiRootPreview=null;refreshCategory();syncHighlightUI();
   syncTimelineRange(currentView.articles);
   syncTimeFocus();
   if(viewMode==='timeline') currentView=AtlasTimeline.filter(currentView,channelFilter,timelineCutoff);
   articles = currentView.articles; relations = currentView.relations;lockedRoots=lockedRoots.filter(id=>focusView.articles.some(a=>a.id===id));pinnedRoot=focusRoot();if(!lockedRoots.length)keywordLocked=false;if(rootSearchState)renderRootResults();
   exportMeta.total_articles = basePayload.total_articles ?? articles.length;
+  if(payload&&!relationUpdate&&(exportMeta.ticker||exportMeta.instrument))globalThis.AtlasWiki?.preload(exportMeta);
   hovered = null;activeTrace=AtlasView.trace([],null);showTrace(null,activeTrace); showPreview(null);
   $('count').textContent = articles.length; $('edges').textContent = relations.length;
   updateGraphMessage(); $('export').disabled = !focusView.articles.length;
-  $('saveDB').disabled = !focusView.articles.length || !!controller || saving;
+  syncSnapshotButton();
   const groups = AtlasView.groups(basePayload);
   for (const p of providers) $('view-count-'+p).textContent = groups[p]?.articles.length || 0;
   const total = viewSources().reduce((n,p)=>n+(groups[p]?.total_articles ?? groups[p]?.articles.length ?? 0),0);
@@ -216,12 +219,14 @@ function rebuild(payload,relationUpdate=false) {
 function renderArticleList(page=articleListPage){
   AtlasUI.pagedRows($('list'),articles,a=>{const b=el('button');b.setAttribute('data-article-id',a.id);b.append(el('div',(a.display_sources||[]).map(p=>sourceNames[p]).join('／')+' · '+date(a.published_at),'meta'),el('div',a.title,'raw'));b.addEventListener('click',()=>showArticle(a));return b;},{page,onPage:value=>{articleListPage=value;}});
 }
+// A job-tree reading overlay may temporarily need more slots than the saved GPU budget.
+function readingRenderBudget(){return wikiRootPreview?Math.max(renderBudget,wikiRootPreview.ids.size):renderBudget;}
 function renderNetwork(){
   scheduleViewRelations();
   if (graph && viewMode==='network') {
    try {
     const priority=viewPriority();
-    const slice=AtlasView.renderSlice(currentView,renderBudget,priority);
+    const slice=AtlasView.renderSlice(currentView,readingRenderBudget(),priority);
     renderedCount=slice.articles.length;renderedEdges=slice.relations.length;
     $('viewLimit').textContent=`3D ${renderedCount}/${currentView.articles.length} · ${AtlasI18n.t('連線')} ${renderedEdges}/${currentView.relations.length}`;
     const same=(a,b)=>a.length===b.length&&a.every((item,i)=>item===b[i]);
@@ -283,7 +288,7 @@ function syncTimeFocus(){
   layoutTimeBar();
 }
 function layoutTimeBar(){
-  const panel=timePanel?.state(),floating=panel&&(globalThis.AtlasDock?.docked($('timeFocusBar'))||panel.collapsed||panel.x!==0||panel.y!==0);
+  const panel=timePanel?.state(),floating=panel&&(globalThis.AtlasDock?.docked($('timeFocusBar'))||panel.collapsed||panel.position);
   const bottom=floating?54:($('timeFocusBar').offsetHeight||104)+64;
   $('timeline').style.bottom=(bottom+30)+'px';$('traceStatus').style.bottom=bottom+'px';
 }
@@ -396,7 +401,7 @@ $('timeBellEditor').open=AtlasUI.read('timeCurveOpen',true);$('timeBellEditor').
 $('timeSizeEnabled').onchange=updateTimeFocus;$('timeFocusSlider').oninput=updateTimeFocus;syncTimeFocus();
 $('form').addEventListener('submit', async e => {
   if(e.target&&e.target!==$('form'))return;
-  e.preventDefault(); if (controller) return;dateRange.refresh();persistSearchDraft();
+  e.preventDefault(); if (controller || saving) return;dateRange.refresh();if(!$('form').reportValidity())return;persistSearchDraft();
   const sources = [...document.querySelectorAll('.sources input:checked')].map(x => x.value);
   const query = $('query').value.trim(), instrument = $('ticker').value.trim().toUpperCase(), ticker = instrument.split(':').at(-1), key = $('key').value.trim()||($('rememberKey').checked?AtlasUI.read('massiveKey',''):'');
   persistKey();
@@ -413,6 +418,7 @@ $('form').addEventListener('submit', async e => {
   $('elapsed').textContent = '正在檢查本地日期覆蓋…';
   for (const s of sources) sourceStates[s]={cached:0,new:0,total:0,phase:'等待中'};
   paintProgress();
+  let completed=false;
   const abortTimer = setTimeout(() => searchController.abort(), 600000);
   try {
     const response = await fetch('/api/search', { method: 'POST', signal: searchController.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(searchBody) });
@@ -426,15 +432,29 @@ $('form').addEventListener('submit', async e => {
     }
     if (!finished) throw new Error('搜尋連線提早中斷；已載入資料仍保留');
     if(pendingSearchMeta)acceptSearchGraph({articles:[],relations:[],relation_settings:preferred},true);
+    completed=true;
   } catch(err){if(request===currentSearch){operationNotice=AtlasI18n.t(err.name==='AbortError'?'已停止等待；已載入資料保留，伺服器可能繼續處理。':'搜尋失敗；目前圖譜保留。')+(err.name==='AbortError'?'':' '+err.message);status.append(el('p',operationNotice,'error'));}}
-  finally{clearTimeout(abortTimer);if(request===currentSearch){controller=null;pendingSearchMeta=null;clearInterval(searchClock);relationUI?.setSearchBusy(false);$('submit').disabled=false;$('cancel').hidden=true;$('saveDB').disabled=!focusView.articles.length||saving;updateGraphMessage();}}
+  finally{
+    clearTimeout(abortTimer);
+    if(request===currentSearch){
+      controller=null;
+      pendingSearchMeta=null;
+      clearInterval(searchClock);
+      relationUI?.setSearchBusy(false);
+      $('submit').disabled=false;
+      $('cancel').hidden=true;
+      syncSnapshotButton();
+      updateGraphMessage();
+      if(completed && $('autoSnapshot').checked && focusView.articles.length)await saveSnapshot();
+    }
+  }
 });
 $('cancel').onclick=()=>{
   if(!controller)return;const previous=controller;controller=null;currentSearch++;previous.abort();pendingSearchMeta=null;clearInterval(searchClock);
-  relationUI?.setSearchBusy(false);$('submit').disabled=false;$('cancel').hidden=true;$('saveDB').disabled=!focusView.articles.length||saving;
+  relationUI?.setSearchBusy(false);$('submit').disabled=false;$('cancel').hidden=true;syncSnapshotButton();
   operationNotice=AtlasI18n.t('已停止等待；已載入資料保留，伺服器可能繼續處理。');updateGraphMessage();
 };
-$('export').onclick = () => { const data = { schema_version: '2.0', search: exportMeta, articles:focusView.articles, relations:focusView.relations, view: {sources:viewSources(),separate:isSeparate(),mode:viewMode,channel_filter:channelFilter,cutoff:timelineCutoff,timeline_style:timelineStyle,exploration,glow:glowConfig,time_focus:timeFocus,price_focus:priceLens?.snapshot(),relation_settings:basePayload.relation_settings||relationUI?.applied(),focus:{mode:lockedRoots.length?(keywordLocked?'keyword':'single'):'overview',root_ids:lockedRoots,query:keywordLocked?rootSearchState?.query||'':'',limit:rootSearchState?.limit||3},channel_definitions:channelDefinitions}, relation_scope:basePayload.relation_scope||'complete',relation_scope_ids:basePayload.relation_scope_ids||null,relations_pending:basePayload.relation_scope==='view'?viewRelationState.phase!=='ready':!!basePayload.relations_pending, relation_note: '關聯來自明確代碼、文字實體、主題與標題相似規則；分數不是機率，連線不是因果。' }; const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })); const a = el('a'); a.href = url; a.download = 'news-atlas.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 10000); };
+$('export').onclick = () => { const data = { schema_version: '2.0', search: exportMeta, articles:focusView.articles, relations:focusView.relations, view: {sources:viewSources(),separate:isSeparate(),mode:viewMode,channel_filter:channelFilter,cutoff:timelineCutoff,timeline_style:timelineStyle,exploration,glow:glowConfig,time_focus:timeFocus,price_focus:priceLens?.snapshot(),relation_settings:basePayload.relation_settings||relationUI?.applied(),focus:{mode:lockedRoots.length?(keywordLocked?'keyword':'single'):'overview',root_ids:wikiRootPreview?[]:lockedRoots,query:keywordLocked?rootSearchState?.query||'':'',limit:rootSearchState?.limit||3},channel_definitions:channelDefinitions}, relation_scope:basePayload.relation_scope||'complete',relation_scope_ids:basePayload.relation_scope_ids||null,relations_pending:basePayload.relation_scope==='view'?viewRelationState.phase!=='ready':!!basePayload.relations_pending, relation_note: '關聯來自明確代碼、文字實體、主題與標題相似規則；分數不是機率，連線不是因果。' }; const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })); const a = el('a'); a.href = url; a.download = 'news-atlas.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 10000); };
 $('fit').onclick = () => {if(viewMode==='timeline'){$('timelineZoom').value=1;$('timeline').scrollLeft=0;renderTimeline();}else graph?.zoomToFit(reducedMotion ? 0 : 600, 60);};
 $('openSearch').onclick = () => $('searchPanel').classList.add('open'); $('closeSearch').onclick = () => $('searchPanel').classList.remove('open'); $('closeDetail').onclick = () => $('detail').classList.remove('open'); $('openResults').onclick = () => $('detail').classList.add('open');
 fetch('/api/status').then(r => r.json()).then(info => { updateDB(info.db); if (info.massive_configured){$('key').placeholder = '伺服器已設定 key，可留白';if(!$('key').value)$('keyStatus').textContent='主機已有金鑰，搜尋會自動沿用。';} }).catch(() => {});
@@ -450,13 +470,51 @@ function savedPayload() {
   payload.view.relation_views=[...restoredRelationViews,...completedRelationViews.values()].filter(v=>v.sources.every(p=>sources.has(p))).slice(-12);
   return payload;
 }
-$('saveDB').onclick = async () => {
-  if (saving || controller || !focusView.articles.length) return;
-  const payload=savedPayload(); saving=true; $('saveDB').disabled=true; $('saveStatus').textContent='儲存中…';
-  try {const response=await fetch('/api/snapshots',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const saved=await response.json();if(!response.ok)throw new Error(saved.error || '儲存失敗');$('saveStatus').textContent=`已儲存「${saved.name}」· ${payload.view.sources.map(p=>sourceNames[p]).join('／')} 分開保存`;updateDB(saved.db);await loadSnapshots();}
-  catch(error){$('saveStatus').textContent='儲存失敗：'+error.message;}
-  finally{saving=false;$('saveDB').disabled=!focusView.articles.length || !!controller;}
+function syncSnapshotButton(){
+  $('saveDB').disabled=$('autoSnapshot').checked || saving || !!controller || !focusView.articles.length;
+}
+$('autoSnapshot').checked=AtlasUI.read('autoSnapshot',true);
+$('autoSnapshot').onchange=()=>{
+  AtlasUI.write('autoSnapshot',$('autoSnapshot').checked);
+  syncSnapshotButton();
 };
+$('saveDB').onclick=saveSnapshot;
+async function saveSnapshot(){
+  if (saving || controller || !focusView.articles.length) return;
+  const payload=savedPayload();
+  snapshotLoadTicket++;
+  saving=true;
+  $('submit').disabled=true;
+  syncSnapshotButton();
+  $('saveStatus').textContent='儲存中…';
+  try{
+    const response=await fetch('/api/snapshots',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const saved=await response.json();
+    if(!response.ok || !saved.id)throw Error(saved.error || '儲存失敗');
+    $('saveStatus').textContent=`已儲存「${saved.name}」· ${payload.view.sources.map(p=>sourceNames[p]).join('／')} 分開保存`;
+    for(const [provider,state] of Object.entries(sourceStates)){
+      if(!state.done)continue;
+      // Completed source results were read back from the news DB, including hidden sources.
+      state.cached=state.total;
+      state.new=0;
+      const group=payload.source_graphs[provider];
+      if(!state.error && group?.articles.length===state.total)state.phase='已存圖譜';
+    }
+    paintProgress();
+    updateDB(saved.db);
+    await loadSnapshots();
+  }catch(error){
+    $('saveStatus').textContent='儲存失敗：'+error.message;
+    const retry=el('button',AtlasI18n.t('重試'));
+    retry.type='button';
+    retry.onclick=saveSnapshot;
+    $('saveStatus').append(retry);
+  }finally{
+    saving=false;
+    $('submit').disabled=!!controller;
+    syncSnapshotButton();
+  }
+}
 async function loadSnapshots() {
   try {const response=await fetch('/api/snapshots');if(!response.ok)return;const data=await response.json();const root=$('snapshots');root.replaceChildren();for(const saved of data.snapshots || []){const button=el('button',`${saved.name} · ${date(saved.created_at)}`,'raw');button.addEventListener('click',async()=>{if(button.disabled)return;const label=button.textContent;button.disabled=true;button.setAttribute('aria-busy','true');button.textContent=AtlasI18n.t('正在載入圖譜快照…');try{await restoreSnapshot(saved.id);}finally{button.disabled=false;button.setAttribute('aria-busy','false');button.textContent=label;}});root.append(button);}if(!data.snapshots?.length)root.append(el('p','尚無已儲存圖譜','muted'));} catch {}
 }
@@ -626,7 +684,7 @@ function renderRootResults(){
 }
 
 AtlasUI.initSourcePanel($);
-timePanel=AtlasUI.initTimePanel($,()=>{timeLens?.paint();layoutTimeBar();});
+timePanel=AtlasUI.initTimePanel($,layoutTimeBar);
 function syncRSSRegion(){const languages={TW:'zh-TW',US:'en-US',HK:'zh-HK',JP:'ja',GB:'en-GB'},region=$('rssRegion').value||'TW';$('yahooRegion').textContent=region+' · '+languages[region];}
 $('rssRegion').addEventListener('change',syncRSSRegion);syncRSSRegion();
 
@@ -655,8 +713,8 @@ syncSourceColors();
 // Public, redacted runtime contract shared by Chat and its MCP UI adapter.
 (() => {
   if(typeof document.addEventListener!=='function')return;
-  const clickIds=['modeNetwork','modeTimeline','fit','clearRoot','resetGlow','resetRelations','rootSearchSubmit','relationOpen','relationClose','relationApply','relationCancel','cancelOperation','retryGraph','priceLoad','sourcePanelToggle','sourcePanelReset','timePanelToggle','timePanelReset','timeBellUndo','timeBellReset','timelineZoomIn','timelineZoomOut','submit','cancel','dateCustom','dateQuick','months-3','months-6','months-9','months-12'];
-  const setIds=['language','query','ticker','start','end','rssRegion','source-google','source-yahoo','source-massive','view-google','view-yahoo','view-massive','rootQuery','rootLimit','renderBudget','highlightModeSwitch','graphChannel','separateSources','channelFilter','timelineZoom','timelineCutoff','stickyStrength','timeSizeEnabled','timeFocusSlider','priceMix','priceHorizon','glow-enabled',...['brightness','radius','decay','background'].map(k=>'glow-'+k),...['internalMin','crossMin','depth','branchLimit','pathMin'].map(k=>'rel-'+k),...['adaptive','entity','entity_days','topic','topic_days','topic_similarity','title','title_days','title_similarity','title_terms_min','half_life','internal_neighbors','cross_neighbors','coverage_first'].map(k=>'relation-'+k)];
+  const clickIds=['modeNetwork','modeTimeline','fit','clearRoot','resetGlow','resetRelations','rootSearchSubmit','relationOpen','relationClose','relationApply','relationCancel','cancelOperation','retryGraph','priceLoad','sourcePanelToggle','sourcePanelReset','timePanelToggle','timePanelReset','timeBellUndo','timeBellReset','timelineZoomIn','timelineZoomOut','submit','cancel','saveDB','dateCustom','dateQuick','months-3','months-6','months-9','months-12'];
+  const setIds=['autoSnapshot','language','query','ticker','start','end','rssRegion','source-google','source-yahoo','source-massive','view-google','view-yahoo','view-massive','rootQuery','rootLimit','renderBudget','highlightModeSwitch','graphChannel','separateSources','channelFilter','timelineZoom','timelineCutoff','stickyStrength','timeSizeEnabled','timeFocusSlider','priceMix','priceHorizon','glow-enabled',...['brightness','radius','decay','background'].map(k=>'glow-'+k),...['internalMin','crossMin','depth','branchLimit','pathMin'].map(k=>'rel-'+k),...['adaptive','entity','entity_days','topic','topic_days','topic_similarity','title','title_days','title_similarity','title_terms_min','half_life','internal_neighbors','cross_neighbors','coverage_first'].map(k=>'relation-'+k)];
   let revision=0,previous='',dataset=0,lastArticles=null,lastEdges=null;const recent=[];
   const note=(type,id)=>{recent.push({type,id,at:new Date().toISOString()});if(recent.length>12)recent.shift();};
   document.addEventListener('click',e=>{const node=e.target.closest?.('[id], [data-article-id]');if(clickIds.includes(node?.id))note('click',node.id);});
@@ -665,7 +723,7 @@ syncSourceColors();
   function state(){
     if(lastArticles!==focusView.articles||lastEdges!==focusView.relations){dataset++;lastArticles=focusView.articles;lastEdges=focusView.relations;}
     const scope=highlightMode==='category'&&viewMode==='network'?Array.from(categoryTrace.nodes.keys()):lockedRoots.length?Array.from(new Set([...lockedRoots,...activeTrace.nodes.keys()])):selected?[selected]:currentView.articles.map(a=>a.id);
-    const state={dataset,language:AtlasI18n.language(),view_mode:viewMode,highlight_mode:highlightMode,selected_article:selected,root_ids:[...lockedRoots],category:graphChannel,channel_filter:channelFilter,scope_ids:scope,scope_kind:highlightMode==='category'&&viewMode==='network'?'category':lockedRoots.length?'roots_and_relations':selected?'article':'visible_results',visible_ids:currentView.articles.map(a=>a.id),counts:{loaded:focusView.articles.length,visible:currentView.articles.length,scope:scope.length,edges:focusView.relations.length,rendered:renderedCount},sources:viewSources(),search:{query:exportMeta.query||'',ticker:exportMeta.ticker||'',start:exportMeta.start||'',end:exportMeta.end||''},cutoff:timelineCutoff,render_budget:renderBudget,exploration:{...exploration},glow:{...glowConfig},time_focus:{...timeFocus},price_focus:priceLens?.state(),tool_dock:globalThis.AtlasDock?.state(),relation_settings:basePayload.relation_settings||{},busy:{search:!!controller,relations:!!relationActivity.busy,root_search:rootSearchBusy},graph_error:graphFailure?.message||null,controls:[...clickIds.map(id=>control(id,'click')),...setIds.map(id=>control(id,'set'))].filter(Boolean),recent_actions:recent.slice()};
+    const state={dataset,language:AtlasI18n.language(),view_mode:viewMode,highlight_mode:highlightMode,selected_article:selected,root_ids:[...lockedRoots],category:graphChannel,channel_filter:channelFilter,scope_ids:scope,scope_kind:highlightMode==='category'&&viewMode==='network'?'category':lockedRoots.length?'roots_and_relations':selected?'article':'visible_results',visible_ids:currentView.articles.map(a=>a.id),counts:{loaded:focusView.articles.length,visible:currentView.articles.length,scope:scope.length,edges:focusView.relations.length,rendered:renderedCount},sources:viewSources(),search:{query:exportMeta.query||'',ticker:exportMeta.ticker||'',start:exportMeta.start||'',end:exportMeta.end||''},cutoff:timelineCutoff,render_budget:renderBudget,exploration:{...exploration},glow:{...glowConfig},time_focus:{...timeFocus},price_focus:priceLens?.state(),tool_dock:globalThis.AtlasDock?.state(),relation_settings:basePayload.relation_settings||{},search_progress:sourceStates,busy:{search:!!controller,saving,relations:!!relationActivity.busy,root_search:rootSearchBusy},graph_error:graphFailure?.message||null,controls:[...clickIds.map(id=>control(id,'click')),...setIds.map(id=>control(id,'set'))].filter(Boolean),recent_actions:recent.slice()};
     const fingerprint=JSON.stringify(state);if(fingerprint!==previous){previous=fingerprint;revision++;}return {...state,revision};
   }
   function data(){return {articles:focusView.articles.map(a=>({id:a.id,title:a.title,summary:a.summary||'',url:a.url,published_at:a.published_at,source:{provider:a.source?.provider,publisher:a.source?.publisher},channels:a.channels,entities:a.entities})),edges:focusView.relations.map(e=>({id:AtlasView.identity(e),source:AtlasView.endpoint(e.source),target:AtlasView.endpoint(e.target),type:e.type,score:e.score,evidence:e.evidence}))};}
@@ -720,12 +778,12 @@ if(globalThis.AtlasPrice)priceLens=AtlasPrice.init($,{articles:()=>focusView.art
 globalThis.addEventListener?.('atlas-dock',layoutTimeBar);
 
 function viewPriority(){
-  return [selected,...lockedRoots,...(highlightMode==='category'?categoryTrace.nodes.keys():basePayload.relation_scope==='view'?[]:focusTraceCache(focusView.relations,lockedRoots,exploration).nodes.keys())].filter(Boolean);
+  return [selected,...lockedRoots,...(wikiRootPreview?wikiRootPreview.ids:[]),...(highlightMode==='category'?categoryTrace.nodes.keys():basePayload.relation_scope==='view'?[]:focusTraceCache(focusView.relations,lockedRoots,exploration).nodes.keys())].filter(Boolean);
 }
 function scheduleViewRelations(){
   if(!viewRelationJob||restoringRelations)return;
   if(basePayload.relation_scope!=='view'||!currentView.articles.length){viewRelationJob.schedule(null);return;}
-  const slice=AtlasView.renderSlice(currentView,renderBudget,viewPriority());
+  const slice=AtlasView.renderSlice(currentView,readingRenderBudget(),viewPriority());
   const byProvider=new Map();
   for(const row of slice.articles)for(const p of row.display_sources||[row.source.provider]){
     if(!byProvider.has(p))byProvider.set(p,new Set());byProvider.get(p).add(row.article_id||row.id);
@@ -780,15 +838,36 @@ $('viewRelationsRetry').onclick=()=>viewRelationJob.retry();$('viewRelationsStop
 AtlasViewRelations.tooltip($('activityCounters'));updateViewCounters();
 }
 
+function wikiPreviewTrace(){
+  const nodes=new Map([...wikiRootPreview.ids].map(id=>[id,{depth:id===wikiRootPreview.root?0:1,strength:1,parent:null,memberships:[wikiRootPreview.root]}]));
+  const edges=new Set(focusView.relations.filter(e=>nodes.has(AtlasView.endpoint(e.source))&&nodes.has(AtlasView.endpoint(e.target))).map(AtlasView.identity));
+  return {nodes,edges,roots:[wikiRootPreview.root],trees:[],truncated:false};
+}
+function showWikiRoot({instrument,tree,group,groups:total}){
+  const en=AtlasI18n.language()==='en',fail=(zh,english)=>{throw Error(en?english:zh);};
+  if(String(exportMeta.ticker||'').toUpperCase()!==instrument.split(':').at(-1))fail('請先在新聞圖譜載入同一股票；不會自動搜尋或覆蓋目前資料。','Load the same stock in News first; this link does not search or replace your data.');
+  if(!tree?.root_id||!Array.isArray(tree.articles)||!tree.articles.length)fail('此工作沒有可讀取的樹快照。','This job has no readable tree snapshot.');
+  const ids=new Set();
+  for(const ref of tree.articles){const row=focusView.articles.find(a=>(a.article_id||a.id.split('::').at(-1))===ref.id&&(a.display_sources||[a.source.provider]).includes(ref.provider));if(!row)fail('此樹部分新聞不在目前載入／勾選來源內；請先載入該股票完整新聞並勾選來源。','Some tree members are not loaded or their sources are hidden. Load the stock news and enable its sources first.');ids.add(row.id);}
+  const sourceRoot=tree.root_id.split('::').at(-1),provider=tree.root_id.includes('::')?tree.root_id.split('::')[0]:null;
+  const rootId=[...ids].find(id=>id.split('::').at(-1)===sourceRoot&&(!provider||!isSeparate()||id.startsWith(provider+'::')));
+  if(!rootId)fail('工作樹的起點不在目前新聞圖譜。','The job root is not in the current News graph.');
+  rootSearchTicket++;idleFocus?.stop();interaction?.clear();hovered=null;highlightMode='root';lockedRoots=[rootId];pinnedRoot=rootId;keywordLocked=true;rootSearchState=null;
+  wikiRootPreview={ids,root:rootId,group,groups:total};viewMode='network';applyMode();syncHighlightUI();refreshFocus();renderNetwork();showArticle(focusView.articles.find(a=>a.id===rootId),false);refreshFocus();
+  $('rootResults').replaceChildren();
+}
+
 // Wiki uses an independent renderer/store; opening it never rebuilds News Graph.
 globalThis.AtlasWikiContext={
+  showRoot:showWikiRoot,
+  confirmedSearch:()=>({instrument:exportMeta.instrument||'',ticker:exportMeta.ticker||''}),
   selection(mode){
     const groups=AtlasView.groups(basePayload),visibleSources=mode==='global'?providers:viewSources();
     const focus=new Set([selected,...lockedRoots,...graphTrace().nodes.keys()].filter(Boolean));
     const rows=visibleSources.flatMap(p=>(groups[p]?.articles||[]).filter(a=>mode!=='focus'||focus.has(a.id)||focus.has(p+'::'+a.id)));
     return {graph_universe:{ticker:(exportMeta.ticker||'').toUpperCase(),separate:isSeparate(),articles:viewSources().flatMap(p=>(groups[p]?.articles||[]).map(a=>({id:a.id,provider:p})))},graph_selection:highlightMode!=='category'?{ticker:(exportMeta.ticker||'').toUpperCase(),trees:(activeTrace.trees||[]).map(tree=>({root_id:tree.root,title:focusView.articles.find(a=>a.id===tree.root)?.title||tree.root,articles:[...tree.nodes.keys()].map(id=>focusView.articles.find(a=>a.id===id)).filter(Boolean).map(a=>({id:a.id.split('::').at(-1),provider:a.source.provider}))}))}:{ticker:(exportMeta.ticker||'').toUpperCase(),trees:[]},graph_settings:{relation_settings:basePayload.relation_settings||relationUI?.applied()||{},exploration:{...exploration}},price_horizon:priceLens?.state().horizon||3,graph_edges:relations.slice(0,30000).map(e=>({source:AtlasView.endpoint(e.source),target:AtlasView.endpoint(e.target),weight:Math.max(0,Math.min(100,Number(e.weight||e.score||1)))})),articles:rows.map(a=>({id:a.id,title:a.title,summary:a.summary||'',url:a.url,published_at:a.published_at,source:{provider:a.source.provider}})),sources:visibleSources,search:{instrument:exportMeta.instrument||'',query:exportMeta.query||'',ticker:exportMeta.ticker||'',rss_region:exportMeta.rss_region||'TW'}};
   },
-  visible(open){if(open){if(typeof rememberNews==='function'&&!workspaceRestoring)rememberNews();clearTimeout(fitTimer);graph?.pauseAnimation();}else if(viewMode==='network')graph?.resumeAnimation();}
+  visible(open){$('newsFloatingTools').hidden=open;document.querySelector('.layout').inert=open;if(open){if(typeof rememberNews==='function'&&!workspaceRestoring)rememberNews();clearTimeout(fitTimer);graph?.pauseAnimation();}else if(viewMode==='network')graph?.resumeAnimation();}
 };
 
 // News and Wiki own separate persisted runtime records. No automatic source search.

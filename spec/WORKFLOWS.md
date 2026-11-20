@@ -1,5 +1,11 @@
 # 標準工作流程
 
+## 明確授權清庫與冷啟動
+
+預設保留可救資料；使用者明確要求全部 DB 重置時，以本次範圍為準。先停止本專案寫入服務，盤點實際 data 根、DB 主檔、WAL／SHM／journal、workspace、衍生快取與 DB 備份，再限定專案範圍清除。不要用包含 `sqlite3` 的模糊檔名匹配：例如 `.sqlite3.massive-key` 是憑證，不是 DB。也不要清除其他專案或外接來源。
+
+重新啟動會建立空 schema；用新聞計數、Wiki 目錄、workspace 與工作狀態確認空資料，不只檢查檔案存在。瀏覽器記憶體、localStorage、登入憑證與資料庫是不同層；關閉舊頁，以無痕／新 profile 驗收，避免舊頁回存狀態。清庫不授權自動新建付費推論。最新操作結果與手動流程見 [SMOKE_TEST](SMOKE_TEST.md)。
+
 入口：[PROJECT_MAP.md](PROJECT_MAP.md)。以 2026-11-06 的工作區實作為準。先讀 [協作偏好](ai-dev-experience-preferences.md)，計算定義見 [CALCULATION_METHODS.md](CALCULATION_METHODS.md)。
 
 ## 專案命名與相容性

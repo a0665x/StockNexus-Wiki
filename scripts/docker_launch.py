@@ -222,9 +222,7 @@ def up(args):
             run(COMPOSE+['up','-d','--no-build','--wait','--wait-timeout','90','--remove-orphans','--scale','atlas=1'])
             final=containers()
             if len(final)!=1 or final[0]['state'].get('Health',{}).get('Status')!='healthy':raise RuntimeError('Container count or health violates the single-service requirement.')
-            opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
-            with opener.open(LOCAL+'/api/status',timeout=5) as response:
-                if response.status!=200:raise RuntimeError('Host port 8765 health check failed.')
+            check_host_ready()
         except BaseException:
             print('Startup failed; cleaning project containers, retaining data/.',flush=True)
             run(COMPOSE+['down','--remove-orphans'])
@@ -244,9 +242,16 @@ def up(args):
 
 
 
+def check_host_ready(base=LOCAL):
+    opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    with opener.open(base+'/api/capabilities',timeout=5) as response:
+        if response.status!=200:raise RuntimeError('Host port 8765 health check failed.')
+
+
 def merge_help(data):
-    command=shlex.quote(str(ROOT/'merge_data.sh'))+' --from /media/usb/data --to '+shlex.quote(str(data))
-    return ('Import USB data from another terminal (replace /media/usb/data):\n'
+    command=shlex.quote(str(ROOT/'merge_data.sh'))+' --from ../incoming/data --to '+shlex.quote(str(data))
+    return ('Import from another terminal (replace ../incoming/data with your source data, graph/TICKER or llm_wiki/TICKER directory):\n'
+            'First preview with --dry-run. After checking the report, remove --dry-run and run the same command to merge.\n'
             '  Preview: '+command+' --dry-run\n'
             '  Merge:   '+command+'\n'
             'Keep this web service open; pause Wiki work/watchers for stocks being merged.\n'

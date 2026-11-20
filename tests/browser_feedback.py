@@ -59,7 +59,7 @@ def main():
             click('timePanelDrag')
             time.sleep(.3)
             check('narrow pane opens by physical click',"!$('timeFocusBody').hidden")
-            check('expanded tool fits available stage',"(()=>{const a=$('timeFocusBar').getBoundingClientRect(),s=$('stage').getBoundingClientRect();return a.top>=s.top+100&&a.bottom<=s.bottom+1&&a.left>=s.left&&a.right<=s.right+1})()")
+            check('expanded tool fits the visible workbench',"(()=>{const a=$('timeFocusBar').getBoundingClientRect(),s=document.querySelector('body>header').getBoundingClientRect();return a.top>=s.bottom+8&&a.bottom<=innerHeight-7&&a.left>=7&&a.right<=innerWidth-7})()")
             check('tools remain separate',"(()=>{const a=$('timeFocusBar').getBoundingClientRect(),b=$('sourcePanel').getBoundingClientRect();return a.right<=b.left||b.right<=a.left||a.bottom<=b.top||b.bottom<=a.top})()")
             js(r"""(()=>{
              window.calls=[];const prior=fetch;window.fetch=async(url,options)=>{
@@ -73,8 +73,8 @@ def main():
             check('assistant stream has no copy buttons',"document.querySelectorAll('.chat-message.assistant').length===2&&!document.querySelector('.chat-message button')&&!!document.querySelector('.chat-message a')")
             js(r"""(()=>{
              const factory=ForceGraph3D;window.ForceGraph3D=(...args)=>{window.renderer=factory(...args);return renderer;};
-             const a={id:'a',kind:'ArticleRevision',title:'Source'},b={id:'b',kind:'Claim',title:'Claim',assessment:{category:'direct'},market_evidence:[{ticker:'TSLA',horizon:3,mean_return:null,baseline_date:'2026-11-02'}]},c={id:'c',kind:'Thesis',title:'Thesis',assessment:{category:'indirect'}};
-             window.fixture={instrument:'NASDAQ:TSLA',version:1,versions:[{version:1,created_at:'2026-11-06'}],total_nodes:3,nodes:[a,b,c],edges:[{source:{stable_id:'a'},target:{stable_id:'b'},relation_type:'SUPPORTS'},{source:{stable_id:'b'},target:{stable_id:'c'},relation_type:'DEPENDS_ON'}],config:{price_horizon:3},jobs:[],perspectives:{categories:{direct:1,indirect:1},index:[]}};
+             const a={id:'a',kind:'ArticleRevision',title:'Source'},b={id:'b',kind:'Claim',title:'Claim',classification_terms:['direct'],assessment:{category:'direct'},market_evidence:[{ticker:'TSLA',horizon:3,mean_return:null,baseline_date:'2026-11-02'}]},c={id:'c',kind:'Thesis',title:'Thesis',assessment:{category:'indirect'}};
+             window.fixture={instrument:'NASDAQ:TSLA',version:1,versions:[{version:1,created_at:'2026-11-06'}],total_nodes:3,taxonomy:{terms:[{id:'direct',label:'Direct',color:'#79daba'}]},opinion_index:[b],nodes:[a,b,c],edges:[{source:{stable_id:'a'},target:{stable_id:'b'},relation_type:'SUPPORTS'},{source:{stable_id:'b'},target:{stable_id:'c'},relation_type:'DEPENDS_ON'}],config:{price_horizon:3},jobs:[],perspectives:{categories:{direct:1,indirect:1},index:[]}};
              const prior=fetch;window.fetch=async(url,options)=>{
               if(!url.startsWith('/api/wiki/'))return prior(url,options);calls.push(url);let v={};
               if(url.endsWith('/status'))v={instruments:[{instrument:'NASDAQ:TSLA',version:1}],bridge_ready:true};
@@ -84,10 +84,11 @@ def main():
               else if(url.includes('/node?'))v={...b,current_market:[{ticker:'TSLA',horizon:Number(new URL(url,'http://fixture').searchParams.get('price_horizon')),mean_return:null,baseline_date:'2026-11-02',as_of:'2026-11-05',available_sessions:3,required_sessions:7}]};
               return {ok:true,json:async()=>v};
              };
-             $('priceHorizon').value=3;$('priceHorizon').dispatchEvent(new Event('input'));AtlasWiki.show();
+             exportMeta.instrument='NASDAQ:TSLA';exportMeta.ticker='TSLA';
+             $('priceHorizon').value=3;$('priceHorizon').dispatchEvent(new Event('input'));return AtlasWiki.show();
             })()""")
             time.sleep(.3)
-            js("$('wikiSaved').value='NASDAQ:TSLA';$('wikiSaved').dispatchEvent(new Event('change'))")
+            check('opens the Wiki for the confirmed News stock',"$('wikiSaved').value==='NASDAQ:TSLA'")
             time.sleep(.3)
             js("$('wikiAssessment').value='direct';$('wikiAssessment').dispatchEvent(new Event('change'))")
             check('category preserves real citation and dependency context',"renderer.graphData().nodes.length===3&&renderer.graphData().links.length===2")

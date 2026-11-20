@@ -1,5 +1,87 @@
 # 變更與驗證 log
 
+## 2026-11-20 — Resizable header and centered News tool icons
+
+The shared header scales the visible ribbon artwork as its bottom edge moves. News sources use a stacked database and time/size focus uses a curve inside a magnifier. Both also appear in their expanded headings. The shared spec now routes new sessions from `main` to a feature contract, its browser or service tests and the local source index. [Behavior and verification](references/wiki-timeline-workbench.md#resizing-the-shared-header) · [Test routes](TESTING.md#workbench-release-verification)
+
+## 2026-11-20 — Movable News and Wiki launchers and ribbon logo
+
+News source and time tools can float over the sidebars. All three tools remember separate window and launcher positions. Collapsing and reopening a docked News reader also restores its split. The shared header uses the replaceable ribbon PNG. [Interaction and image replacement](references/wiki-timeline-workbench.md)
+
+## 2026-11-20 — Wiki chart navigation and local CodeGraph
+
+The timeline detaches, resizes and minimizes. Series toggles, chart reset and pointer capture support returning to all categories and panning a zoomed interval. The comparison reader, filters and wordmark share the graphite workbench styling. Host workspace validation now accepts the controls already emitted by the Wiki. The repository has a local CodeGraph index and a frontend-aware discovery configuration. [Browser acceptance](references/wiki-timeline-workbench.md) · [CodeGraph onboarding](PROJECT_MAP.md#using-this-checkouts-codegraph-index)
+
+## 2026-11-20 — Conditional Wiki reads and isolated classification failures
+
+News warms the matching published Wiki. A tab can display a saved scope during refresh, coalesce in-flight reads and apply graph differences after publication. Compact worker status suppresses repeated forest and configuration transfers. L1 backfill shares equivalent premises and quotes, limits input by UTF-8 bytes, and records outstanding opinions when a split child fails. The host launch probe now uses the same inexpensive capabilities GET as Docker. See [acceptance, measurements and follow-up](references/wiki-cache-classifier-20261120.md).
+
+## 2026-11-20 — Correlated Wiki execution logs
+
+Added bounded private JSONL traces for preparation, worker dispatch/context waits, model calls, validation/publication, classification and L2 synthesis/review. Python and the host bridge share job/call IDs; bridge heartbeats distinguish a live wait from a completed call. Safe errors preserve category and source locations without copying prompts, evidence or credentials. Added `scripts/wiki_trace_report.py` for stock/job summaries and unfinished spans. Model policies and research results are unchanged. See [runtime contract and measured baseline](WIKI_OBSERVABILITY.md) and [tests](TESTING.md).
+
+## 2026-11-20 — Unslop research workbench and persistent Chat
+
+Applied the user-approved graphite workbench across News, Wiki, Chat, settings and documents with restrained teal, consistent typography/controls, compact worker progress and responsive history rows. Installed and pinned unslop by Damir Sokolovsky; attribution and reproduction instructions are in the [design record](references/unslop-20261120.md).
+
+Wiki now opens the existing stock matching the confirmed News graph, ignoring unsubmitted search drafts. Preparation reuses exact saved forest membership and displays real stages/elapsed time. Chat conversations persist across reload/restart, can be reopened and continued, and have a confirmed delete action. Histories are separated by browser owner and News/Wiki surface. Earlier memory-only conversations are not recoverable.
+
+Dedicated branch: `llm_wiki_unslop`, following baseline `86f06a7`. Deployed to the existing Tailscale service with database backup and rollback image. Tests and measured preparation scope are in [TESTING](TESTING.md). NVDA v231 remains published, but annual processing was already stopped by a classification failure/cancellation and was not resumed during deployment.
+
+## 2026-11-20 — Parallel L1 tree workers
+
+Added bounded 1/3/5/10 Graph root workers, independent bridge calls with parent cancellation, per-lane progress, and transactional segment checkpoints for explicit resume. Progress now leads with completed trees, retains article coverage and opens each worker's frozen tree. Cross-machine merge preserves checkpoints with local version mapping. The user selected three GPT-6.1 Sol workers for NVDA L1. Validation: 94 Wiki tests, 13 Node tests and ten browser checks; see [TESTING](TESTING.md) and [runtime contract](WIKI_RUNTIME.md). Deployment observations are recorded in CURRENT_STATE separately.
+
+## 2026-11-20 — Authorized restart and NVDA annual research
+
+Rebuilt the local service and restarted Chat at the user's request. Production `/documents` is now 200 and matches checkout assets; the previous image and all existing data were retained. This supersedes the pre-deployment observations below.
+
+Acquired missing NVDA source days for November 20, 2025 through November 19, 2026 and verified 10,755 provider records. Massive has 365 stored complete days; RSS has remaining coverage gaps. Stored 250 daily OHLC sessions through November 18. Verified `gpt-6.2-sol` availability and started a finite annual L1 → two saved L2 workflow, with no automatic replay after model failure. Completion is tracked separately in the [execution handoff](references/nvda-research-20261120.md); the research is not yet complete.
+
+## 2026-11-20 — Missing document metadata and explained content links
+
+Confirmed the document collection is one graph of multiple article trees and explicit relations, with force-layout distance independent of title/date similarity. Updated the portable import skill to handle untitled/undated input and perform an evidence-based content-link pass. Added `Untitled document` for blank filename stems and optional link rationales (1–2000 characters), preserved in revisions and displayed as literal text beside link targets. Existing exports remain valid; the UI now explains layout distance.
+
+Six document tests and the expanded real HTTP/Chromium workflow passed after reproducing the missing fallback/rationale behavior. See [TESTING](TESTING.md) and [DOCUMENT_IMPORT](DOCUMENT_IMPORT.md). These application changes remain in the working tree; no production restart or model job was performed.
+
+## 2026-11-20 — English onboarding and document import readiness
+
+Verified that the November 19 document graph, Web UI JSONL import and single-article handoff commits are already in local/remote `llm_wiki` at `228f6a7`. Added the English [document import contract](DOCUMENT_IMPORT.md), routed it from PROJECT_MAP, architecture, API and storage docs, and clarified the English README. CURRENT_STATE now separates source readiness from the existing 8765 container, whose `/documents` route still returns 404.
+
+Added a real HTTP/Chromium regression for preview, upload, graph rendering, repeat import, revisions, pinned citations, source/layer filtering, invalid files and reload. It passed with temporary SQLite; 8 focused Python tests and JavaScript syntax also passed. Verification scope and existing Python 3.13 SQLite warnings are recorded in [TESTING](TESTING.md). No application behavior, production data, deployment or model work was changed.
+
+## 2026-11-10：整理成果可見性與變更區上邊界
+
+正式唯讀查核時 GOOGL 已有 611 個 nodes 紀錄、v47；主機保存的 Wiki controls 為 L1／最新版本／wikiAssessment=__pending。已有資料不能直接推論畫面可見，尚待分類篩選會隱藏已分類成果。本輪未改工作內容或重送模型。
+
+每段通過驗證並發布後，最新版本讀取仍隨輪詢更新，不等整棵 root coverage 記帳，也不把未驗證串流當正式節點。即時區顯示已發布版本與目前載入節點；空圖區分第一段等待、圖層、分類／節點篩選、歷史版本與日期無成果。提供「查看最新已發布成果」只讀入口：切 L1／最新版本、清除節點／關係／分類篩選，保留日期與模型／工作設定。停止保留已發布節點。
+
+首次 graph GET 失敗後，poll 原本因 data 為空直接返回，造成永久空圖；現在仍輪詢工作並重試 graph GET。暫時讀取失敗保留舊成果，恢復不建立模型工作。
+
+版本變更展開時新增上邊界；向上拖曳時邊界實際上移，與進度區交換高度，各自保留最低 64px，內容可捲動。支援鍵盤、取消及既有工作區高度保存；版本更新保留展開與高度。手機維持無拖曳把手布局。
+
+`tests/browser_wiki_results.py` 隔離 Chrome 11 項檢查通過，包含首次失敗恢復、__pending 空圖、整理中發布、停止保留、真實滑鼠拖曳邊界、鍵盤持久化與語言。`tests/browser_wiki_layout.py` 48 項既有實體交互／手機檢查通過。測試使用合成資料，無正式模型呼叫。更新與先前 root 閱讀入口一起建置待部署；未中斷正式整理。
+
+## 2026-11-09：目前處理樹的閱讀入口
+
+工作狀態提供「查看第 N／總數棵新聞樹」入口；以 job 的凍結 graph_selection 成員回到 News，高亮整樹並優先納入渲染，其餘變暗。只是閱讀，不提交 plan／模型工作、不修改 News 關聯設定。畫面明示「成員為工作快照、連線依目前新聞設定」：舊工作沒有完整樹邊快照，不假冒舊邊精確重播。不同股票或未載入／隱藏來源造成成員缺漏時拒絕跳轉，保留原頁。空白點擊退出，拖動及背景連線刷新保留；點另一新聞恢復一般選取。此暫時高亮不保存為新的 Wiki 工作樹。
+
+已完成 evidence revision 跨模型／方法／篇數／News edge 設定重用，改分組不刪除舊 Wiki 知識，也不自動重新推論舊觀點。新內容版本／新增新聞仍可處理；已完成文章可能再次作脈絡，未完整發布的樹仍可能重做分段。這次不改去重與發布記帳，也不承諾零重複或全域最少 token。
+
+驗證：`tests/browser_wiki_root.py` 隔離瀏覽器直接點 root 入口，覆蓋成員高亮、閱讀不提交工作、錯股票、缺成員、語言與互動；`test_wiki.WikiTests.test_switch_model_and_prompt_does_not_reextract`、`test_wiki_forest`、`test_wiki_root_budget` 共 11 項通過。正式部署狀態另外核對；不可為更新閱讀功能而未告知就中斷在途模型。
+
+## 2026-11-09：medium root 過早逾時
+
+實際 GOOGL 兩次 root 工作均在第一段（12 篇、整樹 36 篇／4 段）約 120 秒後 failed，錯誤為 `The operation was aborted`，不是正常完成。橋接按 reasoning_effort 給 medium 120 秒，與批次結構化輸出負擔不相符；改為所有 Wiki 呼叫共用 600 秒上限，保留 640 秒 socket 邊界，明確區分逾時／取消。不改模型、分段、日期或 coverage，不自動重試。
+
+虛擬時間直接驅動 createWikiCompiler：medium 12 篇跨 120 秒、600 秒終止原因／模型槽釋放兩項先失敗後通過；`node --test tests/chat-wiki.test.mjs tests/chat-service.test.mjs` 共 11 項通過，含取消與晚回覆。未以正式模型重新執行，不保證任意輸入均能在 600 秒內完成。
+
+## 2026-11-09 — 本機空資料 smoke test 起點
+
+- 依使用者明確授權，停止服務後清除全部專案 DB、sidecar、workspace、DB 備份及衍生圖布局；58 個 DB／sidecar 共 1,642,643,456 bytes。保留憑證，不另留 DB 備份；已重啟並確認空新聞、空 Wiki 目錄、空 workspace。
+- 本輪程式基準為 llm_wiki `8285c09`，只修改 spec；把其他主機的交接標為歷史，新增 SMOKE_TEST，修正舊四分類／純 Thesis 統計及 root 分段描述，記錄跨儲存層冷啟動的協作偏好。
+- 24 項後端測試與隔離 HTTP／Chrome 研究流程通過；未啟動正式模型。詳細證據及限制見 TESTING。
+
 ## 2026-11-08 — 雙語 README 與 L2 進度交接
 
 - 拆分中英文 README，互相切換、各自嵌入最新流程圖；移除影片入口與冗長限制旁註，改以新聞噪音、支持／反對論點、持續 Wiki、L2 議題及 Agent 操作介紹。
@@ -414,3 +496,25 @@ GraphRepository 以每次請求 ticker 路由搜尋、關聯快取、股價、�
 ## 2026-11-07 共用 L1/L2 工作區
 
 模型分類接入 L1 原子發布與明確補足；模型 assignment 可跨相容 taxonomy 合併重用。共用圖譜增加層切換、分類色彩與選取光暈；L2 研究與 Chat 使用相同節點來源鏈。移除手填分類／包含排除欄，新增 550ms 忙碌原因與可保存進度高度。驗證與限制見 TESTING、RESEARCH_LAYERS。
+
+2026-11-09 補強：工作樹閱讀可暫時超過使用者 GPU 預算，退出即還原；120 成員／100 預算／180 全局新聞的隔離 Chrome 測試通過。Wiki 工作集合、去重與模型呼叫未變，部署仍待避免中斷的時機。
+
+## 2026-11-10 L2 論證分支（待部署）
+
+- 依保存的 support/counter 分組呈現形狀不同的導航節點，點選只突出該組論證和引用；無依據不造分支。
+- 節點 hover／詳情增加類型、實際分類色標及多標籤提示，支援語言切換。
+- 新增 `tests/browser_wiki_arguments.py` 11 項隔離檢查，沒有付費模型呼叫或正式資料異動。
+
+## 2026-11-10 閱讀與 Chat 證據鏈（已部署）
+
+立體圖例依可見節點綁定；英文分類／研究入口與跨視窗語系修正。Chat 新增安全可捲動 Markdown 表格，read_research MCP 經 DB API 取得 L2/L1 完整快照與近期日期／過時水位；不生成新研究。完成 [BDD 與一次真實模型抽查](CHAT_RESEARCH_BDD.md)，沒有動正式 DB 或中斷工作。
+
+正式模型槽閒置時完成部署，健康及資產雜湊、實際英文 UI／立體圖例已核對；此輪同時帶入先前待部署的根樹導航、成果更新與版本變更拖曳修正。
+
+## 2026-11-10 L2 側欄動態語系補強
+
+修正忙碌、阻擋工作導航、排隊與執行秒數、重連與失敗等動態訊息；歷史版本與條件標籤一併翻譯。研究原文獨立標記保留，不影響來源語言。載入狀態不再依賴顯示文字判斷。新增完整展開側欄的隔離回歸，修正前忙碌情境確實失敗。
+
+## 2026-11-11 研究面向與問題目錄
+
+依問題文字建立多面向瀏覽標籤；目錄納入已完成但未另保存的結果，支持問題搜尋、歷史去重及點選讀取。共用圖與 L2 節點顯示所屬問題。舊資料只讀補足標籤，不重新推論。第一版規則與限制見 RESEARCH_LAYERS。

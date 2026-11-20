@@ -1,16 +1,78 @@
 # LLM Wiki 執行與維護
 
+## November 20 cache and classifier update
+
+News prefetches the published graph for the confirmed instrument. Wiki paints the exact cached view before verifying progress and publications. The browser and server share scope-bound change tokens. L1 classification backfill uses four-opinion, 48 KiB evidence packets with one bounded split for a batch-specific failure. See the [state, failure and recovery contracts](references/wiki-cache-classifier-20261120.md).
+
+完整階段追查、保留期限與耗時解讀見 [Wiki observability](WIKI_OBSERVABILITY.md)。
+
+## 2026-11-20 — Entry alignment and preparation reuse
+
+Entering Wiki follows the confirmed News graph instrument and loads its existing Wiki; a matching news DB without a Wiki is preselected for creation. A remembered Wiki from another stock cannot override that identity. Unsubmitted search text is ignored. Opening Wiki alone never starts model work.
+
+Root preparation persists a fingerprint over the actual source content, channels, dates, stock, graph/exploration settings, separation and algorithm/cache version. An exact match reuses saved tree membership; any changed input rebuilds it. Current extraction credit and pending work are still evaluated normally. The first plan without a fingerprint rebuilds once. Enqueue decodes the large configuration only once. The UI reports preparation stage and elapsed seconds, without implying model progress. See [design details](references/unslop-20261120.md) and [measured validation](TESTING.md).
+
+## 2026-11-20 — Parallel tree workers and consistent progress
+
+Graph root incremental updates support **1 / 3 / 5 / 10 concurrent workers**. This is a concurrency limit, not a promised speed multiplier. Other grouping methods and manual review remain serial. Every worker uses the job's selected model/effort and owns a different tree; segments within a tree execute in order. Fair scheduling processes at most one tree per lane before giving other stocks/classification a turn. There is one parent job, shared append-only Wiki and transactional publication, rather than separate Wikis per worker.
+
+The primary progress unit is **completed trees / total trees** over the frozen forest and selected evidence. A tree is complete only when every eligible target revision has extraction credit, including reused evidence. A tree's ordinal is its identity, not a completed-tree count. Article coverage remains secondary because trees differ in size and can share context; target articles remain uniquely assigned. Expanded worker rows show model, stage, tree identity, saved segments and target/context sizes. Each row opens its exact frozen tree. Disclosure survives polling; labels support Chinese and English. Non-root jobs continue to show article progress.
+
+Workers coordinate when their model context includes the same mutable opinion revision, rereading context after waiting. Independent proposals may observe different committed snapshots; parallel execution is not equivalent to serial reasoning order. Existing UPDATES conflict checks remain authoritative. The bridge admits at most ten independent calls and cancels all children by parent job ID. Stop/cancel prevents late publication. A worker failure stops further assignment while successful in-flight siblings may commit; no failed model turn is automatically replayed. Existing single bounded schema-repair behavior remains.
+
+Successful tree segments now write `wiki_segments` in the **same transaction** as their published version. The checkpoint key includes prompt version, root, exact ordered evidence revisions, target revisions and segment index. Explicit resumption reuses matching saved segments across model changes, while only the final segment credits target coverage. Input changes invalidate matching. Legacy segments have no checkpoints and may replay when an unfinished legacy tree resumes. Service restart still interrupts active work and requires explicit resumption. Checkpoints merge idempotently with remapped version references.
+
+`plan`/`apply` accept `workers`; frozen config/job payloads retain it. `coverage.trees` returns `total`, `done`, `pending`. `jobs[].payload.workers_state` maps lane numbers to real stage, root, segment and completion values. Parallel dispatch and progress belong to `news_atlas/wiki/parallel.py`; publication/checkpoints to `store.py`; bounded model calls to `chat/wiki.mjs`. Current serial-only and no-segment-checkpoint descriptions below are historical where superseded by this section.
+
+Validation: 94 Wiki tests (including six threaded/checkpoint/merge tests), 13 Node Chat/bridge tests, and ten real Chromium worker interaction checks passed. The browser fixture covers disclosure, exact-tree navigation without writes, translated states, worker choices and mobile overflow. Mechanical design scan returned no findings. Production model throughput is a separate observation, not established by fixture timings.
+
+## 2026-11-14：股票選擇與既有新聞 DB
+
+- 「已建立的 Wiki」選定後，股票下拉唯讀且綁定該 instrument；讀圖、維護與研究都使用此唯一識別。輸入事件不能改成另一股。
+- 選「建立新的股票 Wiki」立即清除舊圖、研究、分組、引用與待回應世代，開放股票 DB 下拉；過期回應不能還原舊圖。選到已有 Wiki 的股票則直接開啟既有成果。
+- 下拉來自 `/api/wiki/status.news_databases`：只列非空、可確認完整 instrument 的新聞 DB；排除 `_unassigned` 與空庫。不猜交易所，舊庫先重用既有 Wiki／快照識別；新搜尋將 instrument 存於 graph_metadata。
+- 新建 plan 傳 `news_db:true`，伺服器以 instrument 對應 DB 及日期選新聞，忽略主頁別股的 articles/search。Graph root 使用該範圍完整新聞引用，不用 3D 顯示預算裁切。超過 10,000 篇要求縮小範圍。
+- 無 DB schema migration；沿用 graph_metadata key/value 表。既有 Wiki 及新聞不刪除。
+- BDD：既有股鎖定、新建即時清空、只列可用 DB、別股主頁隔離、晚回應隔離、日期限制、空庫／不明識別排除。測試：`tests/test_wiki_news_catalog.py`、`tests/browser_wiki_identity.py`。
+
+
+## 2026-11-10：整理成果可見性與變更區上邊界
+
+正式唯讀查核時 GOOGL 已有 611 個 nodes 紀錄、v47；主機保存的 Wiki controls 為 L1／最新版本／wikiAssessment=__pending。已有資料不能直接推論畫面可見，尚待分類篩選會隱藏已分類成果。本輪未改工作內容或重送模型。
+
+每段通過驗證並發布後，最新版本讀取仍隨輪詢更新，不等整棵 root coverage 記帳，也不把未驗證串流當正式節點。即時區顯示已發布版本與目前載入節點；空圖區分第一段等待、圖層、分類／節點篩選、歷史版本與日期無成果。提供「查看最新已發布成果」只讀入口：切 L1／最新版本、清除節點／關係／分類篩選，保留日期與模型／工作設定。停止保留已發布節點。
+
+首次 graph GET 失敗後，poll 原本因 data 為空直接返回，造成永久空圖；現在仍輪詢工作並重試 graph GET。暫時讀取失敗保留舊成果，恢復不建立模型工作。
+
+版本變更展開時新增上邊界；向上拖曳時邊界實際上移，與進度區交換高度，各自保留最低 64px，內容可捲動。支援鍵盤、取消及既有工作區高度保存；版本更新保留展開與高度。手機維持無拖曳把手布局。
+
+`tests/browser_wiki_results.py` 隔離 Chrome 11 項檢查通過，包含首次失敗恢復、__pending 空圖、整理中發布、停止保留、真實滑鼠拖曳邊界、鍵盤持久化與語言。`tests/browser_wiki_layout.py` 48 項既有實體交互／手機檢查通過。測試使用合成資料，無正式模型呼叫。更新與先前 root 閱讀入口一起建置待部署；未中斷正式整理。
+
+## 2026-11-09：目前處理樹的閱讀入口
+
+工作狀態提供「查看第 N／總數棵新聞樹」入口；以 job 的凍結 graph_selection 成員回到 News，高亮整樹並優先納入渲染，其餘變暗。只是閱讀，不提交 plan／模型工作、不修改 News 關聯設定。畫面明示「成員為工作快照、連線依目前新聞設定」：舊工作沒有完整樹邊快照，不假冒舊邊精確重播。不同股票或未載入／隱藏來源造成成員缺漏時拒絕跳轉，保留原頁。空白點擊退出，拖動及背景連線刷新保留；點另一新聞恢復一般選取。此暫時高亮不保存為新的 Wiki 工作樹。
+
+已完成 evidence revision 跨模型／方法／篇數／News edge 設定重用，改分組不刪除舊 Wiki 知識，也不自動重新推論舊觀點。新內容版本／新增新聞仍可處理；已完成文章可能再次作脈絡，未完整發布的樹仍可能重做分段。這次不改去重與發布記帳，也不承諾零重複或全域最少 token。
+
+驗證：`tests/browser_wiki_root.py` 隔離瀏覽器直接點 root 入口，覆蓋成員高亮、閱讀不提交工作、錯股票、缺成員、語言與互動；`test_wiki.WikiTests.test_switch_model_and_prompt_does_not_reextract`、`test_wiki_forest`、`test_wiki_root_budget` 共 11 項通過。正式部署狀態另外核對；不可為更新閱讀功能而未告知就中斷在途模型。
+
 入口：[PROJECT_MAP](PROJECT_MAP.md)／[研究設計](TEMPORAL_WIKI.md)。原始碼核對：2026-11-06。
 
 ## 使用流程
 
-新聞圖與 Wiki 為獨立視圖，返回連結保留新聞節點／鏡頭。品牌圖片使用 `dist/stocknexus-wiki.png`，來源為根目錄使用者提供的同名 PNG。
+新聞圖與 Wiki 為獨立視圖，返回連結保留新聞節點／鏡頭。品牌圖片使用 `dist/stocknexus-wiki.png`。直接替換此檔，在專案根目錄執行 `./run.sh up` 後重新整理頁面即可更新。
 
 覆蓋進度下只有一個「開始整理／繼續整理」主要入口，依目前顯示的日期與設定執行，不暗中延伸日期。進頁、切換設定或輪詢不建立 plan；按下後立即顯示準備狀態，依序 `POST plan` 核對快取範圍、`POST jobs` 排入未完成新聞與缺漏分類。重複點擊不重複排入。正在整理時按設定 Apply 會中斷舊工作並以新設定接續；閒置 Apply 只保存，不啟動模型。開始按鈕 hover/focus 550ms 顯示說明，離開或 Escape 關閉。
 
 整理日期上方輸入是滑桿的固定全局邊界；兩個 thumb 共用一條軌道，在邊界內選取包含起訖日的 UTC 日期。下方顯示所選新聞的抽取覆蓋與待辦。全局來源是目前查詢 memberships＋已載入文章；重新開啟時可用已存查詢與文章，不是所有股票的全 DB。日期先過濾再套 10000 篇單次選取安全上限；不是每日限制。
 
 固定即時區每兩秒同步 queued/running、編譯／修正／發布階段、文章日期、標題、工作進度及停止。動畫只隨真實工作狀態；離線顯示狀態未知。歷史 jobs/calls/rejected_proposals 留 DB/log，不在頁面列出。兩側／下方邊界支援拖拉及方向鍵調整，儲存於本地與主機 Wiki 工作區。
+
+## 固定整理範圍、進度與停止
+
+兩個停止入口共用 `POST /api/wiki/stop`，提交目前的 `instrument`。同一 SQLite 交易取消該股票待執行及執行中的 L1 整理、分類，關閉 catch-up 與監看。兩個入口共用請求中的狀態。已發布的版本可繼續檢視，在途推論可能已耗用模型額度。L2 研究工作有獨立生命週期。
+
+準備、排隊、執行與持續監看期間鎖定整理日期，重新進入時以伺服器記錄的範圍為準。新聞覆蓋率使用已確認範圍。工作百分比使用該工作已提交的目標新聞數或觀點分類數除以固定目標數。整樹分段可先發布節點，覆蓋數在樹目標完成時前進。剩餘時間取各已排定工作的剩餘目標乘以各自平均處理時間（從入列計時，含等候）。尚無完成樣本時顯示估算中，未來監看新增的工作另計。
 
 ## 維護方式與證據選取
 
@@ -34,13 +96,13 @@ Wiki 頂部設定獨立於新聞 edge 設定。每次推論選項為 5／10／15
 
 新設定不必點選 root；有同股票完整圖譜即可 Apply。保存 universe／規則可供重開、續跑；新搜尋範圍須重新 Apply。舊版只有 graph_selection 的工作仍按原範圍續跑，不自動擴大；重新 Apply Graph 後採用全範圍模式。
 
-Graph 每組大小由自動採樣樹決定；內容超過約 65000 個 JSON 字元的輸入預算時自動分段，不截斷文章，runtime 顯示組別／段數。每棵樹全部分段發布成功後才將其目標記入 extractions／done；中斷時保留已發布知識，但不把未完成整樹計為完成，續跑會重新處理該樹。區間外脈絡不記 extractions。單次模型總輸入仍受橋接的 200000 字元上限保護，內部 `_covered_articles` 記帳資料不送入模型。
+Graph 每組大小由自動採樣樹決定；依每段最多 12 篇（含共用 anchor）及約 65000 個 JSON 字元的雙界限自動分段，不截斷文章，runtime 顯示組別／段數。每棵樹全部分段發布成功後才將其目標記入 extractions／done；中斷時保留已發布知識，但不把未完成整樹計為完成，續跑會重新處理該樹。區間外脈絡不記 extractions。單次模型總輸入仍受橋接的 200000 字元上限保護，內部 `_covered_articles` 記帳資料不送入模型。
 
 設定順序為語系、分組方法、篇數；draft 不影響正在跑的工作。Apply 與已套用值不同時才出現。後端先驗證新範圍，再取消舊 job、停止 bridge、保留已發布版本、排入剩餘證據。舊回覆只能在 job 仍 running 時發布；被取消的舊錯誤不能停用新 config。重審續跑會略過舊工作已重審的 revision。settings_version 與完整設定保存在 config/job，切換記錄留 log。
 
 ## 模型、語系與用量
 
-模型及 reasoning 選項來自 Codex `model/list` 的 supportedReasoningEfforts；同一下拉列出 model＋effort，主機再驗證支援度，SDK `modelReasoningEffort` 實際接收選值。無工具、唯讀 thread；不得執行新聞中的指令。一般 120 秒，高思考深度 600 秒，取消可中斷。背景只有一個模型槽；2026-11-07 起每支股票完成一棵 root 樹（含其全部分段）或一般一組證據後，即保存進度、排回 queued 並輪到下一支。queued 是等待輪替，不是停滯；running 才表示目前正在推論。重用已完成 revision／本工作 review 記錄，已凍結工作的每次輪替不重建圖譜。驗證失敗最多修正一次；缺失關聯端點會明確指出關聯序號、source／target 與原始 ID，要求只使用已提供端點或刪除該無依據關聯，保留其他有效內容。不能把缺失 target 誤報為 source 方向錯誤，也不自動猜測／補造節點。修正仍失敗則停用該股補足。重啟中斷不自動重試已開始的付費呼叫。
+模型及 reasoning 選項來自 Codex `model/list` 的 supportedReasoningEfforts；同一下拉列出 model＋effort，主機再驗證支援度，SDK `modelReasoningEffort` 實際接收選值。無工具、唯讀 thread；不得執行新聞中的指令。所有 Wiki 推論最多 600 秒，不依思考深度縮短（2026-11-09 修正 medium root 於 120 秒提前中止）；Python socket 上限 640 秒。使用者取消可即時中斷，逾時與取消分開記錄。背景只有一個模型槽；2026-11-07 起每支股票完成一棵 root 樹（含其全部分段）或一般一組證據後，即保存進度、排回 queued 並輪到下一支。queued 是等待輪替，不是停滯；running 才表示目前正在推論。重用已完成 revision／本工作 review 記錄，已凍結工作的每次輪替不重建圖譜。驗證失敗最多修正一次；缺失關聯端點會明確指出關聯序號、source／target 與原始 ID，要求只使用已提供端點或刪除該無依據關聯，保留其他有效內容。不能把缺失 target 誤報為 source 方向錯誤，也不自動猜測／補造節點。修正仍失敗則停用該股補足。重啟中斷不自動重試已開始的付費呼叫。
 
 預設在同一次結構輸出保存 zh-Hant＋en 的 title/summary/assessment rationale、關係 rationale；設定可只保存其中一種。它們是同一命題的語言版本，不是重複節點。引用原文永不翻譯。介面語言只切換顯示，不觸發推論或翻譯。舊節點沒有翻譯時顯示原內容並註明，不能虛構已完成翻譯。`data-own-i18n` 避開主頁片段替換，避免混合「News／新增／articles」。Wiki Chat 因此必須自行完整翻譯其控制、情境與連線／回覆狀態，不能依賴主頁掃描。News／Wiki runtime 共用 `AtlasI18n.language()` 作介面語言，但 session、圖譜狀態及生成保存語系仍獨立；重連、晚回應和多視窗同步見 [CHAT_AGENT](CHAT_AGENT.md)。
 
@@ -54,9 +116,9 @@ jobs.payload.receipts 保留每次成功／驗證拒絕的新聞日期、usage�
 
 UPDATES 由新節點指向舊節點，原文與既有節點不可覆寫。詳情以連通修訂鏈顯示最早原始觀點與最新三個發布 batch 的觀點；分支保留，不假裝所有修訂都是單線。無 UPDATES 的節點只顯示自己，不根據相似標題亂接歷史。Markdown 包含原文引用、語系欄位與原始／最新三批歷史。
 
-圖下統計為所選版本／新聞區間的 Thesis 數量，以最新引用新聞日期計一次，按 direct/indirect/low/uncertain 色彩堆疊，最多 60 個時間桶；包含保留的歷史修訂，不聲稱代表當下共識。無日期資料不繪製日期柱。圖與觀點分類統計來自 DB，與 GPU budget 分開，工作發新版時更新。圖表與樹狀觀點清單共用完整 Thesis 索引，不再把所有 Claim/Event 計入觀點數。統計另受左側雙滑桿選取日期約束；滾輪縮放、拖移、鍵盤左右／加減／Home 均不能超出此區間。日期改變重設視窗。滑鼠停在色條顯示日期及數量，點擊後右側列出完全對應的觀點；清單分頁，每次展開 20 筆，詳情以 node API 讀取指定版本，不受 GPU 2400 節點上限截斷。
+2026-11-09 對 8285c09 核對：分類選單、圖下時間圖與清單共用 taxonomy／opinion_index，依「分類 → 觀點群」展開。群以 Thesis 相依集合及未涵蓋的非 ArticleRevision 根建立，不再以舊四類或只數 Thesis。群建立、日期與多標籤計數詳見 [CALCULATION_METHODS](CALCULATION_METHODS.md)。統計來自目前 API 載入圖，與 GPU 可見點數不同，也不是無條件全庫索引。
 
-觀點樹依「影響管道大分類 → 主題 → 個別觀點」逐層展開。新模型輸出增加 topic（營收、營運、成本、市場、交易、其他）與 evidence（引用支持、分歧、不足）。舊節點主題暫用標題／摘要詞彙規則歸類，畫面明示，待使用者重審更新；不冒充既有模型曾做此標記。
+圖表遵守側欄日期，最多 60 桶；縮放、拖移與鍵盤操作受日期區間限制，日期改變重設視窗。色條與右側清單使用相同觀點群，清單分頁每次展開 20 筆；個別詳情按指定版本讀取。舊 assessment、topic、evidence 可留在節點詳情，但不能將其詞彙規則分類冒充新版 LLM taxonomy 指派。
 
 分類、證據程度及市場反應是不同維度。2026-11-07 起，L1／L2 模型輸入不再包含未來交易日報酬，避免 outcome 洩漏；`current_market` 仍為獨立事後檢視，舊 `market_evidence` 保留供追溯，不重寫歷史。研究用價格動能需要帶可知時間的行情版本；既有快取不符合時為 unavailable。雙層研究契約見 [RESEARCH_LAYERS.md](RESEARCH_LAYERS.md)。
 
@@ -74,7 +136,7 @@ UPDATES 由新節點指向舊節點，原文與既有節點不可覆寫。詳情
 
 2026-11-06 驗證：229 項完整 Python 回歸、7 項 Node Chat/Wiki、28 項隔離瀏覽器檢查通過。正式 GOOGL 實際頁面確認品牌、設定、滑桿、550ms 提示、統計及雙語；部署前後 articles/versions/nodes/edges/extractions/jobs/calls/rejected_proposals 雜湊一致（6814 新聞、324 版本、607 節點、316 連線），未呼叫真實模型。
 
-互動延伸驗收：234 項 Python、7 項橋接、39 項瀏覽器檢查；正式 GOOGL v351 有 18 個 Thesis，圖表與分類樹只統計 Thesis（原先 300 個分類數含 Claim/Event，並非遺失資料）。實際頁面可從色條點進右側再讀取觀點及股價觀察；所有正式 Wiki 表在部署與驗收前後雜湊一致。該次提案 prompt_version 為 wiki-extract-v4。
+2026-11-06 歷史互動驗收（下述純 Thesis 統計口徑已由新版 taxonomy 觀點群取代）：234 項 Python、7 項橋接、39 項瀏覽器檢查；正式 GOOGL v351 有 18 個 Thesis，圖表與分類樹只統計 Thesis（原先 300 個分類數含 Claim/Event，並非遺失資料）。實際頁面可從色條點進右側再讀取觀點及股價觀察；所有正式 Wiki 表在部署與驗收前後雜湊一致。該次提案 prompt_version 為 wiki-extract-v4。
 
 ## 2026-11-06 引用可見性與股價觀察
 
@@ -132,3 +194,20 @@ GOOGL 月維護的正式模型結果揭露：相似上下文包含已有 UPDATES
 
 
 Root 的輸入字數上限不足以限制模型輸出工作量：44 篇短新聞可以低於 65000 字元，卻允許最多 60 個雙語／分類節點。正式 high 工作於 600 秒橋接上限中止；不能把 abort 當作資料損壞或重試相同大批。現在 root coverage 每段最多 12 篇（含共用 anchor），同時保留原字數限制。小樹不拆；大樹全部成員仍依序送入、每段可發布完整版本，只有最後一段成功才記整樹目標 coverage。這是容量分段，不改 Graph 選取、模型、日期、DB 格式或方法身分；不能保證所有推論都在時限內完成。非 root 的使用者固定篇數設定不受此上限改寫。
+
+## 2026-11-09：低 GPU 預算不截斷工作樹閱讀
+
+Root 連結以完整已載入新聞集合核對成員，不以 graph.graphData 的 GPU 切片判定存在。閱讀時渲染預算暫用 max(使用者預算, 工作樹成員數)，所有成員優先；退出恢復原預算，不改保存設定、工作輸入或覆蓋分母。單樹仍受既有探索深度／分支／maxNodes 規則約束，這些語意選取規則與 GPU 預算不同。Wiki 從已確認 graph_universe 重建完整圖，逐樹涵蓋日期內目標，不拿當前渲染點作全集。真正未載入／隱藏來源的成員仍需補齊資料，不冒充完整樹。
+
+隔離 Chrome：180 篇全局新聞、GPU 預算 100、選中原本未渲染的 root，其樹 120 成員全部顯示，退出回到 100，完整集合維持 180，無 Wiki 寫入；連同既有入口測試共 15 項檢查通過。test_wiki_forest 共 8 項通過，含未渲染與孤立新聞覆蓋。正式容器尚未部署，以免中斷在途整理。
+
+
+## 保存與中斷邊界（2026-11-16 核對）
+
+L1 的 `WikiStore.publish` 在單一交易中保存版本、節點、連線、分類及已完成 extraction；增量 update 透過 `known`／extractions 跳過已完成來源 revision。L2 在驗證通過後，以單一交易保存 run、snapshot 引用、SavedLens 更新及 completed 狀態；「保存研究」是另存追蹤規則，不是一次查詢結果第一次落庫。
+
+目前停止是立即取消模型工作，不是等待當前段完成後才停止。已提交成果保留；未提交推論可能需要重跑。Graph coverage 大樹各段可發布觀點，但只有末段成功才標記整樹目標 coverage；中途停止後，未完成樹的先前分段仍可能重算。L2 未完成的新 run 不對外取代最後完整結果；重新發起時可能重新推論。不得宣稱「中斷後完全零重算」。
+
+使用者期望完成當前段再停、下次從下一段接續。安全暫停與持久分段 checkpoint 尚未實作，本次只記錄經核對的現況，不改執行中的工作。後續若實作，BDD 必須驗證：已提交段不再呼叫模型、checkpoint 與發布同交易、末段前不提前記 coverage、停止期間不排下一段、重啟與重試不重複提交，並保留既有 L2 完整結果。
+
+原始碼定位：[store.py](../news_atlas/wiki/store.py) `publish`、[compiler.py](../news_atlas/wiki/compiler.py) `process/_cancel`、[forest.py](../news_atlas/wiki/forest.py) `groups`、[research.py](../news_atlas/wiki/research.py) `query/process`。

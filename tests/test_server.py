@@ -246,6 +246,15 @@ class HTTPTests(unittest.TestCase):
                 self.assertIn(b'text/javascript', head)
                 self.assertTrue(content)
 
+    def test_header_serves_replaceable_png(self):
+        _, html = self.request('GET', '/')
+        self.assertIn(b'src="/stocknexus-wiki.png" alt="StockNexus Wiki"', html)
+        head, data = self.request('GET', '/stocknexus-wiki.png')
+        self.assertIn(b'200 OK', head)
+        self.assertIn(b'Content-Type: image/png', head)
+        self.assertIn(b'Cache-Control: no-cache', head)
+        self.assertEqual(data, (Path(server.__file__).parent/'dist/stocknexus-wiki.png').read_bytes())
+
     def test_explorer_assets_and_schema_are_served(self):
         for path in ['/i18n.js','/explorer-ui.js','/timeline.js','/date-range.js','/interaction.js','/schema/news-atlas.schema.json']:
             head,data=self.request('GET',path)

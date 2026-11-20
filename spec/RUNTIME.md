@@ -115,4 +115,4 @@ Docker 的 port 檢查依實際 `ATLAS_BIND` 位址執行（預設 127.0.0.1）�
 
 ## 啟動後追加 USB 資料
 
-`up` 在服務成功啟動後印出 `merge_data.sh --from /media/usb/data --to <實際資料路徑>` 及 `--dry-run` 範例。可另開終端執行，不需重啟 Web UI；先暫停目標股票 Wiki 工作／維護。Wiki 目錄會自動刷新。股票分庫、衝突保留與逐庫交易限制見 [DATA_MERGE](DATA_MERGE.md)。
+`up` 在服務成功啟動後印出 `merge_data.sh --from ../incoming/data --to <實際資料路徑>` 及 `--dry-run` 範例。可另開終端執行，不需重啟 Web UI；先暫停目標股票 Wiki 工作／維護。Wiki 目錄會自動刷新。股票分庫、衝突保留與逐庫交易限制見 [DATA_MERGE](DATA_MERGE.md)。

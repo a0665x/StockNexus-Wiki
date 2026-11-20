@@ -1,6 +1,8 @@
 /* Interface translation only. Original news, evidence and JSON are never translated. */
 (function(root){
   const dictionary={
+'調整頁首高度':'Resize header height','拖曳調整頁首高度，雙擊還原':'Drag to resize the header. Double-click to reset.',
+'搜尋完成後自動儲存圖譜快照':'Automatically save snapshot after search',
 '上一頁':'Previous page','下一頁':'Next page','頁碼':'Page number',
 '時間貢獻':'Time contribution','股價貢獻':'Price contribution','混合倍率':'Blended size',
 '滾輪縮放焦點日期範圍；雙擊還原。平均線為基準後逐日累計平均；超過 N 日遮罩。價格為歷史日線，非即時報價。':'Wheel to zoom around the focused date; double-click to reset. The line is the forward cumulative mean; prices beyond N sessions are masked. Historical daily prices, not live quotes.',
@@ -52,7 +54,7 @@
     '標題規則最少共同詞數':'Minimum shared terms for title rule',
     '優先連接有證據的孤立點':'Prioritize isolated nodes with qualifying evidence',
 
-"⚙ 關聯設定":"\u2699 Edge settings",
+"關聯設定":"\u2699 Edge settings",
 "連線如何成立？":"What makes an edge?",
 "只重算已載入新聞的連線，不重新抓新聞；沒有連線的孤立節點始終保留。":"Rebuilds edges from loaded news without fetching. Isolated news nodes always remain.",
 "目前使用可解釋文字規則。沒有 embedding；產業分類不參與加權，時間大小焦點也不改變 edge。":"Uses explainable text rules. No embeddings or industry weighting. The node-size date focus does not change edges.",
@@ -200,6 +202,9 @@
     [/ · 相隔 ([\d.]+|—) 天$/,(_,a)=>` · ${a} days apart`]
   ];
   Object.assign(dictionary,{
+    '開啟來源篩選':'Open source filters','開啟時間大小焦點':'Open time and size focus',
+    '拖動視窗或用方向鍵移動':'Drag the window or move it with arrow keys',
+    '縮小視窗':'Minimize window','視窗歸位':'Reset window position',
     '觀點詳情':'Viewpoint details','來源原文 ↗':'Source article ↗',
     'Wiki {instrument} · v{version} · {count} 個節點\n依目前選取與日期討論觀點；論述與引用可由工具讀取。':'Wiki {instrument} · v{version} · {count} nodes\nDiscuss viewpoints for the current selection and dates; tools can read arguments and citations.',
     '目前範圍：{scope} · {count} 篇 · {view}\n每次提問跟隨目前選取；回答期間可繼續操作。':'Current scope: {scope} · {count} articles · {view}\nEach question follows the current selection; you can keep exploring.',
@@ -228,5 +233,7 @@
   function setLanguage(value,{persist=true}={}){lang=value==='en'?'en':'zh-Hant';if(persist)try{localStorage.setItem('graphnews.language',JSON.stringify(lang));}catch{}refresh();if(typeof document!=='undefined'){const picker=document.getElementById('language');if(picker)picker.value=lang;}if(typeof root.dispatchEvent==='function')root.dispatchEvent(new Event('atlas-language'));}
   root.addEventListener?.('storage',event=>{if(event.key!==null&&event.key!=='graphnews.language')return;try{if(event.storageArea!==localStorage)return;const value=JSON.parse(localStorage.getItem('graphnews.language'));if(value!==null&&value!=='en'&&value!=='zh-Hant')return;const next=value==='en'?'en':'zh-Hant';if(next!==lang)setLanguage(next,{persist:false});}catch{}});
   function start(){if(typeof MutationObserver==='undefined')return;refresh();observer=new MutationObserver(records=>{for(const r of records){if(r.type==='childList')for(const n of r.addedNodes)translateNode(n);else translateNode(r.target);}});observer.observe(document.body,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['placeholder','aria-label','title']});}
-  root.AtlasI18n={t,format,language:()=>lang,setLanguage,start};if(typeof module!=='undefined'&&module.exports)module.exports=root.AtlasI18n;
+  const termEnglish={'topic.data_center':'Data centers','topic.ai_hardware':'AI hardware','topic.cloud':'Cloud','topic.energy':'Energy','driver.demand':'Demand','driver.capex':'Capital expenditure','driver.earnings':'Earnings','driver.supply':'Supply','driver.regulation':'Regulation','driver.valuation':'Valuation','analysis.narrative_momentum':'Narrative momentum','analysis.price_momentum':'Price momentum','analysis.fundamentals':'Fundamentals','analysis.risk':'Risk','analysis.noise':'Low relevance / noise','analysis.fact_check':'Fact check / correction'};
+  function termLabel(term){if(!term)return '';if(lang!=='en')return term.label||term.id;return term.translations?.en?.label||termEnglish[term.id]||(!/[\u3400-\u9fff]/.test(term.label||'')?term.label:term.id)||term.id;}
+  root.AtlasI18n={t,format,termLabel,language:()=>lang,setLanguage,start};if(typeof module!=='undefined'&&module.exports)module.exports=root.AtlasI18n;
 })(globalThis);

@@ -25,6 +25,8 @@ flowchart LR
 
 ## 後端
 
+The independent document path is customer file/folder → external agent export → JSONL preview/import → collection SQLite → `/documents` outline and graph. It shares the HTTP server and graph renderer, but does not enter the stock News → Wiki compiler/research pipeline. See [DOCUMENT_IMPORT](DOCUMENT_IMPORT.md) for ownership, revisions and testing.
+
 | 檔案 | 職責／關鍵入口 |
 | --- | --- |
 | [server.py](../server.py) | ThreadingHTTPServer、靜態檔白名單、Handler、search_events、graph_payload |

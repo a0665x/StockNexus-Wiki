@@ -1,0 +1,3 @@
+{
+  "exclude": ["data/", "dist/vendor/", "dist/*.min.js"]
+}

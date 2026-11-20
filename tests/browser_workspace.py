@@ -1,6 +1,7 @@
 """Real HTTP workspace persistence across fresh browser profiles; synthetic evidence, no model/provider calls."""
 import json,os,signal,shutil,tempfile,subprocess,time,urllib.request,threading,sys
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 import websocket
 import server
@@ -13,7 +14,9 @@ from test_wiki import proposal
 def main():
  with tempfile.TemporaryDirectory(prefix='wiki-workspace-browser-') as tmp:
   folder=Path(tmp);store=GraphRepository(folder/'data/news.sqlite3')
-  rows=[row('massive',title='Tesla earnings '+str(i),day='2026-11-04',suffix=str(i),symbols=['TSLA']) for i in range(3)]
+  today=datetime.now(timezone.utc).date()
+  start=(today-timedelta(days=3)).isoformat();end=today.isoformat()
+  rows=[row('massive',title='Tesla earnings '+str(i),day=(today-timedelta(days=1)).isoformat(),suffix=str(i),symbols=['TSLA']) for i in range(3)]
   store.for_ticker('TSLA').save('massive',query_key('massive','TSLA'),rows,[])
   wiki=WikiService(store,runner=lambda s,j,a,c:{'proposal':proposal(a),'usage':{}},start_worker=False)
   p=wiki.plan({'instrument':'NASDAQ:TSLA','model':'fixture','articles':rows[:1]});wiki.start({'plan_id':p['plan_id']});wiki.tick()
@@ -52,13 +55,13 @@ def main():
      js("AtlasWiki.show()")
      wait("$('wikiCounts').textContent.includes('節點')")
      if run==0:
-      js("$('wikiModel').value='fixture|high';$('wikiModel').dispatchEvent(new Event('input'));$('wikiRange').value='custom';$('wikiStartDate').value='2026-11-01';$('wikiEndDate').value='2026-11-06';$('wikiStartDate').dispatchEvent(new Event('input'))")
+      js(f"$('wikiModel').value='fixture|high';$('wikiModel').dispatchEvent(new Event('input'));$('wikiRange').value='custom';$('wikiStartDate').value='{start}';$('wikiEndDate').value='{end}';$('wikiStartDate').dispatchEvent(new Event('input'))")
       js("$('wikiResizeRight').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft'}));$('wikiResizeTimeline').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowUp'}))")
       time.sleep(.6)
       js("AtlasWorkspace.flush()")
       assert js("AtlasWiki.runtime.state().surface==='wiki'")
      else:
-      assert js("$('wikiModel').value==='fixture|high'&&$('wikiStartDate').value==='2026-11-01'&&$('wikiEndDate').value==='2026-11-06'")
+      assert js(f"$('wikiModel').value==='fixture|high'&&$('wikiStartDate').value==='{start}'&&$('wikiEndDate').value==='{end}'")
       assert js("$('query').value==='TSLA, earnings'&&$('renderBudget').value==='400'&&lockedRoots.length===1")
       js("$('wikiBack').click();AtlasWiki.show()")
       wait("$('wikiModel').value==='fixture|high'")

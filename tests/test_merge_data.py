@@ -70,12 +70,13 @@ class MergeDataTests(unittest.TestCase):
 
     def test_new_stock_is_paused_and_private_excluded(self):
         a=self.wiki(self.sa,[row()]);cfg=a.config();cfg.update(enabled=True,catch_up=True);a.configure(cfg)
-        (self.a/'private').mkdir();(self.a/'private/secret').write_text('secret')
+        (self.a/'private').mkdir(exist_ok=True);(self.a/'private/secret').write_text('secret')
         fresh=self.root/'fresh';run(self.a,fresh)
+        self.assertFalse((fresh/'private').exists())  # Check the merge before startup creates a local trace.
         service=WikiService(GraphRepository(fresh/'news-atlas.sqlite3'),start_worker=False)
         b=service.store('NASDAQ:TSLA')
         self.assertFalse(b.config()['enabled']);self.assertFalse(b.config()['catch_up'])
-        self.assertEqual(b.graph()['version'],1);self.assertFalse((fresh/'private').exists())
+        self.assertEqual(b.graph()['version'],1);self.assertFalse((fresh/'private/secret').exists())
 
     def test_dry_run_no_target_and_no_source_changes(self):
         self.sa.save('massive','query',[row()],[])
@@ -117,6 +118,17 @@ class MergeDataTests(unittest.TestCase):
         run(self.b,self.a);run(self.a,self.b)
         self.assertEqual(self.count(self.sa.path,'snapshots'),2)
         self.assertEqual(self.count(self.sb.path,'snapshots'),2)
+
+    def test_same_snapshot_header_but_different_edges_remains_two_graphs(self):
+        for path,edge in [(self.sa.path,'a'),(self.sb.path,'b')]:
+            with sqlite3.connect(path) as db:
+                db.execute("INSERT INTO snapshots VALUES ('id','market','2026-11-11','{}','{}')")
+                db.execute("INSERT INTO snapshot_relations VALUES ('id','cross',?,'{}')",(edge,))
+        run(self.a,self.b);run(self.a,self.b);run(self.b,self.a);run(self.a,self.b)
+        for path in (self.sa.path,self.sb.path):
+            with sqlite3.connect(path) as db:
+                self.assertEqual(db.execute('SELECT count(*) FROM snapshots').fetchone()[0],2)
+                self.assertEqual(db.execute('SELECT count(DISTINCT snapshot_id),count(*) FROM snapshot_relations').fetchone(),(2,2))
 
     def test_imported_running_job_never_queues_and_citations_preserved(self):
         a=self.wiki(self.sa,[row()])

@@ -1,5 +1,181 @@
 # 測試與驗收
 
+## Workbench release verification
+
+Run the listed scripts from the repository root. On this host, use `/usr/bin/python3` for Chromium journeys. Each journey opens an isolated profile with controlled data. The current release changes the shared header and News tool icons. The paths below also locate the acceptance records for features brought into `main` with it.
+
+| Area | Contract | Executable regression |
+| --- | --- | --- |
+| Ribbon, header edge, centered tool icons, chart and comparison | [Workbench gestures and expected results](references/wiki-timeline-workbench.md#resizing-the-shared-header) | [Header resize and image substitution](../tests/browser_workbench_header.py), [News and Wiki launchers](../tests/browser_wiki_timeline.py), [Wiki pane geometry](../tests/browser_wiki_layout.py), [News controls](../tests/browser_user_journeys.py) |
+| Stock alignment, preparation and Chat history | [Workbench and Chat](references/unslop-20261120.md) | [Browser entry and conversations](../tests/browser_unslop.py), [saved identity](../tests/browser_wiki_identity.py), [Chat history storage](../tests/chat-history.test.mjs) |
+| Parallel L1 tree work and progress | [Worker and tree units](WIKI_RUNTIME.md#2026-11-20--parallel-tree-workers-and-consistent-progress) | [Concurrent work and checkpoints](../tests/test_wiki_parallel.py), [worker progress in the browser](../tests/browser_wiki_workers.py) |
+| News-to-Wiki warm reads and isolated classifier failures | [Cache and classifier acceptance](references/wiki-cache-classifier-20261120.md) | [Conditional reads](../tests/browser_wiki_cache.py), [batch failure recovery](../tests/test_wiki_classification_batches.py) |
+| Timing and errors across L1, L2 and the model bridge | [Trace fields and report](WIKI_OBSERVABILITY.md) | [Python traces](../tests/test_wiki_trace.py), [bridge traces](../tests/chat-wiki-trace.test.mjs) |
+| L2 evidence, bilingual Chat, context and viewpoint comparison | [Research scenarios](CHAT_RESEARCH_BDD.md), [research layers](RESEARCH_LAYERS.md) | [L2 and Chat](../tests/browser_research_chat_bdd.py), [context API](../tests/test_context_api.py), [comparison](../tests/test_viewpoint_comparison.py) |
+| Client articles, missing metadata, JSONL preview and graph relations | [Document import](DOCUMENT_IMPORT.md) | [Schema, replay and relation reasons](../tests/test_document_import.py), [file upload through Chromium](../tests/browser_documents.py) |
+
+The full Python suite passed 372 tests. The combined Node command passed 48 tests. The header journey measured visible image pixels on desktop and compact screens, exercised mouse, keyboard, emulated touch and reload, and exposed a phone layout overflow during development. The final fixture kept every header action reachable. The timeline journey checked the rendered SVG path centers, the Wiki layout regression passed all 51 checks and the News journey passed its interaction checks.
+
+During a second full run, the simulated Docker terminal attempted to acquire the live launcher's lock while a deployment was starting. The terminal fixture now starts its child with a private temporary directory for its lock and simulated data. It can exercise the real terminal menu alongside a running service. The independent lock test still covers mutual exclusion. [Launcher tests](../tests/test_docker_launcher.py)
+
+```sh
+/usr/bin/python3 tests/browser_workbench_header.py
+/usr/bin/python3 tests/browser_wiki_timeline.py
+/usr/bin/python3 tests/browser_wiki_layout.py
+/usr/bin/python3 tests/browser_user_journeys.py
+/usr/bin/python3 -m unittest discover -s tests -q
+node --test tests/test_*.cjs tests/*.test.mjs
+/usr/bin/python3 spec/scripts/verify_docs.py
+git diff --check
+```
+
+## November 20, 2026 — Floating News tools, movable launchers and replaceable PNG
+
+The browser journey uses real pointer and keyboard events at 1223 × 914, 690 × 914 and 390 × 844. It verifies moving an expanded tool outside the graph, separate positions for open and minimized tools, touch cancellation, reloading nested splits, accessible focus, and delivery of the supplied PNG. [Given/When/Then and file replacement instructions](references/wiki-timeline-workbench.md#movable-tools-and-replaceable-header-artwork)
+
+| Suite | Observed result |
+| --- | --- |
+| `browser_wiki_timeline.py`, `browser_floating_resize.py` | Window gestures, separate launcher positions, dock/floating restoration, content scrolling and chart navigation passed. |
+| `browser_native_controls.py`, `browser_user_journeys.py`, `browser_feedback.py` | Native click and drag targets, unobstructed default graph controls, timeline switching, WebGL recovery, taxonomy context and price-horizon selection passed. |
+| `browser_research.py` | A real-HTTP fixture displayed the L2 report and citations when L1 was minimized. |
+| `browser_startup.py` | Normal startup and a simulated missing time-lens module both passed in Chromium. The fixture requested the header image through the HTTP handler. |
+| Python and Node | `/usr/bin/python3 -m unittest discover -s tests -q` passed 372 tests. `node --test tests/test_*.cjs tests/wiki-cache.test.mjs` passed all 21 entries. The HTTP test verifies the stable logo URL, media type, cache header and file bytes. |
+
+## November 20, 2026 — Wiki timeline, comparison and workspace
+
+| Test boundary | Result |
+| --- | --- |
+| `tests/browser_wiki_timeline.py` | Passed with Chromium mouse, wheel, keyboard and emulated touch at 1223 × 914 and 390 × 844. The journey includes a graph refresh while the mouse button is held on Energy, two-way pan, bar activation, panel move, corner resize, minimize, reopen, reload, modal reading width and focus return. |
+| Existing browser regression suites | The Wiki reader passed 50 checks, Wiki layout passed 51, published-result feedback passed 11 and L2 argument shapes passed 13. The real-HTTP L2 fixture displayed its saved report while the L1 tool was minimized. A second fresh browser profile restored the host workspace's News selection, Wiki controls and split sizes. |
+| Python and JavaScript | All 369 Python tests passed, including validation of worker count, research run and pane bounds. All 21 Node test entries for `tests/test_*.cjs` and `tests/wiki-cache.test.mjs` passed. |
+| Source index | CodeGraph 1.6.3 indexed 201 files, 4,051 nodes and 15,210 edges with zero pending changes and zero parse errors at handoff. A new MCP connection returned source for the Wiki timeline. A separate read-only SQLite connection observed a file addition, symbol rename and removal after 1.45, 0.99 and 1.00 seconds respectively during this run. |
+
+The [English scenario and runtime record](references/wiki-timeline-workbench.md) includes the before-and-after evidence and the production read-only smoke.
+
+## November 20, 2026 — Cached switching and bounded L1 backfill
+
+The [English acceptance matrix](references/wiki-cache-classifier-20261120.md) links each user journey to an executable test. These runs used isolated storage and controlled model replies, except for the explicitly identified production GETs.
+
+| Validation | Result and coverage |
+| --- | --- |
+| `PYTHONPATH=.:tests /usr/bin/python3 -m unittest discover -s tests -p 'test_*.py' -q` | 369 tests passed across the repository, including classification, graph sync, tree work, L2, storage, merge and document import. |
+| `node --test tests/chat*.test.mjs` and `node tests/wiki-cache.test.mjs` | 24 Chat/bridge tests and 4 client cache tests cover model routing, malformed classifier replies, history, stale tokens, ordering, deletion, fallback and coalescing. |
+| `tests/browser_wiki_cache.py` | 10 assertions on the real SQLite/HTTP/Chromium path cover warm paint while status is held, an intervening publication during prefetch, pinned/stock isolation, ignored drafts, conditional updates and missing Wiki behavior. |
+| `tests/browser_wiki.py`, `browser_wiki_identity.py`, `browser_wiki_results.py`, `browser_wiki_workers.py` | 50 workbench, 9 identity, 11 published-results and 10 worker checks passed. The workbench fixture now drives the current single maintenance button and real taxonomy groups. The separate layout suite passed 51 physical interaction checks, including native dropdown geometry, stale pre-stop polling, resizing and failed reads. |
+| `tests/browser_unslop.py` and `browser_documents.py` | The 14 workbench/Chat checks passed stock alignment, preparation, conversation reopen/continue/delete and narrow-screen checks. The document suite passed upload, idempotence, exact revision citations, missing title/date and explained cross-article links. |
+| `tests/browser_research.py` | Real HTTP/Chromium passed L2 generation with a fixture, cited sources, live save, cross-stock availability, read-failure recovery, late-layer response isolation, pinned history and desktop/mobile layout. The test uses the saved-Wiki stock selector. |
+| Production HTTPS GETs | For the saved NVDA v231 date range, the graph body was **8,952,360 bytes** and the unchanged response **204 bytes**. Full jobs used **31,767,337 bytes**, initial compact state **478,699 bytes**, and repeated compact state **9,834 bytes**. Six served frontend assets matched the checkout and the bridge reported ready. A fresh Chromium profile opened NVDA v231 over Tailscale, rendered 800 of 1,893 nodes and observed full and unchanged replies with zero model submissions or script errors. |
+
+A first timed loopback conditional read took 3,105 ms and the next two took 6 ms each. A write can invalidate the physical-file fast path and trigger server-side projection work even when the output agrees. A warm tab renders during that wait. These are individual host samples.
+
+The focused Python suite passed all eight classification and four sync scenarios. A test of the legacy resume endpoint first exposed classification extending outside the resumed news interval, then passed after it forwarded its computed dates.
+
+The sandbox's first broad runs encountered local socket restrictions. The full host-socket suites passed. A legacy merge fixture assumed no local private directory after service startup. Its assertions now check the destination immediately after merge and the private secret after startup, preserving the exclusion test with private traces enabled.
+
+The first production launch reached Docker healthy, then its extra five-second host probe timed out reading full corpus statistics and the launcher removed its own container. The retained data and image were reused. Both readiness checks now use `/api/capabilities`. `tests/test_healthcheck.py` exercises both against a store that refuses corpus statistics. The standard launcher completed on the final image. The authenticated host bridge reported ready and the HTTPS smoke passed.
+
+Earlier November 20 sections below retain the original regression results for private execution traces, the unslop workbench, saved Chat, parallel workers, the NVDA workflow and customer document ingestion. Current measurements and proposed next observations appear in the [acceptance record](references/wiki-cache-classifier-20261120.md#nvda-measurements).
+
+## 2026-11-20 — Wiki execution observability
+
+- Initial red loop: `python3 -m unittest discover -s tests -p test_wiki_trace.py -k test_stage_log -q` failed because the real tree-worker/model/publication path produced no durable stage trace. A controlled 25 ms model delay was otherwise unaccounted for. After instrumentation the same assertion passes and attributes the delay to `model_call`.
+- Full Wiki suite: **101 passed** (includes five focused tracing tests). Real threaded workers share a job but have distinct call IDs; failures retain safe source locations and terminal states; private file mode, rotation, concurrent JSONL writes, missing-log storage, report parsing and separate L2 fusion/review are covered. No paid inference. One initial sandbox-only socket denial was rerun with host socket permission.
+- Research suite: **24 passed**. Node Chat/bridge suite: **23 passed**, including stage correlation, usage, redaction, failure isolation, bounded files and in-flight heartbeat cleanup. Model calls use test fixtures. Final Python tracing tests reran successfully after adding explicit context-lock wait timing.
+- Existing NVDA receipts were inspected read-only: 45 prior L1 receipts, median input/output 23,130/6,823 tokens, zero rejected receipts; classification later reached the 600-second call deadline. These facts establish workload and failure, not historical stage percentages. See [observability contract](WIKI_OBSERVABILITY.md).
+- Production smoke: healthy image and ready bridge, both JSONL files at 0600, zero-article preview traced at 485 ms, no model call/job submitted. Documentation link verification and whitespace checks pass. Deployment and current job state are recorded separately in CURRENT_STATE. Logging does not change prompts, models, retries, graph schemas or published evidence.
+
+## 2026-11-20 — Unslop workbench, history and preparation
+
+- Wiki Python suite (`python3 -m unittest discover -s tests -p 'test_wiki*.py' -q`): **96 passed**. Exact forest reuse and invalidation cover changed content, dates, grouping settings and source separation; worker checkpoints remain covered.
+- Node Chat/bridge suite (`node --test tests/chat-*.test.mjs`): **19 passed**, including durable history across service restart, SDK thread resumption, owner/surface isolation, private file mode, deletion and cross-session busy guards. SDK replies are mocked; this does not certify model answer quality.
+- Chat proxy/Tailscale suite: **7 passed**. New history/conversation routes use the existing access boundary.
+- Real Chromium isolated fixtures: `browser_unslop.py` **14 checks**, `browser_wiki_identity.py` **9**, `browser_wiki_workers.py` **10**, `browser_chat_language.py` **23**, and `browser_chat_failure.py` **PASS**. Covers confirmed stock alignment, ignored input drafts, preparation stages and duplicate clicks, saved/reopened/continued/deleted history, cancelled deletion, language changes, reloads, worker navigation, mobile overflow and adjacent error display. The language fixture now waits for workspace restoration and explicitly loads its graph because entering Wiki no longer implicitly loads News; product behavior was not weakened to satisfy the fixture.
+- Paired local preparation benchmark without profiler overhead, using the same stored 9,000-record universe, date-filtered 2,338 target articles and 452 trees: regular preparation **3.693 / 4.061 s**; exact saved-forest reuse **0.839 / 0.872 s**. Returned values were equal in both pairs. This measures the preparation function with an existing graph cache, not HTTP latency, first-time work, model runtime or overall worker throughput.
+- Production rebuild: healthy container, Chat/Wiki ready, served stylesheet and two changed interaction scripts SHA256-match checkout. Tailscale UI shows automatic **NVDA v231** selection and the expanded empty Chat history. No production conversation/model job was created as a test. Existing memory-only chats cannot be recovered.
+- Desktop/mobile fixture screenshots and actual narrow-viewport production screenshots were inspected. JavaScript syntax, documentation links and whitespace checks pass. The approved design, installed skill provenance and operational limits are recorded in [the workbench reference](references/unslop-20261120.md).
+
+## 2026-11-20 — Parallel tree processing
+
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONWARNINGS=ignore::ResourceWarning python3 -m unittest discover -s tests -p 'test_wiki*.py' -q`: **95 passed**, including seven real threaded/SQLite worker tests (overlap, unequal trees, cancellation, failure, checkpoint resume, checkpoint merge, strict settings). Local HTTP tests require host socket permission; an initial sandbox socket denial was rerun successfully with that permission. Existing SQLite ResourceWarnings were suppressed in this run.
+- `node --test tests/chat-wiki.test.mjs tests/chat-service.test.mjs`: **13 passed**, including ten slots, capacity rejection, duplicate call rejection and parent cancellation.
+- `PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 tests/browser_wiki_workers.py`: **10 checks passed** in real Chromium with isolated fixtures. Covers tree/article units, three bars, disclosure after refresh, English labels, exact frozen-tree navigation with no writes, 1/3/5/10 settings, mobile overflow and no JS errors. Desktop/mobile inspected; expanded live area uses full width. No production inference used for these tests.
+- `PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 tests/browser_wiki_root.py`: **15 checks passed** for exact root navigation, render budget and wrong-stock guards.
+- Production Tailscale UI verified all three live lanes using `gpt-6.1-sol`, independent saved-segment progress and publication from v184 through v188. This verifies actual operation, not a measured 3× speedup or annual completion.
+- Added a job-history query-plan regression: initially failed with `USE TEMP B-TREE FOR ORDER BY`; passed after the timestamp index, along with all seven parallel tests. Three simultaneous production jobs GETs returned HTTP 200 after the fix. The same index was applied online to NVDA after production logs showed `database or disk is full` during progress reads (28.7 MB payload sort, 32 MB container `/tmp`, ample data disk capacity).
+- JavaScript syntax and `git diff --check` passed. Impeccable mechanical detector returned `[]` for the changed UI. Existing forest failure/resume regression now asserts that the exact already-published checkpoint is not replayed, while final tree credit remains atomic.
+
+The private annual orchestrator is operational tooling, not a product scheduler. Check its live ledger separately from these tests or the app's parent job.
+
+## 2026-11-20 — Restart and NVDA workflow
+
+User-authorized rebuild and Chat restart completed. The production container is healthy, `/documents` returns 200 with bytes matching checkout, `/api/capabilities` returns 200, and Chat/Wiki report ready. The live model catalog contains `gpt-6.2-sol`. This supersedes the earlier 404 observation; no customer document was uploaded to production as a test.
+
+The document-import unit suite was rerun: 6 passed. JavaScript syntax and `git diff --check` passed. All 139 local links across the updated handoff/map/changelog/preferences/execution reference resolved.
+
+Six isolated tests for the private NVDA controller passed, covering dependency ordering, exact saved run identity, pending annual evidence, uncertain submissions and cancellation without stopping a replacement job. These tests do not certify model output. Production L1 published version 131 from base 130 at 00:23 UTC with the authorized job still running; this is real incremental progress, not full-year completion. Real annual L1/L2 completion remains tracked in [the execution handoff](references/nvda-research-20261120.md) and private live ledger.
+
+## 2026-11-20 — Untitled/undated articles and content relations
+
+User-confirmed scenario: the skill reads article content, exports supported cross-article relations, and the UI displays them in one collection without requiring original titles or publication dates.
+
+- RED: the new integration case initially failed with `Line 3: Invalid link` for a link rationale; the new blank-filename case returned a whitespace title. Chromium reproduced the missing relation explanation after an otherwise successful upload.
+- GREEN: `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_document_import.py -v` passed **6 tests**. Added scenarios cover multiple untitled/undated articles, same display names with distinct path-based IDs, unchanged original bodies, no converter-invented links, explicit reasons surviving validation/import/readback, invalid reasons rejected, idempotent replay and blank-label fallback.
+- GREEN: `PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 tests/browser_documents.py` passed the earlier journey plus real converter → validator → native file upload of three heading-free, undated articles. Two articles have an explicit reasoned link and the unrelated article stays visible. The UI shows unknown dates, follows the target, and renders reason markup literally. No model calls, production writes or JavaScript errors.
+- `node --check dist/documents.js` and the system skill creator's `quick_validate.py skills/stocknexus-document-import` passed. Actual semantic extraction by an independent model and customer corpus quality were not exercised; relationship reasoning is supplied as a controlled fixture.
+
+The optional rationale field is backward-compatible for existing exports, but new exports containing it require the updated importer. Deployment status remains separate from these temporary-DB results.
+
+## 2026-11-20 — Document upload readiness (fresh local evidence)
+
+Baseline: `llm_wiki` / `228f6a7`. These checks use temporary fixtures, not customer files or production SQLite.
+
+| Command / action | Observed result and scope |
+| --- | --- |
+| `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_document_import.py -v` | PASS, 4 tests: preview without storage, replay/revisions/pinned citations, invalid graphs/batches, upload handler origin check, portable single-file/folder conversion and validation. |
+| `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tests python3 -m unittest test_agent_workflow test_viewpoint_comparison -v` | PASS, 4 tests: HTTP agent workflow with real SQLite and fixture providers/models, full graph pagination, stop behavior and merge/comparison flow. Python 3.13 emitted SQLite connection `ResourceWarning`s; no assertion failed. |
+| `PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 tests/browser_documents.py` | PASS, real Chromium and real HTTP routes with temporary SQLite: native file input, preview without document storage, import with 3D canvas and hierarchy, identical retry, revision update, cross-source L2 claim citing original v1 text, combined sources/layer filter, invalid upload preservation and reload. No unexpected POST or JavaScript errors. No Wiki worker/model calls. |
+| `node --check dist/documents.js` | PASS. |
+| `python3 spec/scripts/verify_docs.py` and `git diff --check` | PASS: 41 spec Markdown files have valid local links and required entrypoints; no whitespace errors. |
+| Host `docker ps` and `GET http://127.0.0.1:8765/documents` | Existing atlas container healthy, document route **404**. This is a deployment gap, not a passing production smoke test. Initial sandbox connection failure was resolved by host-level read-only inspection. |
+
+The new browser regression is [browser_documents.py](../tests/browser_documents.py); it reuses the existing Chromium/WebSocket harness and rejects non-document POSTs. The source contract and reproducible workflow are in [DOCUMENT_IMPORT](DOCUMENT_IMPORT.md).
+
+Not covered: real customer PDF/OCR extraction quality, paid inference, large collections, complete document-page English localization, or rebuilding the production Docker image. No production data or active Wiki work was changed. Prior test records below remain historical.
+
+## 2026-11-10：整理成果可見性與變更區上邊界
+
+正式唯讀查核時 GOOGL 已有 611 個 nodes 紀錄、v47；主機保存的 Wiki controls 為 L1／最新版本／wikiAssessment=__pending。已有資料不能直接推論畫面可見，尚待分類篩選會隱藏已分類成果。本輪未改工作內容或重送模型。
+
+每段通過驗證並發布後，最新版本讀取仍隨輪詢更新，不等整棵 root coverage 記帳，也不把未驗證串流當正式節點。即時區顯示已發布版本與目前載入節點；空圖區分第一段等待、圖層、分類／節點篩選、歷史版本與日期無成果。提供「查看最新已發布成果」只讀入口：切 L1／最新版本、清除節點／關係／分類篩選，保留日期與模型／工作設定。停止保留已發布節點。
+
+首次 graph GET 失敗後，poll 原本因 data 為空直接返回，造成永久空圖；現在仍輪詢工作並重試 graph GET。暫時讀取失敗保留舊成果，恢復不建立模型工作。
+
+版本變更展開時新增上邊界；向上拖曳時邊界實際上移，與進度區交換高度，各自保留最低 64px，內容可捲動。支援鍵盤、取消及既有工作區高度保存；版本更新保留展開與高度。手機維持無拖曳把手布局。
+
+`tests/browser_wiki_results.py` 隔離 Chrome 11 項檢查通過，包含首次失敗恢復、__pending 空圖、整理中發布、停止保留、真實滑鼠拖曳邊界、鍵盤持久化與語言。`tests/browser_wiki_layout.py` 48 項既有實體交互／手機檢查通過。測試使用合成資料，無正式模型呼叫。更新與先前 root 閱讀入口一起建置待部署；未中斷正式整理。
+
+## 2026-11-09：目前處理樹的閱讀入口
+
+工作狀態提供「查看第 N／總數棵新聞樹」入口；以 job 的凍結 graph_selection 成員回到 News，高亮整樹並優先納入渲染，其餘變暗。只是閱讀，不提交 plan／模型工作、不修改 News 關聯設定。畫面明示「成員為工作快照、連線依目前新聞設定」：舊工作沒有完整樹邊快照，不假冒舊邊精確重播。不同股票或未載入／隱藏來源造成成員缺漏時拒絕跳轉，保留原頁。空白點擊退出，拖動及背景連線刷新保留；點另一新聞恢復一般選取。此暫時高亮不保存為新的 Wiki 工作樹。
+
+已完成 evidence revision 跨模型／方法／篇數／News edge 設定重用，改分組不刪除舊 Wiki 知識，也不自動重新推論舊觀點。新內容版本／新增新聞仍可處理；已完成文章可能再次作脈絡，未完整發布的樹仍可能重做分段。這次不改去重與發布記帳，也不承諾零重複或全域最少 token。
+
+驗證：`tests/browser_wiki_root.py` 隔離瀏覽器直接點 root 入口，覆蓋成員高亮、閱讀不提交工作、錯股票、缺成員、語言與互動；`test_wiki.WikiTests.test_switch_model_and_prompt_does_not_reextract`、`test_wiki_forest`、`test_wiki_root_budget` 共 11 項通過。正式部署狀態另外核對；不可為更新閱讀功能而未告知就中斷在途模型。
+
+## 2026-11-09：medium root 過早逾時
+
+實際 GOOGL 兩次 root 工作均在第一段（12 篇、整樹 36 篇／4 段）約 120 秒後 failed，錯誤為 `The operation was aborted`，不是正常完成。橋接按 reasoning_effort 給 medium 120 秒，與批次結構化輸出負擔不相符；改為所有 Wiki 呼叫共用 600 秒上限，保留 640 秒 socket 邊界，明確區分逾時／取消。不改模型、分段、日期或 coverage，不自動重試。
+
+虛擬時間直接驅動 createWikiCompiler：medium 12 篇跨 120 秒、600 秒終止原因／模型槽釋放兩項先失敗後通過；`node --test tests/chat-wiki.test.mjs tests/chat-service.test.mjs` 共 11 項通過，含取消與晚回覆。未以正式模型重新執行，不保證任意輸入均能在 600 秒內完成。
+
+## 2026-11-09：8285c09 文件核對與空資料起點
+
+- `PYTHONPATH=.:tests python -m unittest test_research test_healthcheck`：24 tests PASS（2.605s）。
+- `PYTHONPATH=.:tests python tests/browser_research.py`：PASS；隔離 HTTP／Chrome 驗證 query、模型 fixture、來源、即時保存、導覽、owner 拒絕、桌面／手機 overflow，以及進度與完成結果 GET 恢復，不建立重複模型工作。
+- 先停止正式服務再按使用者授權清庫；重新啟動 `./run.sh up --non-interactive --tailscale off` 成功。實際 `/api/status` 的 articles／coverage／attempts／snapshots 均 0，`/api/wiki/status` instruments=[]、bridge_ready=true，`/api/workspace`={}，`/api/snapshots` snapshots=[]。
+- 清除 58 個 DB／sidecar（含備份），1,642,643,456 bytes；受保護憑證清理前後雜湊相同。啟動後出現新空 DB 屬正常行為。
+- 以上不代表真實來源搜尋或付費模型內容品質完成驗收，也未清除使用者瀏覽器 localStorage。手動 smoke 路線與冷啟動邊界見 [SMOKE_TEST](SMOKE_TEST.md)。
+
 入口：[PROJECT_MAP.md](PROJECT_MAP.md)。測試使用隔離 fixture／暫存 DB，不應改寫使用者的 data/news-atlas.sqlite3。
 
 ## 2026-11-07：跨步驟互動驗收與可見等待狀態
@@ -442,3 +618,26 @@ PYTHONPATH=.:tests python tests/browser_chat_language.py
 
 
 最終正式 HTTPS 驗收 PASS：`/usr/bin/python3 tests/browser_live_research_availability.py --url https://ubuntu.tail9e662c.ts.net:8765/ --stock NASDAQ:GOOGL --check-l2`；證據 `/tmp/live-l2-final.log`、`/tmp/research-availability-live.json`、`/tmp/research-availability-live.png`。從新瀏覽器設定檔以滑鼠及原生下拉切 GOOGL→L2，現有「動能」run 的 5 個 L2 節點全數渲染、與 API claims 數一致；無 JS 錯誤、零模型動作，3 次工作區偏好寫入已隔離。
+
+## 2026-11-09：低 GPU 預算不截斷工作樹閱讀
+
+Root 連結以完整已載入新聞集合核對成員，不以 graph.graphData 的 GPU 切片判定存在。閱讀時渲染預算暫用 max(使用者預算, 工作樹成員數)，所有成員優先；退出恢復原預算，不改保存設定、工作輸入或覆蓋分母。單樹仍受既有探索深度／分支／maxNodes 規則約束，這些語意選取規則與 GPU 預算不同。Wiki 從已確認 graph_universe 重建完整圖，逐樹涵蓋日期內目標，不拿當前渲染點作全集。真正未載入／隱藏來源的成員仍需補齊資料，不冒充完整樹。
+
+隔離 Chrome：180 篇全局新聞、GPU 預算 100、選中原本未渲染的 root，其樹 120 成員全部顯示，退出回到 100，完整集合維持 180，無 Wiki 寫入；連同既有入口測試共 15 項檢查通過。test_wiki_forest 共 8 項通過，含未渲染與孤立新聞覆蓋。正式容器尚未部署，以免中斷在途整理。
+
+### L2 論證分支（2026-11-10）
+
+`python tests/browser_wiki_arguments.py`：11 項隔離 Chrome 驗證支持／反對實體形狀、分支精確選取、類型及色標、HTML escaping、英文切換、缺失／未知 claim／缺 L1 不造分支、共用 claim 保留雙角色、L2-only 與 L1 隔離、零模型呼叫及 runtime errors。測試用既有成果 fixture，不修改正式 DB。
+
+同輪回歸：`tests/browser_wiki_layout.py` 48 項通過；`tests/browser_research.py` 完整隔離 HTTP／Chrome 流程通過。回歸發現先前發布結果提示改動讓 L2 空畫面未指出研究入口，已補回引導並重新驗證。語法與 `git diff --check` 通過；`docker compose build atlas` 成功，未重啟正式容器。
+
+## 2026-11-10 L1／L2 Chat 與閱讀 BDD
+
+[可重跑案例與實際模型抽查](CHAT_RESEARCH_BDD.md)。13 項 Node Chat tests 通過；新 DB→HTTP→MCP stdio→瀏覽器 BDD 通過（未來時間排除、舊快照／待整理水位、完整引用、表格及 HTML 安全）。英文分類／研究入口原先 FAIL，修正後連同新視窗與跨視窗切換 PASS。既有 Chat 語系生命週期及完整研究 HTTP／Chrome 回歸 PASS。一次真實模型已完成工具讀取與最終回答；修正測試誤選進度文字後重播驗證日期與表格，未再次付費。
+
+部署後追加：正式 8765／Chat 健康與四個 HTTP 資產雜湊 PASS；阻擋偏好與模型寫入的隔離 Chrome 驗證正式英文分類／研究入口、現有 L1 立體圖例及無 runtime error PASS。空 L2 不列圖例，不能把無資料當成圖例故障。39 份 spec 文件連結與必要入口檢查 PASS。
+
+2026-11-10 L2 語系回歸：`python tests/browser_research_locale.py` 使用隔離瀏覽器，完整展開側欄與歷史版本，涵蓋忙碌 tooltip、模型狀態失聯／恢復、排隊／執行／中斷、進度重連及中英往返。保存問題保留原文，其餘介面文字排除漏翻譯；所有模型 POST 必須為零。新視窗／跨頁切換另由 `browser_wiki_reading.py` 驗證。
+
+## DB context 情境邊界（2026-11-14）
+Given DB 有資料而畫面未載入，When 查新聞／L1／L2，Then 直接讀持久資料且不啟動模型。`test_context_api` 驗證分頁、end exclusive、未知股票不建庫、交易所不混用、related 證據、無行情不偽造零報酬、行情 ticker 隔離、非法日期／owner 拒絕、L1 精確引用且不寫入、L2 owner 隔離與固定 snapshot、缺 taxonomy 不初始化。Chat tool 的 session 與股票切換由 `chat-database.test.mjs` 驗證。正式行情覆蓋、付費模型答覆品質不由 fixture 測試證明。

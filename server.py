@@ -131,6 +131,9 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_GET(self):
+        if self.path.startswith('/api/context/'):
+            from news_atlas.context_api import handle
+            handle(self);return
         if self.path=='/api/workspace':
             from news_atlas.workspace import handle
             handle(self);return
@@ -140,6 +143,9 @@ class Handler(BaseHTTPRequestHandler):
         if self.path.startswith('/api/chat/'):
             chat_proxy.handle(self);return
         path = urllib.parse.urlsplit(self.path).path
+        if path == '/api/documents':
+            from news_atlas.documents import handle
+            handle(self);return
         if path == '/api/capabilities':
             self.json_response(200,api.capabilities());return
         if path == '/openapi.json':
@@ -170,7 +176,14 @@ class Handler(BaseHTTPRequestHandler):
             saved = self.store.load_snapshot(path.rsplit('/',1)[-1])
             self.json_response(200 if saved else 404, saved or {'error':'快照不存在'})
             return
-        files = {'/research-view.js': ('dist/research-view.js','text/javascript; charset=utf-8'), '/floating-resize.js': ('dist/floating-resize.js','text/javascript; charset=utf-8'), '/knowledge-mining.svg': ('dist/knowledge-mining.svg','image/svg+xml'), '/wiki-layout.js': ('dist/wiki-layout.js','text/javascript; charset=utf-8'), '/workspace.js': ('dist/workspace.js','text/javascript; charset=utf-8'), '/stocknexus-wiki.png': ('dist/stocknexus-wiki.png','image/png'), '/wiki-view.js': ('dist/wiki-view.js','text/javascript; charset=utf-8'), '/wiki-view.css': ('dist/wiki-view.css','text/css; charset=utf-8'), '/view-relations.js': ('dist/view-relations.js','text/javascript; charset=utf-8'), '/price-chart.js': ('dist/price-chart.js','text/javascript; charset=utf-8'), '/docking.js': ('dist/docking.js','text/javascript; charset=utf-8'), '/price-lens.js': ('dist/price-lens.js','text/javascript; charset=utf-8'), '/chat-panel.js': ('dist/chat-panel.js','text/javascript; charset=utf-8'), '/chat-panel.css': ('dist/chat-panel.css','text/css; charset=utf-8'), '/relation-settings.js': ('dist/relation-settings.js','text/javascript; charset=utf-8'), '/time-lens.js': ('dist/time-lens.js','text/javascript; charset=utf-8'), '/docs': ('dist/docs.html','text/html; charset=utf-8'), '/docs/': ('dist/docs.html','text/html; charset=utf-8'), '/vendor/swagger-ui-bundle.js': ('dist/vendor/swagger-ui-bundle.js','text/javascript; charset=utf-8'), '/vendor/swagger-ui.css': ('dist/vendor/swagger-ui.css','text/css; charset=utf-8'), '/interaction.js': ('dist/interaction.js','text/javascript; charset=utf-8'), '/date-range.js': ('dist/date-range.js','text/javascript; charset=utf-8'), '/glow.js': ('dist/glow.js','text/javascript; charset=utf-8'), '/i18n.js': ('dist/i18n.js','text/javascript; charset=utf-8'), '/explorer-ui.js': ('dist/explorer-ui.js','text/javascript; charset=utf-8'), '/schema/news-atlas.schema.json': ('schema/news-atlas.schema.json','application/json; charset=utf-8'), '/': ('dist/index.html', 'text/html; charset=utf-8'), '/3d-force-graph.min.js': ('dist/3d-force-graph.min.js', 'text/javascript; charset=utf-8'), '/app.js': ('dist/app.js', 'text/javascript; charset=utf-8'), '/graph-view.js': ('dist/graph-view.js', 'text/javascript; charset=utf-8'), '/timeline.js': ('dist/timeline.js', 'text/javascript; charset=utf-8')}
+        files = {'/workbench.css': ('dist/workbench.css','text/css; charset=utf-8'), '/wiki-comparison.js': ('dist/wiki-comparison.js','text/javascript; charset=utf-8'), '/research-view.js': ('dist/research-view.js','text/javascript; charset=utf-8'), '/floating-resize.js': ('dist/floating-resize.js','text/javascript; charset=utf-8'), '/knowledge-mining.svg': ('dist/knowledge-mining.svg','image/svg+xml'), '/wiki-layout.js': ('dist/wiki-layout.js','text/javascript; charset=utf-8'), '/workspace.js': ('dist/workspace.js','text/javascript; charset=utf-8'), '/stocknexus-wiki.png': ('dist/stocknexus-wiki.png','image/png'), '/wiki-view.js': ('dist/wiki-view.js','text/javascript; charset=utf-8'), '/wiki-view.css': ('dist/wiki-view.css','text/css; charset=utf-8'), '/view-relations.js': ('dist/view-relations.js','text/javascript; charset=utf-8'), '/price-chart.js': ('dist/price-chart.js','text/javascript; charset=utf-8'), '/docking.js': ('dist/docking.js','text/javascript; charset=utf-8'), '/price-lens.js': ('dist/price-lens.js','text/javascript; charset=utf-8'), '/chat-panel.js': ('dist/chat-panel.js','text/javascript; charset=utf-8'), '/chat-panel.css': ('dist/chat-panel.css','text/css; charset=utf-8'), '/relation-settings.js': ('dist/relation-settings.js','text/javascript; charset=utf-8'), '/time-lens.js': ('dist/time-lens.js','text/javascript; charset=utf-8'), '/docs': ('dist/docs.html','text/html; charset=utf-8'), '/docs/': ('dist/docs.html','text/html; charset=utf-8'), '/vendor/swagger-ui-bundle.js': ('dist/vendor/swagger-ui-bundle.js','text/javascript; charset=utf-8'), '/vendor/swagger-ui.css': ('dist/vendor/swagger-ui.css','text/css; charset=utf-8'), '/interaction.js': ('dist/interaction.js','text/javascript; charset=utf-8'), '/date-range.js': ('dist/date-range.js','text/javascript; charset=utf-8'), '/glow.js': ('dist/glow.js','text/javascript; charset=utf-8'), '/i18n.js': ('dist/i18n.js','text/javascript; charset=utf-8'), '/explorer-ui.js': ('dist/explorer-ui.js','text/javascript; charset=utf-8'), '/schema/news-atlas.schema.json': ('schema/news-atlas.schema.json','application/json; charset=utf-8'), '/': ('dist/index.html', 'text/html; charset=utf-8'), '/3d-force-graph.min.js': ('dist/3d-force-graph.min.js', 'text/javascript; charset=utf-8'), '/app.js': ('dist/app.js', 'text/javascript; charset=utf-8'), '/graph-view.js': ('dist/graph-view.js', 'text/javascript; charset=utf-8'), '/timeline.js': ('dist/timeline.js', 'text/javascript; charset=utf-8')}
+        files['/wiki-timeline.js'] = ('dist/wiki-timeline.js', 'text/javascript; charset=utf-8')
+        files['/wiki-cache.js'] = ('dist/wiki-cache.js', 'text/javascript; charset=utf-8')
+        files.update({
+            '/documents': ('dist/documents.html','text/html; charset=utf-8'),
+            '/documents.js': ('dist/documents.js','text/javascript; charset=utf-8'),
+            '/documents.css': ('dist/documents.css','text/css; charset=utf-8'),
+        })
         if path not in files:
             self.send_error(404)
             return
@@ -197,6 +210,10 @@ class Handler(BaseHTTPRequestHandler):
         self.json_response(200 if removed else 404, {'channels':self.store.list_channels()} if removed else {'error':'自訂 channel 不存在'})
 
     def do_POST(self):
+        if urllib.parse.urlsplit(self.path).path == '/api/documents/import':
+            from news_atlas.documents import handle_import
+            handle_import(self)
+            return
         if self.path=='/api/workspace':
             from news_atlas.workspace import handle
             handle(self);return

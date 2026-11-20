@@ -1,10 +1,30 @@
 # StockNexus-Wiki — 專案入口
 
-全圖原始碼查核：2026-11-06；Wiki 延續性入口與文件路由更新：2026-11-07（不是全庫重新查核）。這是目前工作目錄的實作地圖，不代表 GitHub main 或正在執行的 server 已同步。
+Start a new `project-spec-graph-onboarding` session on `main`. The November 20 workbench release comes from `llm_wiki_unslop`. Run `git status -sb` and `git log -3 --oneline`, read the latest handoff, then choose one feature and its test. [Current handoff](CURRENT_STATE.md#workbench-release-handoff) · [Feature-to-test index](TESTING.md#workbench-release-verification) · [CodeGraph access](codegraph/INDEX.md)
+
+The shared News and Wiki tool contract covers the resizable header, centered launcher icons, chart gestures, split restoration and the path for replacing the logo. [Window behavior and browser acceptance](references/wiki-timeline-workbench.md)
+
+The current News-to-Wiki navigation, incremental reads, classifier recovery and their acceptance scenarios are covered in the [cache and classifier contract](references/wiki-cache-classifier-20261120.md).
+
+全圖原始碼查核：2026-11-06；2026-11-09 對 `8285c09` 核對 Wiki 分組／分類統計、研究恢復與空資料啟動契約（不是全庫重新查核）。這是目前工作目錄的實作地圖，不代表 GitHub main 或正在執行的 server 已同步。
 
 真實新聞搜尋與可解釋關聯圖：Google RSS、Yahoo 地區新聞（經 Google RSS）、Massive → 標準化／規則關聯 → SQLite 快取 → 3D 星系及時間軸。Python 標準函式庫後端、原生 JavaScript 前端，支援 Docker／Compose、無前端建置程序。
 
 展示名稱 **StockNexus-Wiki**；GitHub slug **stocknexus-wiki**。現有 runtime／DB／偏好識別沿用，改名邊界見 [WORKFLOWS.md](WORKFLOWS.md)。
+
+空資料驗收入口：[SMOKE_TEST.md](SMOKE_TEST.md)。先核對 CURRENT_STATE 的最新本機交接；歷史主機與舊工作數字不是目前資料。
+
+本輪年度資料／L1 更新及市場報告交接：[2026-11-14 批次](references/annual-research-batch-20261114.md)。讀取即時 private ledger 後再續作，不沿用歷史工作數字。
+
+文件知識庫從 [英文功能與本機測試契約](DOCUMENT_IMPORT.md) 或 [外部 agent 匯入規格與範例](../skills/stocknexus-document-import/SKILL.md) 開始。使用獨立的 documents.sqlite3，由首頁進入 `/documents`；不自動送入股票 Wiki 編譯。2026-11-20 已核對 `228f6a7`，最新 Git／實測／部署差異見 CURRENT_STATE 頂部。
+
+2026-11-20 Web UI、Wiki 選股、準備快取與 Chat 歷史：[unslop 改版契約](references/unslop-20261120.md)。
+
+Wiki 耗時與錯誤追查：[執行 Log 與診斷](WIKI_OBSERVABILITY.md)。
+
+## Using this checkout's CodeGraph index
+
+Use this checkout's existing index first. Pass the repository root as `projectPath` to `codegraph_explore`, or ask one scoped question with the CLI. The access guide covers the watcher, CLI fallback and the scope of the index. [CodeGraph access](codegraph/INDEX.md)
 
 ## 新 session 的最短閱讀路徑
 
@@ -17,6 +37,7 @@
 
 | 任務／領域 | Level 2 入口 | 優先原始碼 |
 | --- | --- | --- |
+| 客戶文章／資料夾、JSONL 上傳、文件 Graph | [DOCUMENT_IMPORT.md](DOCUMENT_IMPORT.md)（English） | news_atlas/documents.py、dist/documents.js、skills/stocknexus-document-import/ |
 | 計算定義、輸入／顯示範圍、進度與目的 | [CALCULATION_METHODS.md](CALCULATION_METHODS.md) | model.py、exploration.py、price_lens.py、wiki/forest.py |
 | 操作、設定、刷新、快照、開發交付 | [WORKFLOWS.md](WORKFLOWS.md) | run.sh、server.py、dist/app.js、dist/workspace.js、news_atlas/workspace.py |
 | 整體架構、資料流、模組邊界 | [ARCHITECTURE.md](ARCHITECTURE.md) | server.py、news_atlas/、dist/app.js |
@@ -48,6 +69,8 @@
 
 ## Level 3 與既有文件
 
+- [NVDA annual research, 2026-11-20](references/nvda-research-20261120.md): authorized restart, annual source coverage, 6.2 Sol workflow and live-ledger resume rules.
+
 - [語系、重連與多視窗教訓](references/lesson-20261106-language-runtime.md)：翻譯責任、晚回應、同來源偏好同步與入口／時序驗證。
 
 - [互動、範圍與交付教訓](references/lesson-20261106-interaction-and-delivery.md)：root 概念演進、狀態耦合、初畫尺寸、手勢、測試本身及在線匯入。
@@ -75,3 +98,5 @@
 - [TOOL_DOCK.md](TOOL_DOCK.md)：右側工具停靠、可調整分隔線、版面保存與拖曳邊界。
 
 - [RESEARCH_LAYERS.md](RESEARCH_LAYERS.md)：L1／分類／Lens／L2 垂直流程、BDD 邊界、API、遷移與限制。
+
+Chat L1／L2 證據整合與日期、MCP、表格驗收：[CHAT_RESEARCH_BDD.md](CHAT_RESEARCH_BDD.md)。

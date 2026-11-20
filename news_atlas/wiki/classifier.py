@@ -1,8 +1,9 @@
 """LLM labels are a versioned index of L1, never a new evidence source.
 
 Backfill is explicitly queued by catch-up. Reads do not spend tokens. A classification
-batch is atomic; failures require an explicit retry and never overwrite old revisions.
+batch publishes atomically. Timeout recovery is bounded and scoped to its revisions.
 """
+from .trace import span, emit, job_fields, admitted, job_state, error_fields
 import json
 import datetime as dt
 import uuid
@@ -123,44 +124,223 @@ def enqueue(store,model,effort,date_range=None):
         db.execute('INSERT INTO research_jobs VALUES (?,?,?,?,?,?,NULL)',(ident,OWNER,'queued',stamp,stamp,encode(payload)))
         return {'job_id':ident,'status':'queued','pending':len(pending)}
 
-def process(store,service):
+# Limits cover the serialized evidence packet including its frozen taxonomy.
+MAX_OPINIONS = 4
+PACKET_BYTES = 48 * 1024
+DEPENDENCY_CHARS = 18000
+
+
+class InvalidBatch(ValueError):
+    """An unusable reply for these specific opinions."""
+
+
+class OversizeOpinion(ValueError):
+    """The full target and frozen taxonomy alone exceed the packet budget."""
+
+
+def classification_batch(ids, by_id, membership, tax):
+    """Intern node bodies and exact citation objects once, preserving revision membership."""
+    # The frozen taxonomy in the job remains authoritative at validation time.
+    terms = []
+    for original in tax['terms']:
+        term = dict(original)
+        for key, default in (('status','active'), ('exclude',[]), ('related_terms',[]),
+                             ('include',term.get('aliases',[]))):
+            if term.get(key) == default:
+                del term[key]
+        terms.append(term)
+    vocabulary = {**tax, 'terms':terms}
+
+    def pack(targets):
+        nodes = {}
+        citations = []
+        citation_index = {}
+        for target in targets:
+            for ident in [target['id'], *target['dependency_ids']]:
+                if ident in nodes:
+                    continue
+                original = by_id[ident]
+                node = {key: value for key, value in original.items() if key not in ('id','citations','batch_id')}
+                if 'translations' in original:
+                    canonical = {key:original[key] for key in ('title','summary') if key in original}
+                    canonical.update({key:value for key,value in (original.get('assessment') or {}).items() if key=='rationale'})
+                    node['translations'] = {lang:{k:v for k,v in fields.items() if k not in canonical or v!=canonical[k]}
+                                            for lang,fields in original['translations'].items()}
+                if 'citations' in original:
+                    node['citation_ids'] = []
+                    for citation in original['citations']:
+                        key = encode(citation)
+                        if key not in citation_index:
+                            citation_index[key] = len(citations)
+                            compact = dict(citation)
+                            if 'content_hash' in compact and compact.get('article_revision_id') == 'article-'+str(compact['content_hash']):
+                                del compact['content_hash']
+                            citations.append(compact)
+                        node['citation_ids'].append(citation_index[key])
+                nodes[ident] = node
+        return {'opinions': targets, 'nodes': nodes, 'citations': citations, 'taxonomy': vocabulary}
+
+    targets = []
+    result = None
+    for ident in ids[:MAX_OPINIONS]:
+        available = [dep for dep in membership.get(ident, []) if dep != ident]
+        selected = []
+        chars = 0
+        for dep in available:
+            chars += len(encode(by_id[dep]))
+            if chars > DEPENDENCY_CHARS:
+                break
+            selected.append(dep)
+        target = {'id':ident, 'dependency_ids':selected, 'dependency_context_truncated':len(selected) < len(available)}
+        while True:
+            candidate = pack([*targets, target])
+            if len(encode(candidate).encode('utf-8')) <= PACKET_BYTES:
+                break
+            if targets:
+                return result  # leave this target intact for the next batch
+            if not selected:
+                raise OversizeOpinion('單一觀點與分類表超過輸入上限，已保留待處理')
+            selected.pop()
+            target['dependency_context_truncated'] = True
+        targets.append(target)
+        result = candidate
+    return result
+
+
+def _validate_batch(response, packet, taxonomy):
+    try:
+        rows = response['proposal']['opinions']
+        targets = {opinion['id'] for opinion in packet['opinions']}
+        if not isinstance(rows, list) or len(rows) != len(targets) or {r['opinion_revision'] for r in rows} != targets:
+            raise ValueError('Classification must cover each exact L1 revision once')
+        return [validate({k:v for k,v in r.items() if k != 'opinion_revision'},
+                         {'id':r['opinion_revision']}, taxonomy) for r in rows]
+    except (KeyError, TypeError, ValueError) as error:
+        raise InvalidBatch(str(error)) from error
+
+
+def _unresolved(payload, known):
+    return [ident for ident in payload['opinion_ids'] if ident not in known]
+
+
+def _save_progress(db, key, payload, known, expected):
+    missing = _unresolved(payload, known)
+    failed = set(payload.get('failed_ids', []))
+    # A different publisher may have assigned one of these revisions during the model call.
+    if missing and all(ident in failed for ident in missing):
+        missing = _unresolved(payload, assignments(db, payload['taxonomy']['revision_id']))
+    payload['failed_ids'] = [ident for ident in missing if ident in failed]
+    payload['done'] = len(payload['opinion_ids']) - len(missing)
+    if any(ident not in failed for ident in missing):
+        status, error = 'queued', None
+    elif missing:
+        status = 'failed'
+        error = f'尚有 {len(missing)} 個觀點未分類。已保存其他批次，可按繼續整理補做。'
+    else:
+        status, error = 'completed', None
+    db.execute('UPDATE research_jobs SET status=?,payload=?,error=?,updated_at=? WHERE id=? AND status=?',
+               (status, encode(payload), error, now(), key, expected))
+    return status
+
+
+def process(store, service):
     with store.connection() as db:
         db.execute('BEGIN IMMEDIATE')
-        r=db.execute("SELECT * FROM research_jobs WHERE status='queued' AND json_extract(payload,'$.operation')='classify_l1' ORDER BY created_at LIMIT 1").fetchone()
-        if not r:return
-        job=dict(r);p=json.loads(job['payload']);known=assignments(db,p['taxonomy']['revision_id'])
-        ids=[i for i in p['opinion_ids'] if i not in known][:12]
-        graph={'nodes':[json.loads(r[0]) for r in db.execute('SELECT payload FROM nodes')],'edges':[json.loads(r[0]) for r in db.execute('SELECT payload FROM edges')]}
-        byid={n['id']:n for n in graph['nodes']};membership=groups(graph);nodes=[];size=0
-        for i in ids:
-            if i not in byid:continue
-            n={**byid[i],'dependencies':[]};budget=0
-            for dep in membership.get(i,[]):
-                if dep==i:continue
-                value=byid[dep];budget+=len(encode(value))
-                if budget>18000:break
-                n['dependencies'].append(value)
-            n['dependency_context_truncated']=len(n['dependencies'])<len(membership.get(i,[]))-1
-            length=len(encode(n))
-            if nodes and size+length>65000:break
-            nodes.append(n);size+=length
-        if not nodes:db.execute("UPDATE research_jobs SET status='completed',payload=json_set(payload,'$.done',?),updated_at=? WHERE id=?",(p['total'],now(),job['id']));return
-        p['current_title']=nodes[0]['title'];p['current_size']=len(nodes)
-        db.execute("UPDATE research_jobs SET status='running',payload=?,updated_at=? WHERE id=?",(encode(p),now(),job['id']))
-    service.active=(store,job['id'])
+        row = db.execute("SELECT * FROM research_jobs WHERE status='queued' AND json_extract(payload,'$.operation')='classify_l1' ORDER BY created_at LIMIT 1").fetchone()
+        if not row:
+            return
+        job = dict(row)
+        payload = json.loads(row['payload'])
+        fields = job_fields(store, job)
+        tax = payload['taxonomy']
+        known = assignments(db, tax['revision_id'])
+        failed = set(payload.get('failed_ids', []))
+        remaining = [ident for ident in _unresolved(payload, known) if ident not in failed]
+        if not remaining:
+            _save_progress(db, job['id'], payload, known, 'queued')
+            return
+        waiting = payload.setdefault('retry_batches', [])
+        pending = set(remaining)
+        retry_ids = []
+        while waiting and not retry_ids:
+            retry_ids = [ident for ident in waiting.pop(0) if ident in pending]
+        ids = retry_ids or remaining[:MAX_OPINIONS]
+        with span(store, 'classification_prepare', **fields):
+            graph = {'nodes':[json.loads(r[0]) for r in db.execute('SELECT payload FROM nodes')],
+                     'edges':[json.loads(r[0]) for r in db.execute('SELECT payload FROM edges')]}
+            by_id = {node['id']:node for node in graph['nodes']}
+            absent = [ident for ident in ids if ident not in by_id]
+            payload.setdefault('failed_ids', []).extend(absent)
+            ids = [ident for ident in ids if ident in by_id]
+            try:
+                packet = classification_batch(ids, by_id, groups(graph), tax)
+            except OversizeOpinion as error:
+                payload['last_batch_error'] = str(error)
+                payload['failed_ids'].append(ids[0])
+                emit(store, 'state', 'classification_batch', **fields, status='input_too_large', opinions=1)
+                packet = None
+            if packet is None:
+                if retry_ids and len(ids)>1:
+                    waiting.insert(0, ids[1:])
+                if _save_progress(db, job['id'], payload, known, 'queued') == 'queued':
+                    service.wake.set()
+                return
+            batch = [target['id'] for target in packet['opinions']]
+            if retry_ids and len(batch)<len(ids):
+                waiting.insert(0, ids[len(batch):])
+            payload.update(current_title=by_id[batch[0]]['title'], current_size=len(batch), current_batch=batch,
+                           recovering=bool(retry_ids))
+            db.execute("UPDATE research_jobs SET status='running',payload=?,updated_at=? WHERE id=?", (encode(payload),now(),job['id']))
+    service.active = (store, job['id'])
+    admitted(store, job)
     try:
-        response=service.runner(store,{'id':job['id'],'payload':p},{'opinions':nodes,'taxonomy':p['taxonomy']},[])
-        p['usage']={k:p.get('usage',{}).get(k,0)+v for k,v in response.get('usage',{}).items() if type(v)==int and v>=0}
-        with store.connection() as db:put(db,'model_receipt',{'job_id':job['id'],'phase':'classify_l1','usage':response.get('usage',{}),'recorded_at':now()})
-        rows=response.get('proposal',{}).get('opinions',[])
-        if len(rows)!=len(nodes) or {x.get('opinion_revision') for x in rows}!={n['id'] for n in nodes}:raise ValueError('Classification must cover each exact L1 revision once')
-        byid={n['id']:n for n in nodes};records=[validate({k:v for k,v in x.items() if k!='opinion_revision'},byid[x['opinion_revision']],p['taxonomy']) for x in rows]
+        emit(store, 'state', 'classification_batch', **fields, opinions=len(batch), nodes=len(packet['nodes']),
+             citations=len(packet['citations']), input_bytes=len(encode(packet).encode()), recovering=bool(retry_ids))
+        call = {'id':job['id'], 'payload':payload}
+        response = service.run_model(store, call, packet, [])
+        if not isinstance(response, dict):
+            raise InvalidBatch('Expected a classification response object')
+        usage = response.get('usage') or {}
+        totals = payload.setdefault('usage', {})
+        for key,value in usage.items():
+            if type(value) is int and value >= 0:
+                totals[key] = totals.get(key, 0) + value
+        with store.connection() as db:
+            put(db, 'model_receipt', {'job_id':job['id'], 'phase':'classify_l1','usage':usage,'recorded_at':now()})
+        with span(store, 'classification_validate', **fields):
+            records = _validate_batch(response, packet, tax)
+        with span(store, 'classification_publish', **fields), store.connection() as db:
+            db.execute('BEGIN IMMEDIATE')
+            if db.execute('SELECT status FROM research_jobs WHERE id=?',(job['id'],)).fetchone()[0] != 'running':
+                return
+            for record in records:
+                save(db, record)
+            status = _save_progress(db, job['id'], payload, {*known, *batch}, 'running')
+        if status == 'queued':
+            service.wake.set()
+    except Exception as error:
+        # Only a confirmed timeout or a rejected per-batch proposal has a useful smaller retry.
+        local_failure = (isinstance(error, (TimeoutError, InvalidBatch)) or
+                         str(error).startswith(('Wiki compilation timed out after 600 seconds','Invalid Wiki classification response')))
+        emit(store, 'error', 'classification_batch', **fields, **error_fields(error), opinions=len(batch))
         with store.connection() as db:
             db.execute('BEGIN IMMEDIATE')
-            if db.execute('SELECT status FROM research_jobs WHERE id=?',(job['id'],)).fetchone()[0]!='running':return
-            for record in records:save(db,record)
-            p['done']+=len(nodes)
-            db.execute('UPDATE research_jobs SET status=?,payload=?,updated_at=? WHERE id=?',('completed' if p['done']>=p['total'] else 'queued',encode(p),now(),job['id']))
-    except Exception as e:
-        with store.connection() as db:db.execute("UPDATE research_jobs SET status='failed',error=?,updated_at=? WHERE id=? AND status='running'",(str(e)[:600],now(),job['id']))
-    finally:service.active=None
+            if db.execute('SELECT status FROM research_jobs WHERE id=?',(job['id'],)).fetchone()[0] != 'running':
+                return
+            if not local_failure:
+                db.execute("UPDATE research_jobs SET status='failed',payload=?,error=?,updated_at=? WHERE id=?",
+                           (encode(payload),str(error)[:600],now(),job['id']))
+                return
+            if len(batch)>1 and not retry_ids:
+                mid = (len(batch)+1)//2
+                waiting[:0] = [batch[:mid], batch[mid:]]
+                emit(store, 'state', 'classification_split', **fields, opinions=len(batch), children=2)
+            else:
+                payload['failed_ids'].extend(batch)
+            payload['last_batch_error'] = str(error)[:600]
+            status = _save_progress(db, job['id'], payload, known, 'running')
+        if status == 'queued':
+            service.wake.set()
+    finally:
+        job_state(store, job, 'research_jobs')
+        service.active = None

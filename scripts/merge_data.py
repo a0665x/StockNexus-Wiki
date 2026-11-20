@@ -3,6 +3,7 @@
 import argparse
 import contextlib
 import datetime as dt
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -17,7 +18,7 @@ from news_atlas.storage import Store
 from news_atlas.wiki.store import WikiStore, digest, instrument, folder_name
 
 NEWS = {'articles','memberships','membership_origins','coverage','attempts','snapshots','snapshot_articles','snapshot_relations','channels','daily_prices','price_downloads','graph_metadata'}
-WIKI = {'metadata','articles','versions','nodes','edges','extractions','jobs','review_coverage','reviews','calls','rejected_proposals'}
+WIKI = {'wiki_segments','metadata','articles','versions','nodes','edges','extractions','jobs','review_coverage','reviews','calls','rejected_proposals'}
 from news_atlas.wiki.research import TABLES as RESEARCH_TABLES
 WIKI |= RESEARCH_TABLES
 AUX = {'merge_conflicts','merge_versions','merge_records'}
@@ -167,6 +168,9 @@ def wiki_merge(src,dst,stats,stamp):
                     else:stats['duplicates']+=1
                     continue
                 p['available_at']=stamp;r['payload']=encoded(p)
+                if p.get('kind')!='ArticleRevision':
+                    dst.execute('INSERT OR IGNORE INTO merge_records VALUES (?,?,?)',
+                                ('viewpoint:'+r['id'],'imported_viewpoint',r[v]))
             elif t=='edges':
                 old=dst.execute('SELECT payload FROM edges WHERE id=?',(r['id'],)).fetchone()
                 if old:
@@ -178,6 +182,10 @@ def wiki_merge(src,dst,stats,stamp):
                     continue
                 p=json.loads(r['payload']);p['available_at']=stamp;p['decision_as_of']=stamp;r['payload']=encoded(p)
             union_row(dst,t,r,stats,ignore=(v,))
+    if 'wiki_segments' in st:
+        for raw in src.execute('SELECT * FROM wiki_segments'):
+            r=dict(raw);r['version']=version_map[r['version']]
+            union_row(dst,'wiki_segments',r,stats,ignore=('version','job_id'))
     for t in ('jobs','calls','reviews','rejected_proposals'):
         if t not in st:continue
         for raw in src.execute('SELECT * FROM '+t):
@@ -212,7 +220,15 @@ def wiki_merge(src,dst,stats,stamp):
                 if dst.execute('SELECT 1 FROM research_objects WHERE id=?',(r['id'],)).fetchone():continue
                 event=json.loads(r['payload']);event['original_known_at']=event['known_at'];event['known_at']=stamp;event['committed_at']=stamp
                 r.update(owner='',created_at=stamp,payload=encoded(event))
-            else:r['owner']='imported:'+digest(source_ident)[:16]
+            else:
+                # A returned copy of our own immutable run/snapshot is a duplicate.
+                # Keep the destination owner and keep different payloads in the conflict archive.
+                if t=='research_objects':
+                    existing=dst.execute('SELECT kind,payload FROM research_objects WHERE id=?',(r['id'],)).fetchone()
+                    if existing and existing['kind']==r['kind'] and existing['payload']==r['payload']:
+                        stats['duplicates']+=1
+                        continue
+                if not r['owner'].startswith('imported:'):r['owner']='imported:'+digest(source_ident)[:16]
             if t=='research_jobs' and r['status'] in ('queued','running'):
                 r['status']='interrupted';r['error']='Imported research; explicit local query required'
             union_row(dst,t,r,stats)
@@ -235,6 +251,18 @@ def wiki_merge(src,dst,stats,stamp):
                 raise ValueError('Invalid citation span/content hash; source snapshot retained')
 
 
+def snapshot_content(db,snapshot_id):
+    # Headers alone cannot identify the saved nodes and edges.
+    fingerprint=hashlib.sha256()
+    present=tables(db)
+    for table,columns in [('snapshot_articles','provider,article_id,payload'),('snapshot_relations','scope,edge_id,payload')]:
+        fingerprint.update(table.encode())
+        if table in present:
+            for row in db.execute(f'SELECT {columns} FROM {table} WHERE snapshot_id=? ORDER BY 1,2',(snapshot_id,)):
+                fingerprint.update(encoded(tuple(row)).encode()+b'\n')
+    return fingerprint.hexdigest()
+
+
 def merge(src,dst,kind,stamp):
     ceiling={'news':4,'wiki':1,'prices':0}[kind]
     if src.execute('PRAGMA user_version').fetchone()[0]>ceiling or dst.execute('PRAGMA user_version').fetchone()[0]>ceiling:
@@ -247,10 +275,13 @@ def merge(src,dst,kind,stamp):
         if kind=='news' and 'snapshots' in st:
             for raw in src.execute('SELECT * FROM snapshots'):
                 r=dict(raw);old=dst.execute('SELECT * FROM snapshots WHERE id=?',(r['id'],)).fetchone()
-                same=dst.execute('SELECT id FROM snapshots WHERE name=? AND created_at=? AND search_json=? AND view_json=? ORDER BY id LIMIT 1',tuple(r[k] for k in ('name','created_at','search_json','view_json'))).fetchone()
-                if same:snapshot_map[r['id']]=same[0]
-                elif old and dict(old)!=r:
-                    snapshot_map[r['id']]='import-'+digest(r)
+                headers=tuple(r[k] for k in ('name','created_at','search_json','view_json'))
+                candidates=dst.execute('SELECT id FROM snapshots WHERE name=? AND created_at=? AND search_json=? AND view_json=? ORDER BY id',headers).fetchall()
+                if candidates or old:
+                    content=snapshot_content(src,r['id'])
+                    same=next((c[0] for c in candidates if snapshot_content(dst,c[0])==content),None)
+                    if same:snapshot_map[r['id']]=same
+                    elif old:snapshot_map[r['id']]='import-'+digest([headers,content])
         for t in sorted(st-AUX):
             for raw in src.execute('SELECT * FROM '+ident(t)):
                 row=dict(raw)
@@ -301,7 +332,7 @@ def inventory(root):
         result.append((p.relative_to(root),'wiki',canonical))
     for rel,_,_ in result:
         if (root/rel).resolve()!=root/rel:raise ValueError('Symlink database paths are not supported')
-    if not result:raise ValueError('No supported databases found; select data, llm_wiki, or a stock folder')
+    if not result:raise ValueError('No supported databases found; select data, graph, llm_wiki, or a stock folder')
     return result
 
 
@@ -316,6 +347,7 @@ def destination_entries(entries,target):
     stock_category=None
     if (target/'wiki.sqlite3').exists():stock_category='llm_wiki'
     elif (target/'news-atlas.sqlite3').exists() and target.parent.name=='graph':stock_category='graph'
+    elif target.parent.name in ('graph','llm_wiki'):stock_category=target.parent.name
     elif len(categories)==1 and all(target.name==r[2].parent.name for r in entries):stock_category=next(iter(categories))
     elif (target/'news-atlas.sqlite3').exists():
         with contextlib.closing(connect(target/'news-atlas.sqlite3',True)) as db:
@@ -410,7 +442,7 @@ def main():
     parser=argparse.ArgumentParser(description='Union stock data. The web UI may stay open; pause target Wiki jobs/watchers first; local conflicting values are retained, incoming conflicts archived. Never copies private credentials or calls LLMs.')
     parser.add_argument('--from',dest='source',required=True,help='Source data, graph, llm_wiki, or stock directory')
     parser.add_argument('--to',dest='target',required=True,help='Target data, graph, llm_wiki, or stock directory')
-    parser.add_argument('--dry-run',action='store_true',help='Validate and report without changing target contents')
+    parser.add_argument('--dry-run',action='store_true',help='Preview only. To apply the merge, run the same command again without --dry-run.')
     args=parser.parse_args()
     try:print(json.dumps(run(args.source,args.target,args.dry_run),ensure_ascii=False,indent=2))
     except (ValueError,sqlite3.Error,OSError,KeyError,TypeError) as e:

@@ -4,6 +4,20 @@
 
 Turn a flood of news into connected, traceable opinions that you can explore and maintain over time.
 
+## Build a research graph from your own documents
+
+Give your agent access to the [complete skill folder](skills/stocknexus-document-import/) and the documents. The leading `/` below denotes the root of the agent’s workspace.
+
+```text
+Read /stocknexus-document-import/SKILL.md and process <path to the article or folder>.
+```
+
+When the agent returns the validated `records.jsonl`, choose **Import documents** on the homepage, select the file and click **匯入並開啟圖譜** (import and open graph). You can use the default collection and source.
+
+The document workspace is at `/documents`. Preview with **只預覽** before importing. Web uploads accept JSONL up to 32 MiB; Markdown/text conversion is bundled, while PDF, Word and other formats need extraction by your agent. The document page currently uses Chinese labels.
+
+Imported documents form a separate knowledge collection. Browsing it does not start a model or feed documents into the stock LLM Wiki. Your agent can include L1/L2 claims with citations when requested. See the [English document import guide](spec/DOCUMENT_IMPORT.md) for the full workflow, update behavior and local tests.
+
 ## What does it help you do?
 
 - **Cut through news overload**: collect Google News RSS, Yahoo news and Massive articles, deduplicate them, and explore related events in a news graph.
@@ -61,14 +75,37 @@ For local Python mode, use `./run.sh local`. See the [runtime guide](spec/RUNTIM
 - News and Wiki data are stored in local SQLite databases by stock, including nodes, relationships, sources and revisions.
 - Persistent graph caches reuse earlier work when you change display budgets, switch sources or reopen the page.
 - Save a news graph snapshot, export JSON, or export Wiki Markdown.
-- Use `merge_data.sh` to merge data from another computer or USB drive. Pause Wiki processing for the target stock, preview the merge, then apply it:
+
+### Import from another directory
+
+Choose your source and pause Wiki processing for the target stocks. This example imports all of `../incoming/data` into `./data`. For a single stock, use `../incoming/data/graph/GOOGL` (news graph) or `../incoming/data/llm_wiki/GOOGL` (Wiki) as the source in both steps.
+
+1. **Preview the merge.** Adding `--dry-run` shows the planned changes without writing to the destination database.
+
+   ```bash
+   ./merge_data.sh --from ../incoming/data --to ./data --dry-run
+   ```
+
+2. **Apply the merge.** After checking the preview, keep the same source and destination, remove `--dry-run`, and run the command again to write the changes.
+
+   ```bash
+   ./merge_data.sh --from ../incoming/data --to ./data
+   ```
+
+See [data merging and backups](spec/DATA_MERGE.md) for more examples.
+
+## Import your own document graph
+
+Give your independent agent the [document import skill](skills/stocknexus-document-import/SKILL.md) and a folder. Ask for UTF-8 JSONL with stable IDs, hierarchy and original locators. Transfer the result to the web server host and run from the project root:
 
 ```bash
-./merge_data.sh --from /media/usb/data --to ./data --dry-run
-./merge_data.sh --from /media/usb/data --to ./data
+# Preview only
+python3 scripts/import_documents.py --collection my_research --source manuals --input records.jsonl --dry-run
+# Remove --dry-run to apply
+python3 scripts/import_documents.py --collection my_research --source manuals --input records.jsonl
 ```
 
-Replace the paths with your actual source and destination. See [data merging and backups](spec/DATA_MERGE.md).
+Choose the collection and check its source beneath Massive on the homepage. Open multiple sources together in the document graph. Use the same `--data-dir` on both commands if the service mounts a different host directory. Undated documents and agent-authored L1/L2 claims are supported.
 
 ## Learn more
 

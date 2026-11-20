@@ -8,7 +8,7 @@ from ..graph_storage import select
 from ..graph_cache import build_cached
 from ..graph_payload import graph_payload
 from ..exploration import trace,settings,adjacency_index
-from .store import capture
+from .store import capture, digest
 from .evidence import bounded_groups
 
 PROVIDERS=('google','yahoo','massive')
@@ -32,9 +32,24 @@ def in_range(a,dates):
     day=(a.get('published_at') or '')[:10]
     return not dates or bool(day and dates['start']<=day<=dates['end'])
 
-def prepare(news,ident,universe,graph_settings,dates):
+from .trace import span
+
+def prepare(news,ident,universe,graph_settings,dates,*,cached=None):
+    with span(news,'prepare_forest',instrument=ident) as metrics:
+        result=_prepare(news,ident,universe,graph_settings,dates,cached=cached)
+        metrics.update(cache_hit=result[2] is cached,trees=len(result[2]['trees']),target_articles=len(result[0]))
+        return result
+
+def _prepare(news,ident,universe,graph_settings,dates,*,cached=None):
     raw=universe_rows(news,ident,universe);store=select(news,ident.split(':')[1])
-    graph=build_cached(store,graph_payload,raw,store.list_channels(),graph_settings['relation_settings'])
+    channels=store.list_channels()
+    from ..graph_cache import VERSION
+    fingerprint=digest(['forest-v1',VERSION,ident,raw,channels,graph_settings,dates,universe.get('separate',False)])
+    rows=[capture(a) for a in raw];targets=[a for a in rows if in_range(a,dates)]
+    if cached and cached.get('fingerprint')==fingerprint:
+        context_keys={(a['provider'],a['id']) for tree in cached['trees'] for a in tree['articles']}
+        return targets,[a for a in rows if (a['provider'],a['id']) in context_keys],cached
+    graph=build_cached(store,graph_payload,raw,channels,graph_settings['relation_settings'])
     cfg=settings(graph_settings['exploration']);separate=universe.get('separate',False)
     key=lambda p,i:p+'::'+i if separate else i
     refs={};titles={};edges={}
@@ -49,7 +64,6 @@ def prepare(news,ident,universe,graph_settings,dates):
             pair=tuple(sorted((e['source'],e['target'])))
             if pair not in edges:edges[pair]={**e,'id':':'.join(pair),'scope':'cross'}
     edges=[e for e in edges.values() if e['weight']>=cfg['crossMin' if e['scope']=='cross' else 'internalMin']]
-    rows=[capture(a) for a in raw];targets=[a for a in rows if in_range(a,dates)]
     target_keys={(a['provider'],a['id']) for a in targets};uncovered=set(target_keys)
     degree={n:0 for n in refs}
     for e in edges:degree[e['source']]+=e['weight'];degree[e['target']]+=e['weight']
@@ -66,7 +80,7 @@ def prepare(news,ident,universe,graph_settings,dates):
         context_keys.update((a['provider'],a['id']) for a in members)
     if uncovered:raise ValueError('完整圖譜覆蓋未完成，請重新預覽')
     context=[a for a in rows if (a['provider'],a['id']) in context_keys]
-    forest={'mode':'coverage','ticker':ident.split(':')[1],'trees':trees,'universe_articles':len(rows),'target_articles':len(targets),'context_articles':len(context),'target_revisions':[a['revision_id'] for a in targets]}
+    forest={'mode':'coverage','fingerprint':fingerprint,'ticker':ident.split(':')[1],'trees':trees,'universe_articles':len(rows),'target_articles':len(targets),'context_articles':len(context),'target_revisions':[a['revision_id'] for a in targets]}
     return targets,context,forest
 
 def groups(pending,context,forest):

@@ -1,5 +1,7 @@
 # REST、Swagger 與 MCP 邊界
 
+The optional graph sync and compact jobs query parameters are documented alongside their [response and fallback contracts](references/wiki-cache-classifier-20261120.md#runtime-behavior). Existing callers can still read the full endpoints.
+
 入口：[PROJECT_MAP.md](PROJECT_MAP.md)。完整操作表與 request 示意保留於 [docs/API.md](../docs/API.md)，此處只提供開發定位，避免兩份巨型 API 清單漂移。
 
 ## 文件與路由
@@ -13,7 +15,11 @@
 
 ## 合約要點
 
-POST 需 application/json。一般 body 上限 16384 bytes；snapshots、classify 及 api.POST_PATHS 接受最多 268435456 bytes（256 MiB；超過明確拒絕，不截斷）。驗證錯誤 400，找不到資源 404，Content-Type 錯誤 415，建立快照 201。HTTP 200 不等於來源成功或歷史完整。
+一般 POST 需 application/json；文件匯入例外使用 application/x-ndjson，見下節。一般 body 上限 16384 bytes；snapshots、classify 及 api.POST_PATHS 接受最多 268435456 bytes（256 MiB；超過明確拒絕，不截斷）。驗證錯誤 400，找不到資源 404，Content-Type 錯誤 415，建立快照 201。HTTP 200 不等於來源成功或歷史完整。
+
+## Document collections (2026-11-19)
+
+`GET /api/documents` reads the collection/source catalog, current nodes or an exact historical revision. `POST /api/documents/import` requires `collection`, `source` and `mode=preview|apply`, with a raw UTF-8 JSONL body (`application/x-ndjson`, maximum 32 MiB). Preview does not persist document data; apply appends changed revisions. Both endpoints use the existing allowed-host/same-origin guard. The UI is `/documents`; this route is independent of stock Wiki jobs and the JSON-body limits above. Full parameters, persistence and source owners: [DOCUMENT_IMPORT](DOCUMENT_IMPORT.md).
 
 `/api/search` 是 NDJSON：cache/status/source/heartbeat/done，一行一物件。`/api/search/result` 聚合成單一 JSON，檢查 partial 及每來源 warnings/error/cache。兩者會外連並寫 acquisition cache。
 
@@ -49,3 +55,34 @@ Chat 同源代理：GET `/api/chat/status`；POST `/api/chat/session|sync|turn|c
 新增 `POST /api/graph/preview`（NDJSON、最多2400不同節點），搜尋可指定 `defer_relations:true`。範圍、配對計數及局部快照契約見 [視圖關聯流程](references/view-first-relations-20261104.md)。
 
 `POST /api/graph/preview` 新增 `include_cross`（預設true）；分組畫面送false。progress/result的 `pairs_computed`／`pairs_reused` 區分新評分與快取命中，`pairs_checked`仍是掃描數。快照view新增 `render_budget`、`relation_cache_version`、`relation_scope_sources`、`relation_views`（最多12組）；細節見OpenAPI及[增量重用說明](references/view-first-relations-20261104.md)。
+
+
+### Wiki 新建股票來源（2026-11-14）
+`GET /api/wiki/status` 新增 `news_databases: [{instrument,ticker,articles}]`。`POST /api/wiki/plan` 與 `/apply` 支援 `news_db:true`（global scope），以已存在的對應股票新聞 DB 為唯一輸入，遵守 date_range 與 10,000 篇界限。此路徑不擷取外部新聞。
+
+`POST /api/wiki/configure` 可在沒有活動 extraction/classification 工作時保存 `model`／`reasoning_effort`，保留日期、凍結範圍與成果，不重新建立 plan；有活動工作時拒絕。
+
+## 情境式唯讀查詢（2026-11-14）
+新增 `/api/context/catalog|news|related|prices|l1|l2`，不受畫面節點預算限制、不外連、不建立 DB／研究工作。實作 [context_api.py](../news_atlas/context_api.py)；完整使用契約與情境路由在 [獨立 Skill](../skills/stocknexus-research-api/SKILL.md) 及其 [API 表](../skills/stocknexus-research-api/references/routes.md)。Chat 新增 `read_database` 經原 session/tool capability 與瀏覽器同源取用；回應時股票切換會拒絕過期結果。既有文章／graph／Wiki 路由保留。操作總數以實際 OpenAPI 為準，本文歷史 29 個數字不代表目前總數。
+
+### Agent 更新與修訂流程
+
+Swagger 首頁列出下列可串接的操作。整條 HTTP 流程的隔離驗收在 [test_agent_workflow.py](../tests/test_agent_workflow.py)，使用正式 handler 和 SQLite，來源及模型使用 fixture。
+
+1. GET `/api/context/catalog` 查看股票、新聞筆數、L1 最新版本、目前 owner 的 L2 run 數。
+2. POST `/api/cache/graph` 提供 instrument、sources、起迄日期。依各來源的 missing_ranges 決定是否 POST `/api/search`。搜尋輸入的 end 含當天，缺口的 end 不含當天。沿用原搜尋條件即只補缺口。消費 NDJSON 的 cache、status、heartbeat、source、done，再查 coverage。
+3. GET `/api/wiki/models`，POST `/api/wiki/plan` 指定 model、instrument、news_db:true、scope:global 及 date_range。update 編譯新證據，review 重新評估已處理證據。POST `/api/wiki/jobs` 送 plan_id，GET 同路徑帶 instrument 觀察目前工作。
+4. GET `/api/context/graph` 帶 instrument，選 collection=nodes 或 edges。後續頁帶首次回傳的 version 和 next_offset 作為 offset。edges 加節點 id 可讀取該節點全部入邊與出邊，包括 SUPPORTS、CONTRADICTS 及 UPDATES。完整分頁獨立於 3D 預算。模型維護仍以批次選取相關觀點。
+5. GET `/api/wiki/research/availability`，POST query，GET job，依 payload.run_id 讀 run，再 save 為 live 或 pinned。刷新 live 傳 lens_id 與 expected_revision。來源更正可以 source-status 登記 corrected 或 retracted 並附理由。舊 run 保留原快照。
+6. GET `/api/chat/models` 回傳目前 Codex 全目錄。`POST /api/chat/turn` 可指定 model。Wiki 的目錄只列名稱屬於 Sol、Luna、Mini、Nano 的模型，兩處重用主機五分鐘的 model/list 快取。
+
+7. 合併後可用 research/comparison-candidates 以 q、offset 搜尋同股的精確觀點 ref。POST research/compare 傳 instrument、refs（兩個）、model 與選用 reasoning_effort；GET research/job 查看狀態，完成後依 payload.comparison_id 讀 research/comparison。research/comparisons 可分頁查看本機比對紀錄。
+
+
+### Parallel Wiki tree jobs (2026-11-20)
+
+`POST /api/wiki/plan|apply` accepts integer `workers: 1|3|5|10` (default 1). Values above 1 require Graph root incremental update. This caps concurrent calls; it does not multiply a throughput estimate. Config and parent job payloads freeze the count and model. `GET /api/wiki/jobs` and graph coverage return `coverage.trees: {total,done,pending}` for a coverage forest, otherwise null. Each tree completes after all its targets have extraction credit; `scope_done/scope_total` still measure articles. `jobs[].payload.workers_state` exposes per-lane `status`, `stage`, `model`, `root_id`, `tree`, `total_trees`, `parts`, `completed_parts`, `targets`, `context_articles`, and any error. Tree ordinals are identifiers, not progress numerators. Stop cancels the parent and all bridge calls; committed segments remain available for explicit resumption. See [Wiki runtime](WIKI_RUNTIME.md).
+
+## 2026-11-20 Chat conversation history
+
+`POST /api/chat/session` accepts optional `owner` (browser history capability) and `surface` (`news` or `wiki`), returning a session token and owner capability. `POST /api/chat/history` with the session bearer returns conversation summaries for that owner/surface. `POST /api/chat/conversation` accepts `{action: "open" | "delete", id}`; open returns stored messages, delete removes the application record. Both validate ownership and reject active-conversation conflicts. SDK thread IDs and tool tokens are not public fields. `reset` starts a fresh conversation while preserving earlier history. Turn streams additionally emit `{type: "conversation", id}` for browser restoration. Existing origin/identity checks remain mandatory. See [history contract](references/unslop-20261120.md).

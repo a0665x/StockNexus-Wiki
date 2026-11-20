@@ -65,6 +65,8 @@ def migrate_legacy(data):
         path.parent.rename(dest)
 
 
+from .trace import timed
+
 class WikiStore:
     def __init__(self, root, ident, fixture=False):
         self.instrument=instrument(ident)
@@ -77,7 +79,11 @@ class WikiStore:
             # A normal read must not acquire SQLite's writer lock. Migrate only
             # incomplete schemas; never cache row data or skip stock validation.
             tables={r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-            required={'metadata','articles','versions','nodes','edges','extractions','jobs','review_coverage','reviews','calls','rejected_proposals','research_objects','research_lenses','research_jobs'}
+            # Sort only the timestamp index, not multi-megabyte frozen payloads.
+            # Checking first preserves the read-only fast path after migration.
+            if 'jobs' in tables and not db.execute("SELECT 1 FROM sqlite_master WHERE type='index' AND name='jobs_created'").fetchone():
+                db.execute('CREATE INDEX IF NOT EXISTS jobs_created ON jobs(created_at DESC)')
+            required={'wiki_segments','metadata','articles','versions','nodes','edges','extractions','jobs','review_coverage','reviews','calls','rejected_proposals','research_objects','research_lenses','research_jobs'}
             if required<=tables:
                 row=db.execute("SELECT value FROM metadata WHERE key='instrument'").fetchone()
                 if row:
@@ -94,10 +100,12 @@ class WikiStore:
             CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,status TEXT NOT NULL,payload TEXT NOT NULL,done INTEGER NOT NULL DEFAULT 0,error TEXT,usage TEXT NOT NULL DEFAULT '{}');
             CREATE TABLE IF NOT EXISTS review_coverage (revision TEXT PRIMARY KEY,evidence_epoch INTEGER NOT NULL);
             CREATE TABLE IF NOT EXISTS reviews (job_id TEXT NOT NULL,revision TEXT NOT NULL,PRIMARY KEY(job_id,revision));
+            CREATE TABLE IF NOT EXISTS wiki_segments (key TEXT PRIMARY KEY,job_id TEXT NOT NULL,root_id TEXT NOT NULL,part INTEGER NOT NULL,version INTEGER NOT NULL);
             CREATE TABLE IF NOT EXISTS calls (id TEXT PRIMARY KEY,day TEXT NOT NULL,job_id TEXT NOT NULL,revision TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS rejected_proposals (id INTEGER PRIMARY KEY,job_id TEXT NOT NULL,revision TEXT NOT NULL,created_at TEXT NOT NULL,error TEXT NOT NULL,proposal TEXT,usage TEXT NOT NULL);
             CREATE INDEX IF NOT EXISTS edges_endpoints ON edges(source,target,created_version);
             CREATE INDEX IF NOT EXISTS nodes_version ON nodes(created_version DESC,id);
+            CREATE INDEX IF NOT EXISTS jobs_created ON jobs(created_at DESC);
             PRAGMA user_version=1;
             ''')
             from .research import migrate
@@ -123,6 +131,7 @@ class WikiStore:
     def configure(self,value):
         with self.connection() as db: db.execute('INSERT OR REPLACE INTO metadata VALUES (?,?)',('config',encode(value)))
 
+    @timed('ingest')
     def ingest(self, rows):
         with self.connection() as db:
             stamp=now()
@@ -147,6 +156,7 @@ class WikiStore:
             known={r[0] for r in db.execute('SELECT DISTINCT revision FROM extractions')}
         return [r for r in rows if r['revision_id'] not in known]
 
+    @timed('enqueue')
     def enqueue(self,model,limit=10000,daily_limit=None,revision_ids=None,operation='update'):
         with self.connection() as db:
             db.execute('BEGIN IMMEDIATE')
@@ -154,7 +164,8 @@ class WikiStore:
             if active: return active[0]
             rows=self.pending(model,limit,revision_ids,review=operation=='review')
             ident=uuid.uuid4().hex;stamp=now()
-            payload={**{k:self.config()[k] for k in ('reasoning_effort','languages','evidence_size','strategy','graph_edges','graph_settings','price_horizon','settings_version','graph_selection','graph_universe') if k in self.config()},'context_revisions':self.config().get('graph_context_revisions',self.config().get('revision_ids')) if self.config().get('strategy')=='root' else None,'model':model,'revisions':[r['revision_id'] for r in rows],'prompt_version':PROMPT_VERSION,'operation':operation}
+            config=self.config()
+            payload={**{k:config[k] for k in ('workers','reasoning_effort','languages','evidence_size','strategy','graph_edges','graph_settings','price_horizon','settings_version','graph_selection','graph_universe') if k in config},'context_revisions':config.get('graph_context_revisions',config.get('revision_ids')) if config.get('strategy')=='root' else None,'model':model,'revisions':[r['revision_id'] for r in rows],'prompt_version':PROMPT_VERSION,'operation':operation}
             db.execute('INSERT INTO jobs(id,created_at,updated_at,status,payload) VALUES (?,?,?,?,?)',(ident,stamp,stamp,'queued' if rows else 'completed',encode(payload)))
         return ident
 
@@ -175,6 +186,7 @@ class WikiStore:
             db.execute('INSERT INTO calls VALUES (?,?,?,?)',(uuid.uuid4().hex,now()[:10],job['id'],revision))
         return True
 
+    @timed('context')
     def context(self,article):
         terms=lambda text:set(re.findall(r'[a-z0-9_]+|[\u4e00-\u9fff]',text.lower()))
         words=terms(article['title']+' '+article['summary'][:2000])
@@ -209,6 +221,7 @@ class WikiStore:
             related=[n for _,_,n in heapq.nlargest(4,candidates,key=lambda x:x[:2])]
         return [{k:n[k] for k in ('id','kind','title','scope','summary','assessment','content_hash','url','published_at','provider') if k in n} for n in [*selected[:12-len(related)],*related]]
 
+    @timed('publish')
     def publish(self,job,article,proposal,context,usage):
         nodes,edges=validate_proposal(article,proposal,context)
         evidence=article.get('_evidence',[article]);covered=article.get('_covered_articles',evidence)
@@ -216,6 +229,8 @@ class WikiStore:
             db.execute('BEGIN IMMEDIATE')
             state=db.execute('SELECT status FROM jobs WHERE id=?',(job['id'],)).fetchone()
             if not state or state[0]!='running': return False
+            checkpoint=article.get('_checkpoint')
+            if checkpoint and db.execute('SELECT 1 FROM wiki_segments WHERE key=?',(checkpoint,)).fetchone():return True
             review=job['payload'].get('operation')=='review'
             if not review and db.execute('SELECT 1 FROM extractions WHERE revision=?',(article['revision_id'],)).fetchone(): return True
             if review and db.execute('SELECT 1 FROM reviews WHERE job_id=? AND revision=?',(job['id'],article['revision_id'])).fetchone(): return True
@@ -258,9 +273,12 @@ class WikiStore:
             for k,v in usage.items():
                 if isinstance(v,int) and not isinstance(v,bool) and v>=0: totals[k]=old.get(k,0)+v
             db.execute('UPDATE jobs SET done=done+?,updated_at=?,usage=? WHERE id=?',(len(covered),stamp,encode(totals),job['id']))
+            if checkpoint:
+                db.execute('INSERT INTO wiki_segments VALUES (?,?,?,?,?)',(checkpoint,job['id'],article['_group']['root_id'],article['_group']['part'],version))
             self.receipt(db,job,article,usage,'published')
         return True
 
+    @timed('reject')
     def reject(self,job,article,proposal,error,usage):
         # Rejected responses consume tokens too; keep evidence for diagnosis, never graph publication.
         with self.connection() as db:
@@ -290,8 +308,8 @@ class WikiStore:
             total=db.execute("SELECT count(*) FROM nodes WHERE kind='Thesis' AND created_version<=?",(version,)).fetchone()[0]
         return {'categories':counts,'theses':theses,'total_theses':total,'note':'既有模型局部觀點彙整，並非全圖重新推論；分類未以未來股價驗證。'}
 
-    def graph(self,version=None,as_of=None,limit=2400,start=None,end=None):
-        with self.connection() as db:
+    def graph(self,version=None,as_of=None,limit=2400,start=None,end=None,*,connection=None,include_activity=True):
+        with self.connection() if connection is None else contextlib.nullcontext(connection) as db:
             versions=[dict(r) for r in db.execute('SELECT * FROM versions ORDER BY version DESC LIMIT 10')]
             if as_of:
                 stamp=dt.datetime.fromisoformat(as_of.replace('Z','+00:00'))
@@ -303,7 +321,7 @@ class WikiStore:
                 if chosen<0 or (chosen and chosen not in {v['version'] for v in versions}): raise ValueError('只保留最近 10 個可切換版本')
             else: chosen=versions[0]['version'] if versions else 0
             from .workbench import enrich_graph
-            extra=enrich_graph(self,chosen,start,end)
+            extra=enrich_graph(db,chosen,start,end)
             allowed=encode(extra.pop('visible_ids')) if start or end else None
             extra.pop('visible_ids',None)
             nodes=[json.loads(r[0]) for r in db.execute('SELECT payload FROM nodes WHERE created_version<=? AND (? IS NULL OR id IN (SELECT value FROM json_each(?))) ORDER BY created_version DESC,id LIMIT ?',(chosen,allowed,allowed,limit))]
@@ -316,11 +334,14 @@ class WikiStore:
             from .classifier import enrich
             cutoff=dt.datetime.fromisoformat(stamp) if as_of else (dt.datetime.fromisoformat(next(v['created_at'] for v in versions if v['version']==chosen)) if version and chosen else None)
             classification=enrich(db,{'nodes':nodes,'edges':edges},cutoff)
-            classification_jobs=[{**dict(r),'payload':json.loads(r['payload'])} for r in db.execute("SELECT * FROM research_jobs WHERE json_extract(payload,'$.operation')='classify_l1' ORDER BY created_at DESC LIMIT 1")]
+            activity = {}
+            if include_activity:
+                classification_jobs=[{**dict(r),'payload':json.loads(r['payload'])} for r in db.execute("SELECT * FROM research_jobs WHERE json_extract(payload,'$.operation')='classify_l1' ORDER BY created_at DESC LIMIT 1")]
+                activity = {'classification_jobs':classification_jobs,'config':self.config(),'jobs':self.jobs()}
         perspectives=extra.pop('filtered_perspectives')
         visible_ids={n['id'] for n in nodes}|{n['id'] for n in perspectives['theses']}
         extra['histories']={k:v for k,v in extra['histories'].items() if k in visible_ids}
-        return {**extra,'classification_jobs':classification_jobs,'taxonomy':classification['taxonomy'],'opinion_groups':classification['opinion_groups'],'opinion_index':classification['opinion_index'],'instrument':self.instrument,'mode':'live_recorded','version':chosen,'versions':versions,'nodes':nodes,'edges':edges,'total_nodes':total,'captured_articles':count,'truncated':total>len(nodes),'config':self.config(),'jobs':self.jobs(),'perspectives':perspectives}
+        return {**extra,**activity,'taxonomy':classification['taxonomy'],'opinion_groups':classification['opinion_groups'],'opinion_index':classification['opinion_index'],'instrument':self.instrument,'mode':'live_recorded','version':chosen,'versions':versions,'nodes':nodes,'edges':edges,'total_nodes':total,'captured_articles':count,'truncated':total>len(nodes),'perspectives':perspectives}
 
     def markdown(self,version=None):
         graph=self.graph(version=version)

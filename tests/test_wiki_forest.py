@@ -38,6 +38,26 @@ class ForestTests(unittest.TestCase):
         p=self.service.plan(body);self.assertEqual(p['selected'],810)
         trees=p['graph_selection']['trees'];self.assertEqual(len(trees),810)
         self.assertEqual(len({a['id'] for tree in trees for a in tree['articles']}),810)
+    def test_saved_forest_reuse_requires_exact_evidence_dates_and_rules(self):
+        from unittest.mock import patch
+        from news_atlas.wiki.forest import prepare
+        from news_atlas.wiki.evidence import graph_options
+        rows=[row(title='Tesla factory earnings update',suffix='cached')]
+        body=self.body(rows);cfg=graph_options(body['graph_settings'])
+        first=prepare(self.news,'NASDAQ:TSLA',body['graph_universe'],cfg,None)
+        with patch('news_atlas.wiki.forest.build_cached',side_effect=AssertionError('unexpected graph rebuild')):
+            reused=prepare(self.news,'NASDAQ:TSLA',body['graph_universe'],cfg,None,cached=first[2])
+            self.assertEqual(reused,first)
+        import copy
+        for variant in ['date','rule','content','separate']:
+            fresh=copy.deepcopy(body);settings=copy.deepcopy(cfg);dates=None
+            if variant=='date':dates={'start':'2026-01-01','end':'2026-12-31'}
+            if variant=='rule':settings['exploration']['branchLimit']=6
+            if variant=='separate':fresh['graph_universe']['separate']=True
+            if variant=='content':self.body([{**rows[0],'title':'Changed evidence'}])
+            with patch('news_atlas.wiki.forest.build_cached',side_effect=ValueError('cache invalidated')):
+                with self.assertRaisesRegex(ValueError,'cache invalidated'):
+                    prepare(self.news,'NASDAQ:TSLA',fresh['graph_universe'],settings,dates,cached=first[2])
     def test_no_duplicate_tree_call_and_same_stock_boundary(self):
         rows=[row(title='Tesla factory production earnings '+str(i),suffix=str(i)) for i in range(3)]
         body=self.body(rows);p=self.service.plan(body)
@@ -81,6 +101,7 @@ class ForestTests(unittest.TestCase):
         self.assertEqual(self.store.graph()['version'],1)
         self.assertEqual(self.calls[0]['_covered_articles'],[])
         self.assertGreater(self.calls[0]['_group']['parts'],1)
+        published_first=self.calls[0]['_checkpoint']
         self.calls=[]
         def success(store,job,a,c):
             self.calls.append(a);return {'proposal':proposal(a),'usage':{}}
@@ -88,7 +109,7 @@ class ForestTests(unittest.TestCase):
         self.service.resume({'instrument':'NASDAQ:TSLA'});self.service.tick()
         self.assertEqual(self.store.jobs()[0]['status'],'completed')
         self.assertEqual(self.service.coverage(self.store)['scope_done'],15)
-        self.assertEqual(len({a['id'] for call in self.calls for a in call['_evidence']}),15)
+        self.assertTrue(all(call['_checkpoint']!=published_first for call in self.calls),'Published segments must not be replayed on explicit resume')
         self.assertEqual(sum(len(a['_covered_articles']) for a in self.calls),15)
         # Bookkeeping can contain the whole tree, but must not inflate LLM input.
         bodies=[]

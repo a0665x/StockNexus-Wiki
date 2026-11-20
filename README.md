@@ -4,6 +4,16 @@
 
 把大量新聞整理成可探索、可追溯、持續維護的觀點。
 
+## 用自己的文件建立研究圖譜
+
+讓 agent 能讀取[完整 skill 資料夾](skills/stocknexus-document-import/)和文章。下方的 `/` 表示 agent 的工作區根目錄。
+
+```text
+請讀取 /stocknexus-document-import/SKILL.md，處理「<文章或資料夾路徑>」。
+```
+
+收到 agent 驗證完成的 `records.jsonl` 後，在首頁點 **匯入研究文件**，選檔後按 **匯入並開啟圖譜**。預設知識庫與來源可直接使用。
+
 ## 解決什麼問題？
 
 - **新聞太多、噪音太多**：整合 Google News RSS、Yahoo 新聞與 Massive，去重後在新聞圖譜中探索相關事件。
@@ -61,14 +71,37 @@ npx --no-install codex login  # 已登入可略過
 - 新聞與 Wiki 依股票存入本機 SQLite，保留節點、連線、來源與版本。
 - 新聞圖譜使用持久快取；調整顯示數量、切換來源或重開頁面可重用既有成果。
 - 用「儲存圖譜快照」保存新聞探索畫面，或匯出 JSON／Wiki Markdown。
-- 跨電腦或 USB 搬移資料可使用 `merge_data.sh`；先暫停目標股票的 Wiki 整理，再預覽並合併：
+
+### 從另一份資料夾匯入
+
+選好來源並暫停目標股票的 Wiki 整理。以下以整份 `../incoming/data` 匯入本機 `./data` 為例。只想匯入單股時，將兩個步驟的來源都換成 `../incoming/data/graph/GOOGL`（新聞圖譜）或 `../incoming/data/llm_wiki/GOOGL`（Wiki）。
+
+1. **先預覽**。加上 `--dry-run` 只會顯示預計合併的內容，不會寫入目標資料庫。
+
+   ```bash
+   ./merge_data.sh --from ../incoming/data --to ./data --dry-run
+   ```
+
+2. **正式合併**。確認預覽符合預期後，保留相同的來源與目標，移除 `--dry-run` 再執行一次，才會寫入資料。
+
+   ```bash
+   ./merge_data.sh --from ../incoming/data --to ./data
+   ```
+
+更多範例見 [資料合併與備份](spec/DATA_MERGE.md)。
+
+## 匯入自己的文件圖譜
+
+在另一個 agent 中提供 [文件轉檔 skill](skills/stocknexus-document-import/SKILL.md) 與原始資料夾，請它保留章節、原文位置與穩定 ID，輸出 UTF-8 的 `records.jsonl`。將 JSONL 放到執行 Web UI 的主機，在專案根目錄執行以下兩步。可先用 `skills/stocknexus-document-import/examples/manual.jsonl` 取代輸入路徑試跑。
 
 ```bash
-./merge_data.sh --from /media/usb/data --to ./data --dry-run
-./merge_data.sh --from /media/usb/data --to ./data
+# 第一步：只預覽
+python3 scripts/import_documents.py --collection my_research --source manuals --input records.jsonl --dry-run
+# 第二步：移除 --dry-run，正式匯入
+python3 scripts/import_documents.py --collection my_research --source manuals --input records.jsonl
 ```
 
-來源、目標改成實際路徑；詳見 [資料合併與備份](spec/DATA_MERGE.md)。
+首頁 Massive 下方選擇知識庫並勾選來源，或開啟 `/documents?collection=my_research&source=manuals`。勾選多個來源可合看章節、引用與觀點。直接讀取 DB，無日期也能顯示。JSONL 歸檔於 `data/graph/<collection>/imports/<source>/`，文件與外部 agent 產生的 L1/L2 修訂共存於該庫的 `documents.sqlite3`。若服務另掛資料目錄，在兩條指令都加上 `--data-dir /實際資料目錄`。這個流程獨立於股票新聞搜尋及其 Wiki 背景工作。
 
 ## 深入了解
 

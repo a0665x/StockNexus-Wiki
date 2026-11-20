@@ -14,7 +14,20 @@
   }
   function init($,now=()=>new Date()){
     let onChange=()=>{},mode='custom',months=3,custom={start:$('start').value,end:$('end').value};
-    function bounds(){const today=iso(now());$('end').max=today;$('start').max=$('end').value||today;const end=Date.parse(($('end').value||today)+'T00:00:00Z');if(Number.isFinite(end))$('start').min=iso(new Date(end-(MAX_DAYS-1)*DAY));}
+    function bounds(){
+      const today=iso(now()), start=$('start'), end=$('end');
+      const last=end.value && end.value<today ? end.value : today;
+      start.max=last;
+      start.min=quickRange(12,new Date(last+'T00:00:00Z')).start;
+      end.min=start.value;
+      end.max=today;
+      if(start.value){
+        const anniversary=new Date(start.value+'T00:00:00Z');
+        anniversary.setUTCFullYear(anniversary.getUTCFullYear()+1);
+        const latest=iso(new Date(anniversary.getTime()-DAY));
+        if(latest<today)end.max=latest;
+      }
+    }
     function refresh(){if(mode==='quick'){const range=quickRange(months,now());$('start').value=range.start;$('end').value=range.end;}bounds();$('dateRangeSummary').textContent=$('start').value+' → '+$('end').value+' UTC';onChange();}
     function paint(){const quick=mode==='quick';$('dateMode').classList.toggle('quick',quick);$('dateCustom').setAttribute('aria-pressed',String(!quick));$('dateQuick').setAttribute('aria-pressed',String(quick));$('quickDates').hidden=!quick;$('start').readOnly=quick;$('end').readOnly=quick;for(const m of [3,6,9,12])$('months-'+m).setAttribute('aria-pressed',String(m===months));refresh();}
     function setMode(next){if(next===mode){refresh();return;}if(mode==='custom')custom={start:$('start').value,end:$('end').value};mode=next;if(mode==='custom'){$('start').value=custom.start;$('end').value=custom.end;}paint();}

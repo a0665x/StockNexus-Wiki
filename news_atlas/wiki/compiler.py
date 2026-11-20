@@ -12,13 +12,18 @@ from ..chat_proxy import UnixConnection
 from ..search import query_key
 from .workbench import settings, batches, usage_summary, news_day
 
+from .view_sync import GraphViews
 from .evidence import OPTION_KEYS, selected_graph_rows, bounded_groups, cached_market
+
+from .trace import span, timed, emit, job_fields, admitted, job_state, error_fields
 
 log=logging.getLogger(__name__)
 
 class WikiService:
     def __init__(self,news,runner=None,start_worker=True):
         self.news=news;self.data_root=getattr(news,'data_root',news.path.parent);migrate_legacy(self.data_root);self.root=self.data_root/'llm_wiki'
+        emit(self,'state','service',status='started')
+        self.graph_views=GraphViews()
         self.runner=runner or self.bridge
         self._coverage_cache={};self._coverage_lock=threading.RLock()
         self.plans={};self.lock=threading.RLock();self.stop=threading.Event();self.wake=threading.Event()
@@ -62,8 +67,49 @@ class WikiService:
         except (OSError,json.JSONDecodeError) as error: raise RuntimeError('LLM橋接無法連線；請檢查 Chat 服務及登入狀態') from error
         finally: conn.close()
 
+    def run_model(self,store,job,article,context):
+        # A distinct correlation ID per attempt; parent cancellation keeps job identity.
+        call_id=uuid.uuid4().hex
+        job={**job,'trace_id':call_id}
+        meta=article.get('_group',{})
+        with span(store,'model_call',**job_fields(store,job),call_id=call_id,
+                  worker=job.get('worker'),root_id=meta.get('root_id'),part=meta.get('part'),
+                  repair=bool(job.get('repair')),evidence_count=len(article.get('_evidence',[])),
+                  context_count=len(context),input_bytes=len(json.dumps([{k:v for k,v in article.items() if k not in ('_covered_articles','_checkpoint')},context]).encode())) as metrics:
+            result=self.runner(store,job,article,context)
+            if isinstance(result,dict):
+                metrics['usage']={k:v for k,v in (result.get('usage') or {}).items() if k in ('input_tokens','output_tokens','cached_input_tokens') and type(v)==int}
+                proposal=result.get('proposal',{})
+                if isinstance(proposal,dict):metrics['counts']={k:len(proposal[k]) for k in ('nodes','relations','claims','opinions') if isinstance(proposal.get(k),list)}
+            return result
+
     def bridge(self,store,job,article,context):
-        return self.bridge_request('/wiki/compile',{'job_id':job['id'],'instrument':store.instrument,'model':job['payload']['model'],'article':{k:v for k,v in article.items() if k!='_covered_articles'},'context':context,'operation':job['payload'].get('operation','update'),'repair':job.get('repair'),**{k:job['payload'].get(k) for k in ('reasoning_effort','languages')}},timeout=640)
+        return self.bridge_request('/wiki/compile',{'job_id':job.get('call_id',job['id']),'parent_job_id':job['id'],'trace_id':job.get('trace_id'),'instrument':store.instrument,'model':job['payload']['model'],'article':{k:v for k,v in article.items() if k not in ('_covered_articles','_checkpoint')},'context':context,'operation':job['payload'].get('operation','update'),'repair':job.get('repair'),**{k:job['payload'].get(k) for k in ('reasoning_effort','languages')}},timeout=640)
+
+    def news_catalog(self):
+        """Only nonempty, explicitly identified news DBs; never guess exchanges."""
+        if not hasattr(self.news,'stores'):return []
+        known={s.instrument.split(':')[1]:s.instrument for s in self.stores()}
+        result=[]
+        for news in self.news.stores():
+            ticker=news.path.parent.name
+            if ticker=='_unassigned':continue
+            with news.connection() as db:
+                count=db.execute('SELECT count(*) FROM articles').fetchone()[0]
+                if not count:continue
+                ident=known.get(ticker)
+                if db.execute("SELECT 1 FROM sqlite_master WHERE name='graph_metadata'").fetchone():
+                    meta=db.execute("SELECT value FROM graph_metadata WHERE key='instrument'").fetchone()
+                    if meta:ident=meta[0]
+                if not ident:
+                    for row in db.execute('SELECT search_json FROM snapshots ORDER BY created_at DESC'):
+                        value=json.loads(row[0]).get('instrument')
+                        if value and value.split(':')[-1]==ticker:ident=value;break
+            try:valid=bool(ident and instrument(ident).split(':')[1]==ticker)
+            except ValueError:valid=False
+            if valid:
+                result.append({'instrument':ident,'ticker':ticker,'articles':count})
+        return result
 
     def info(self):
         try: bridge=self.bridge_request('/status',timeout=2)
@@ -73,8 +119,9 @@ class WikiService:
             with store.connection() as db:
                 version=db.execute('SELECT COALESCE(max(version),0) FROM versions').fetchone()[0]
                 total=db.execute('SELECT count(*) FROM nodes').fetchone()[0]
-            stocks.append({'instrument':store.instrument,'version':version,'nodes':total,'enabled':store.config()['enabled']})
-        return {'instruments':stocks,'bridge_ready':bridge.get('wiki_ready',False),'default_model':bridge.get('wiki_model',''),'storage':'llm_wiki/<ticker>/wiki.sqlite3','prompt_version':PROMPT_VERSION}
+                enabled=db.execute("SELECT json_extract(value,'$.enabled') FROM metadata WHERE key='config'").fetchone()
+            stocks.append({'instrument':store.instrument,'version':version,'nodes':total,'enabled':bool(enabled and enabled[0])})
+        return {'instruments':stocks,'news_databases':self.news_catalog(),'bridge_ready':bridge.get('wiki_ready',False),'default_model':bridge.get('wiki_model',''),'storage':'llm_wiki/<ticker>/wiki.sqlite3','prompt_version':PROMPT_VERSION}
 
     @staticmethod
     def options(body):
@@ -113,11 +160,26 @@ class WikiService:
                 rows.extend(capture(json.loads(r[0])) for r in found)
         return rows
 
+    @timed('plan')
     def plan(self,body):
         model=self.options(body);options=settings(body);store=self.store(body.get('instrument'))
         operation=body.get('operation','update')
         if operation not in ('update','review'):raise ValueError('無效維護方式')
+        if options['workers']>1 and (options['strategy']!='root' or operation!='update'):
+            raise ValueError('Parallel workers require Graph root incremental update')
         dates=self.date_range(body)
+        if body.get('news_db'):
+            if body.get('scope','global')!='global':raise ValueError('新聞 DB 模式使用全局範圍')
+            available={x['instrument'] for x in self.news_catalog()}
+            if store.instrument not in available:raise ValueError('此股票沒有可用新聞 DB')
+            news=self.news.for_ticker(store.instrument.split(':')[1])
+            with news.connection() as db:
+                raw=db.execute("SELECT payload FROM articles WHERE (? IS NULL OR date(published_at) BETWEEN ? AND ?) ORDER BY published_at DESC LIMIT 10001",(None if not dates else 1,(dates or {}).get('start'),(dates or {}).get('end'))).fetchall()
+            if len(raw)>10000:raise ValueError('查詢超過10000篇，請縮小日期範圍')
+            articles=[json.loads(x[0]) for x in raw]
+            body={**body,'articles':articles,'sources':[],'search':{'ticker':store.instrument.split(':')[1]}}
+            if options['strategy']=='root':
+                body['graph_universe']={'ticker':store.instrument.split(':')[1],'separate':False,'articles':[{'provider':a['source']['provider'],'id':a['id']} for a in articles]}
         rows=body.get('articles',[])
         if not isinstance(rows,list) or len(rows)>10000: raise ValueError('最多選取10000篇')
         rows=list(map(capture,rows))
@@ -146,7 +208,7 @@ class WikiService:
             universe=body.get('graph_universe') or store.config().get('graph_universe')
             if universe:
                 from .forest import prepare
-                rows,context_rows,options['graph_selection']=prepare(self.news,store.instrument,universe,options['graph_settings'],dates)
+                rows,context_rows,options['graph_selection']=prepare(self.news,store.instrument,universe,options['graph_settings'],dates,cached=store.config().get('graph_selection'))
                 options['graph_universe']=universe;options['graph_context_revisions']=[a['revision_id'] for a in context_rows]
             else:
                 selection=body.get('graph_selection',store.config().get('graph_selection'))
@@ -167,8 +229,9 @@ class WikiService:
             self.plans[plan['id']]=plan
         with store.connection() as db:used=db.execute('SELECT count(*) FROM calls WHERE day=?',(now()[:10],)).fetchone()[0]
         dated=sorted(news_day(a['published_at']) for a in rows if a['published_at'])
-        return {'date_bounds':{'start':dated[0],'end':dated[-1]} if dated else None,'graph_selection':options.get('graph_selection'),'grouping_edges':len(options['graph_edges']),'usage':usage_summary(store,(dates or {}).get('start'),(dates or {}).get('end')),**{k:options[k] for k in ('reasoning_effort','languages','evidence_size','strategy')},'daily_used':used,'plan_id':plan['id'],'instrument':store.instrument,'base_version':base,'selected':len(rows),'pending':pending,'next_batch':pending,'reused':len(rows)-len(unseen),'model':model,'date_range':dates,'operation':operation,'watch_sources':subscriptions,'expires_in':600,'note':'只處理本次日期範圍；增量模式跨模型重用既有成果，不受新聞edge設定與渲染數影響。局部校正需另行明確選擇，仍會消耗token。'}
+        return {'date_bounds':{'start':dated[0],'end':dated[-1]} if dated else None,'graph_selection':options.get('graph_selection'),'grouping_edges':len(options['graph_edges']),'usage':usage_summary(store,(dates or {}).get('start'),(dates or {}).get('end')),**{k:options[k] for k in ('workers','reasoning_effort','languages','evidence_size','strategy')},'daily_used':used,'plan_id':plan['id'],'instrument':store.instrument,'base_version':base,'selected':len(rows),'pending':pending,'next_batch':pending,'reused':len(rows)-len(unseen),'model':model,'date_range':dates,'operation':operation,'watch_sources':subscriptions,'expires_in':600,'note':'只處理本次日期範圍；增量模式跨模型重用既有成果，不受新聞edge設定與渲染數影響。局部校正需另行明確選擇，仍會消耗token。'}
 
+    @timed('enqueue_request')
     def start(self,body):
         if not isinstance(body.get('continuous',False),bool) or not isinstance(body.get('classify_missing',False),bool): raise ValueError('無效持續維護設定')
         with self.lock:
@@ -199,6 +262,7 @@ class WikiService:
             self.plans.pop(plan['id'],None);self.wake.set()
         return {'job_id':ident,'instrument':store.instrument}
 
+    @timed('settings_apply')
     def apply(self,body):
         # Validate/rebuild before cancellation: a bad setting must leave the old work alive.
         if not isinstance(body.get('continuous',False),bool):raise ValueError('無效持續維護設定')
@@ -274,7 +338,9 @@ class WikiService:
         done=len(rows)-len(missing)
         with store.connection() as db:
             reviewed=db.execute('SELECT count(*) FROM review_coverage WHERE revision IN (SELECT value FROM json_each(?))',(json.dumps(ids),)).fetchone()[0]
-        return {'scope_total':len(rows),'scope_done':done,'scope_pending':len(missing),'scope_percent':round(100*done/len(rows),2) if rows else 0,
+        from .parallel import tree_coverage
+        trees=tree_coverage(cfg,rows,missing)
+        return {'trees':trees,'scope_total':len(rows),'scope_done':done,'scope_pending':len(missing),'scope_percent':round(100*done/len(rows),2) if rows else 0,
             'review_done':reviewed,'review_total':done,'captured_revisions':captured,'extracted_revisions':extracted,
             'daily_calls':used,'rejected_responses':rejected,'usage':usage_summary(store,(cfg.get('date_range') or {}).get('start'),(cfg.get('date_range') or {}).get('end')),
             'storage':str(store.path.relative_to(self.data_root)),'instrument':store.instrument,'date_range':cfg.get('date_range'),
@@ -291,7 +357,7 @@ class WikiService:
             store.ingest(rows);cfg.update(date_range=dates,revision_ids=[a['revision_id'] for a in rows],catch_up=True)
             store.configure(cfg);self._refresh(store)
             from .classifier import enqueue
-            classification=enqueue(store,cfg['model'],cfg.get('reasoning_effort','high'))
+            classification=enqueue(store,cfg['model'],cfg.get('reasoning_effort','high'),date_range=dates)
             self.wake.set()
             return {'instrument':store.instrument,'coverage':self.coverage(store),'config':store.config(),'classification':classification}
 
@@ -302,9 +368,39 @@ class WikiService:
         store=self.store(body.get('instrument'));cfg=store.config()
         enabled=body.get('enabled')
         if not isinstance(enabled,bool): raise ValueError('enabled必須是boolean')
+        if 'model' in body or 'reasoning_effort' in body:
+            with store.connection() as db:
+                classification=db.execute("SELECT 1 FROM research_jobs WHERE status IN ('queued','running') AND json_extract(payload,'$.operation')='classify_l1' LIMIT 1").fetchone()
+            if classification or any(j['status'] in ('queued','running') for j in store.jobs()):
+                raise ValueError('請先停止現有工作再更換模型設定')
+            changed={**cfg,**{k:body[k] for k in ('model','reasoning_effort') if k in body}}
+            self.options(changed);settings(changed)
+            changed['settings_version']=int(cfg.get('settings_version',0))+1
+            cfg=changed
         if enabled: self.options(cfg)
         cfg['enabled']=enabled;cfg['catch_up']=False;store.configure(cfg);self.wake.set()
         return cfg
+
+    def stop_maintenance(self,body):
+        """Stop this instrument's L1 work and watcher in one durable transaction."""
+        with self.lock:
+            store=self.store(body.get('instrument'))
+            with store.connection() as db:
+                db.execute('BEGIN IMMEDIATE')
+                cfg=store.config()
+                cfg.update(enabled=False,catch_up=False)
+                db.execute('INSERT OR REPLACE INTO metadata VALUES (?,?)',('config',json.dumps(cfg)))
+                stamp=now()
+                jobs=db.execute("""UPDATE jobs SET status='cancelled',updated_at=?
+                    WHERE status IN ('queued','running') RETURNING id""",(stamp,)).fetchall()
+                classifiers=db.execute("""UPDATE research_jobs SET status='cancelled',updated_at=?
+                    WHERE status IN ('queued','running') AND json_extract(payload,'$.operation')='classify_l1'
+                    RETURNING id""",(stamp,)).fetchall()
+            ids=[r[0] for r in [*jobs,*classifiers]]
+            for ident in ids:
+                try:self.bridge_request('/wiki/cancel',{'job_id':ident},timeout=2)
+                except RuntimeError:pass
+            return {'instrument':store.instrument,'cancelled_jobs':ids,'enabled':False,'catch_up':False}
 
     def cancel(self,body):
         with self.lock:return self._cancel(body)
@@ -351,12 +447,21 @@ class WikiService:
 
     def process(self,store,max_groups=None):
         with store.connection() as db:
+            row=db.execute("SELECT payload FROM jobs WHERE status='queued' ORDER BY created_at LIMIT 1").fetchone()
+        payload=json.loads(row[0]) if row else {}
+        if payload.get("graph_selection",{}).get("mode")=="coverage" and payload.get("operation")!="review":
+            from .parallel import process
+            return process(self,store,max_groups)
+        return self._process_serial(store,max_groups)
+
+    def _process_serial(self,store,max_groups=None):
+        with store.connection() as db:
             db.execute('BEGIN IMMEDIATE')
             raw=db.execute("SELECT * FROM jobs WHERE status='queued' ORDER BY created_at LIMIT 1").fetchone()
             if not raw: return
             job=dict(raw);job['payload']=json.loads(job['payload'])
             db.execute("UPDATE jobs SET status='running',updated_at=? WHERE id=?",(now(),job['id']))
-        self.active=(store,job['id'])
+        self.active=(store,job['id']);admitted(store,job)
         try:
             with store.connection() as db:
                 rows=[json.loads(r[0]) for r in db.execute('SELECT payload FROM articles WHERE id IN (SELECT value FROM json_each(?))',(json.dumps(job['payload']['revisions']),))]
@@ -383,7 +488,8 @@ class WikiService:
                     if job['payload'].get('operation')!='review' and db.execute('SELECT 1 FROM extractions WHERE revision=?',(revision,)).fetchone(): continue
                     pass
                 if not store.reserve_call(job,revision): return
-                context=store.context({**article,'summary':' '.join(a['title']+' '+a['summary'][:1500] for a in group)})
+                with span(store,'context_resolve',**job_fields(store,job),root_id=group_info.get('root_id'),part=group_info.get('part')):
+                    context=store.context({**article,'summary':' '.join(a['title']+' '+a['summary'][:1500] for a in group)})
                 refs=[n['id'] for n in context if n['kind']=='ArticleRevision']
                 with store.connection() as db:
                     from .research import taxonomy
@@ -394,10 +500,11 @@ class WikiService:
                     db.execute("UPDATE jobs SET payload=json_set(payload,'$.current_title',?,'$.current_date',?,'$.current_size',?,'$.group_info',json(?)) WHERE id=?",(article['title'],article['published_at'],len(group),json.dumps(group_info),job['id']))
                 for attempt in range(2):
                     store.stage(job,'repairing' if attempt else 'compiling',revision)
-                    output=self.runner(store,job,article,context)
+                    output=self.run_model(store,job,article,context)
                     if not isinstance(output,dict) or not isinstance(output.get('usage',{}),dict): raise ValueError('LLM回覆格式錯誤')
                     try:
-                        validate_proposal(article,output.get('proposal'),context)
+                        with span(store,'validate',**job_fields(store,job)):
+                            validate_proposal(article,output.get('proposal'),context)
                         if job['payload'].get('operation')=='review':
                             targets={n['id'] for n in context}
                             revised={r['source'] for r in output.get('proposal',{}).get('relations',[]) if r.get('type')=='UPDATES' and r.get('target') in targets}
@@ -431,6 +538,7 @@ class WikiService:
             if store.config().get('catch_up'):self.wake.set()
             log.info('wiki_job completed instrument=%s job=%s',store.instrument,job['id'])
         except Exception as error:
+            emit(store,'error','job',**job_fields(store,job),**error_fields(error))
             with self.lock:
                 with store.connection() as db:
                     # A restart must never observe terminal failure with catch-up
@@ -443,7 +551,9 @@ class WikiService:
                         cfg['enabled']=False;cfg['catch_up']=False
                         db.execute('INSERT OR REPLACE INTO metadata VALUES (?,?)',('config',json.dumps(cfg)))
             log.warning('wiki_job failed instrument=%s job=%s error_type=%s',store.instrument,job['id'],type(error).__name__)
-        finally: self.active=None
+        finally:
+            job_state(store,job)
+            self.active=None
 
     def tick(self,max_groups=None):
         for store in self.stores():
@@ -459,6 +569,10 @@ class WikiService:
                     with candidate.connection() as db:
                         l1_busy=l1_busy or bool(db.execute("SELECT 1 FROM jobs WHERE status IN ('queued','running')").fetchone()) or bool(db.execute("SELECT 1 FROM research_jobs WHERE json_extract(payload,'$.operation')='classify_l1' AND status IN ('queued','running')").fetchone())
                 if not l1_busy:research.refresh_live();research.process(self)
+                else:
+                    with store.connection() as db:
+                        waiting=db.execute("SELECT id FROM research_jobs WHERE status='queued' AND COALESCE(json_extract(payload,'$.operation'),'')!='classify_l1'").fetchall()
+                    for row in waiting:emit(store,'state','research_deferred',instrument=store.instrument,job_id=row['id'],reason='l1_or_classification_pending')
 
     def loop(self):
         while not self.stop.is_set():

@@ -7,7 +7,7 @@ from ..exploration import settings as exploration_settings
 from ..relation_settings import settings as relation_settings
 from ..price_lens import measurements
 
-OPTION_KEYS=('reasoning_effort','languages','evidence_size','strategy','graph_edges','graph_settings','price_horizon','settings_version','graph_selection','graph_universe','graph_context_revisions')
+OPTION_KEYS=('workers','reasoning_effort','languages','evidence_size','strategy','graph_edges','graph_settings','price_horizon','settings_version','graph_selection','graph_universe','graph_context_revisions')
 TOPICS=('revenue','operations','costs','market','trading','other')
 
 def graph_options(value=None):

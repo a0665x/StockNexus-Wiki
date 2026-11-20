@@ -104,8 +104,15 @@ def main():
   url='http://127.0.0.1:'+str(http.server_port);os.environ['NEWS_ATLAS_WIKI_ORIGINS']=url
   threading.Thread(target=http.serve_forever,daemon=True).start();browsers=[]
   try:
+   def open_fixture(target):
+    # News intentionally does not auto-query on startup. Supply the known
+    # fixture explicitly before testing cross-surface language ownership.
+    target.wait("typeof AtlasWiki!=='undefined'&&typeof AtlasRuntime!=='undefined'&&!workspaceRestoring")
+    if not target.js('AtlasRuntime.state().counts.loaded'):
+     target.js('rebuild('+json.dumps(server.graph_payload(rows))+');exportMeta.ticker="TSLA";exportMeta.instrument="NASDAQ:TSLA"')
+    target.open_wiki()
    browser=Browser(folder/'browser');browsers.append(browser);page=browser.page(url)
-   page.open_wiki();page.chat();page.wait("document.querySelector('#wikichatPage .chat-status').textContent.includes('已連線')")
+   open_fixture(page);page.chat();page.wait("document.querySelector('#wikichatPage .chat-status').textContent.includes('已連線')")
    page.language('en');time.sleep(.9)
    page.check('English Wiki connection and scope after switch and subsequent sync',"document.querySelector('#wikichatPage .chat-status').textContent==='Connected · Using local sign-in'&&document.querySelector('#wikichatPage .chat-context').textContent.includes('nodes')&&!/[\\u3400-\\u9fff]/.test(document.querySelector('#wikichatPage .chat-context').textContent)")
    def english(target,label):
@@ -149,7 +156,7 @@ def main():
    english(page,'expired session reconnect keeps current language')
    page.check('language does not change knowledge settings, selection or graph geometry',"graph.graphData().nodes.every((n,i)=>n===kept.news[i])&&JSON.stringify(graph.cameraPosition())===kept.camera&&document.getElementById('wikiModel').value===kept.model&&document.getElementById('wikiLanguages').value===kept.languages&&JSON.stringify(AtlasWiki.runtime.state().root_ids)===kept.roots&&JSON.stringify(AtlasWiki.runtime.state().date_range)===kept.dates")
    # Same origin and Chrome profile: a genuinely separate URL tab shares the preference.
-   second=browser.page(url+'/?window=second');second.open_wiki();second.chat()
+   second=browser.page(url+'/?window=second');open_fixture(second);second.chat()
    second.wait("document.querySelector('#wikichatPage .chat-status').textContent==='Connected · Using local sign-in'")
    english(second,'new URL tab initializes in saved English')
    second.language('zh-Hant')
@@ -158,7 +165,7 @@ def main():
    page.language('en');second.wait("AtlasI18n.language()==='en'");english(second,'two-way window synchronization')
    # Delayed connect callback must read the language at completion, not request start.
    page.language('zh-Hant');session_gate.clear();old_calls=transport['session_calls']
-   late=browser.page(url+'/?window=late');late.open_wiki();late.chat()
+   late=browser.page(url+'/?window=late');open_fixture(late);late.chat()
    for _ in range(100):
     if transport['session_calls']>old_calls:break
     time.sleep(.03)
@@ -170,13 +177,13 @@ def main():
    late.js("document.getElementById('wikiBack').click();document.getElementById('chatTab').click()")
    late.wait("document.querySelector('#chatPage .chat-status').textContent==='Connected · Using local sign-in'")
    late.check('News Chat scope and status also stay English',"!/[\\u3400-\\u9fff]/.test(document.querySelector('#chatPage .chat-context').textContent)")
-   late.open_wiki();english(late,'returning from News preserves Wiki language')
-   second.call('Page.reload');second.open_wiki();second.chat()
+   open_fixture(late);english(late,'returning from News preserves Wiki language')
+   second.call('Page.reload');open_fixture(second);second.chat()
    second.wait("document.querySelector('#wikichatPage .chat-status').textContent==='Connected · Using local sign-in'")
    english(second,'reload reconnects in the saved language')
    # New profile has its own preference. English is present before any component mounts.
    fresh_browser=Browser(folder/'fresh-browser');browsers.append(fresh_browser);fresh=fresh_browser.page(url,lang='en')
-   fresh.open_wiki();fresh.chat();fresh.wait("document.querySelector('#wikichatPage .chat-status').textContent==='Connected · Using local sign-in'")
+   open_fixture(fresh);fresh.chat();fresh.wait("document.querySelector('#wikichatPage .chat-status').textContent==='Connected · Using local sign-in'")
    english(fresh,'fresh profile with saved English mounts all labels correctly')
    fresh.language('zh-Hant');time.sleep(.2)
    english(page,'separate browser profiles do not silently share UI preference')

@@ -24,6 +24,8 @@ class HealthcheckTests(unittest.TestCase):
             with urlopen(f'http://127.0.0.1:{http.server_port}{path}', timeout=2) as response:
                 self.assertEqual(response.status, 200)
                 self.assertIsInstance(json.load(response), dict)
+            from scripts.docker_launch import check_host_ready
+            check_host_ready(f'http://127.0.0.1:{http.server_port}')
             http.store.stats.assert_not_called()
         finally:
             http.shutdown()

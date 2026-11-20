@@ -7,10 +7,10 @@
 - 可以對新聞／Chat 或已分割的工具視窗繼續分割；不再固定右下。保留原本新聞／Chat 頁籤。
 - 拖標題回圖中會移出分割區，其兄弟視窗自動補位。各分隔線可拖曳；方向鍵／Home 同樣能調大小。右側既有外邊界控制總寬度。
 - `graphnews.toolDock` version 2 保存分割樹、順序與比例；還原時驗證合法工具 ID、唯一性、深度與新聞視窗。舊固定下方版面可遷移。浮動位置仍由原偏好保存。
-- 收合圖示由 36px 放大為 72px、符號由 22px 放大為 44px。上方導覽空間保留；分割區工具不參與圖內碰撞避讓。
+- A minimized News tool leaves its split and becomes a movable square icon. Empty leaves and their dividers release their space. Reopening restores the original leaf and ratio, including after reload. [Current window behavior](references/wiki-timeline-workbench.md)
 - 短分割視窗精簡曲線說明與讀數，讓時間曲線及 K 線優先可見；內容仍可捲動。MCP runtime 提供分割樹及邊緣／停留條件。
 
-驗證：`tests/browser_price_dock.py` 真實滑鼠檢查中央／空隙／快速掠過不吸附、邊緣停留分割、上下左右配置、拖出補位、分隔調整、雙倍圖示與重新整理。`tests/browser_user_journeys.py` 覆蓋既有來源控制、2,400 節點及 WebGL 重試。
+驗證：`tests/browser_price_dock.py` 真實滑鼠檢查中央／空隙／快速掠過不吸附、邊緣停留分割、上下左右配置、拖出補位、分隔調整、方形圖示與重新整理。`tests/browser_user_journeys.py` 覆蓋既有來源控制、2,400 節點及 WebGL 重試。
 
 ## 2026-11-03 拖出後補位修正
 
@@ -24,7 +24,7 @@
 
 ## 浮動視窗尺寸（2026-11-06）
 
-`dist/floating-resize.js` 管理時間與來源工具的四邊／四角拖曳。展開預設時間 480×380、來源 430×320；受當下圖區可用尺寸限制，通常最小 280×180。標題固定，內容在自己的 body 捲動。尺寸與位置、收合狀態一同存於各自 `graphnews.timePanel/sourcePanel` 瀏覽器偏好，收合／展開／重新整理沿用；不宣稱跨設定檔保存。
+`dist/floating-resize.js` 管理時間與來源工具的四邊／四角拖曳。展開預設時間 480×380、來源 430×320；初始受圖區可用尺寸限制，拖出後依工作台視窗大小調整，通常最小 280×180。標題固定，內容在自己的 body 捲動。尺寸與位置、收合狀態一同存於各自 `graphnews.timePanel/sourcePanel` 瀏覽器偏好，收合／展開／重新整理沿用；不宣稱跨設定檔保存。
 
 調整大小使用把手的 pointer capture，事件不交給父層搬移或圖譜；失焦／取消回復本次起始幾何，放開保存。底部定位的面板在高度改變後需以實際新矩形補償位置，不能只更改 height。方向鍵每次 20px，Home 回預設尺寸。停靠後隱藏浮動把手，尺寸由分割樹管理；拖回圖中沿用浮動尺寸。
 
