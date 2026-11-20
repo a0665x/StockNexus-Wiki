@@ -1,5 +1,9 @@
 # 變更與驗證 log
 
+## 2026-11-20 — Contextual help and functional colors
+
+News, Wiki, Chat, document graphs and API navigation reveal secondary explanations on demand. The shared header displays the ribbon. Source, time and viewpoint tools carry distinct background colors. The Chromium journey measures hover timing, verifies accessible names and descriptions, checks modal and touch dismissal and samples the three filled launchers. [Acceptance scenarios](references/unslop-20261120.md#contextual-help-and-tool-colors) · [Release verification](TESTING.md#workbench-release-verification)
+
 ## 2026-11-20 — Resizable header and centered News tool icons
 
 The shared header scales the visible ribbon artwork as its bottom edge moves. News sources use a stacked database and time/size focus uses a curve inside a magnifier. Both also appear in their expanded headings. The shared spec now routes new sessions from `main` to a feature contract, its browser or service tests and the local source index. [Behavior and verification](references/wiki-timeline-workbench.md#resizing-the-shared-header) · [Test routes](TESTING.md#workbench-release-verification)

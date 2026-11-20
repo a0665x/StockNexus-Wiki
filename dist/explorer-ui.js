@@ -66,7 +66,7 @@
     $('forceRefresh').checked=false;
     function save(){
       const draft={rss_region:$('rssRegion').value||'TW',query:$('query').value,ticker:$('ticker').value,sources:providers.filter(p=>$('source-'+p).checked),dates:dates.state()};
-      const ok=write('searchDraft',draft);$('searchDraftStatus').textContent=ok?'搜尋設定已自動保存在此瀏覽器。':'瀏覽器儲存不可用；重新整理後無法保留搜尋設定。';return ok;
+      const ok=write('searchDraft',draft);$('searchDraftStatus').textContent=ok?'':'瀏覽器儲存不可用；重新整理後無法保留搜尋設定。';return ok;
     }
     for(const id of ['query','ticker','rssRegion','forceRefresh',...providers.map(p=>'source-'+p)])for(const event of ['input','change'])$(id).addEventListener(event,save);
     dates.onChange(save);save();return save;
@@ -327,7 +327,7 @@
     if(!header||!handle)return;
     const rootNode=document.documentElement;
     const heading=header.querySelector('h1');
-    const controls=Array.from(header.querySelectorAll(':scope > span,button,select'));
+    const controls=Array.from(header.querySelectorAll('button,select'));
     const saved=read('headerHeight');
     let preferred=Number.isFinite(saved)?saved:null;
     let height,minimum,maximum,standard,drag=null;

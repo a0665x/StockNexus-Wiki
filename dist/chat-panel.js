@@ -32,6 +32,10 @@
  input.placeholder='整理我選取的新聞，或幫我調整畫面…';input.setAttribute('aria-label','向新聞助理提問');input.maxLength=24000;send.type='submit';send.disabled=true;send.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m21 3-6.5 18-4-7.5L3 9.5 21 3Z M10.5 13.5 21 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';fresh.type=stop.type='button';stop.disabled=true;toolbar.append(fresh,stop);form.append(input,send);status.setAttribute('role','status');status.setAttribute('aria-live','polite');chat.append(toolbar,context,messages,status,form);
  const historyToggle=make('button',null,'chat-history-toggle'),historyPanel=make('section',null,'chat-history'),historyHeading=make('div',null,'chat-history-heading'),historyList=make('div',null,'chat-history-list');
  historyToggle.type='button';historyToggle.id=prefix+'chatHistoryToggle';historyToggle.setAttribute('aria-expanded','false');historyPanel.id=prefix+'chatHistory';historyToggle.setAttribute('aria-controls',historyPanel.id);historyPanel.hidden=true;historyPanel.append(historyHeading,historyList);toolbar.append(historyToggle);toolbar.after(historyPanel);
+ const selection=make('span',null,'context-selection'),contextHelp=make('button',null,'help-trigger'),contextNote=make('span',null,'help-tip');
+ context.classList.add('help-heading');contextNote.id=prefix+'chatContextHelp';contextNote.hidden=true;
+ contextNote.setAttribute('role','tooltip');contextHelp.type='button';contextHelp.setAttribute('aria-describedby',contextNote.id);
+ context.append(selection,contextHelp,contextNote);
  const ownerKey='stocknexus.chatOwner',activeKey='stocknexus.chatActive.'+(prefix||'news');
  const localRead=key=>{try{return localStorage.getItem(key);}catch{return null;}},localWrite=(key,value)=>{try{value?localStorage.setItem(key,value):localStorage.removeItem(key);}catch{}};
  let conversation=null,historyRows=[],changingConversation=false;
@@ -76,7 +80,15 @@
  function renderStatus(){status.textContent=format(statusState.source,statusState.values);}
  function setStatus(source,values={}){statusState={source,values};renderStatus();}
  function showError(error){const source=String(error.message||error);if(source==='Session expired; start a new chat.')setStatus('對話連線已失效，請重新開啟 Chat。');else if(source.startsWith('回覆失敗：'))setStatus('回覆失敗：{detail}',{detail:source.slice(5)});else if(/^Chat 連線失敗 \(\d+\)$/.test(source))setStatus('Chat 連線失敗 ({code})',{code:source.match(/\d+/)[0]});else setStatus(source==='已停止回覆。'?'已停止回覆':source);}
- function renderContext(state=runtime.state()){context.textContent=state.surface==='wiki'?format('Wiki {instrument} · v{version} · {count} 個節點\n依目前選取與日期討論觀點；論述與引用可由工具讀取。',{instrument:state.instrument+' · '+(state.layer||'L1'),version:state.version,count:state.counts.scope})+(state.selected_node?'\n'+(state.selected_node.layer||'L1')+' · '+state.selected_node.title:'')+(state.research_question?'\n'+state.research_question:''):format('目前範圍：{scope} · {count} 篇 · {view}\n每次提問跟隨目前選取；回答期間可繼續操作。',{scope:tr(state.scope_kind==='category'?'分類':state.scope_kind==='roots_and_relations'?'Roots 與關聯':state.scope_kind==='article'?'選定新聞':'目前結果'),count:state.counts.scope,view:tr(state.view_mode==='network'?'3D':'時間軸')});}
+ function renderContext(state=runtime.state()){
+  const wiki=state.surface==='wiki';
+  const text=wiki?format('Wiki {instrument} · v{version} · {count} 個節點',{instrument:state.instrument+' · '+(state.layer||'L1'),version:state.version,count:state.counts.scope})+
+   (state.selected_node?'\n'+(state.selected_node.layer||'L1')+' · '+state.selected_node.title:'')+(state.research_question?'\n'+state.research_question:''):
+   format('目前範圍：{scope} · {count} 篇 · {view}',{scope:tr(state.scope_kind==='category'?'分類':state.scope_kind==='roots_and_relations'?'Roots 與關聯':state.scope_kind==='article'?'選定新聞':'目前結果'),count:state.counts.scope,view:tr(state.view_mode==='network'?'3D':'時間軸')});
+  selection.textContent=text;
+  contextHelp.setAttribute('aria-label',tr('對話範圍說明'));
+  contextNote.textContent=tr(wiki?'依目前選取與日期討論觀點；論述與引用可由工具讀取。':'每次提問跟隨目前選取；回答期間可繼續操作。');
+ }
  let visible=false,busy=false,session=null,connecting=null,lastData=null,syncing=false,timer=null,stopping=false;
  const api={active:()=>visible||busy};
  function setTab(show){visible=show;deck.classList.toggle('chat-visible',show);news.inert=show;chat.inert=!show;news.setAttribute('aria-hidden',String(show));chat.setAttribute('aria-hidden',String(!show));newsTab.setAttribute('aria-selected',String(!show));chatTab.setAttribute('aria-selected',String(show));newsTab.tabIndex=show?-1:0;chatTab.tabIndex=show?0:-1;if(show){refreshModels();detail.classList.add('open');connect().then(()=>sync()).catch(showError);}}

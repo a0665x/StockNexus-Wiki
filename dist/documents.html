@@ -1,4 +1,4 @@
-<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>文件知識庫 · StockNexus Wiki</title><link rel="stylesheet" href="/documents.css"><link rel="stylesheet" href="/workbench.css?v=20261120-unslop"></head>
+<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>文件知識庫 · StockNexus Wiki</title><link rel="stylesheet" href="/documents.css"><link rel="stylesheet" href="/workbench.css?v=20261120-unslop"><link rel="stylesheet" href="/workbench-help.css"></head>
 <body class="documents-workbench"><header><a href="/">← StockNexus Wiki</a><h1>文件知識庫</h1><select id="documentCollection" aria-label="知識庫"></select></header>
 <main><aside>
 <form id="importDocuments">
@@ -11,6 +11,6 @@
   <p id="importStatus" role="status"></p>
 </form>
 <h2>來源</h2><button id="refreshDocuments">重新讀取 DB</button><div id="documentChoices"></div><label for="layers">顯示層級</label><select id="layers"><option value="">全部節點</option><option value="documents">文件與章節</option><option>L1</option><option>L2</option></select><h2>文件目錄</h2><div id="outline"></div></aside>
-<section class="canvas"><div id="docGraph"></div><output id="counts" aria-live="polite"></output><p id="layoutNote">連線表示章節隸屬或內容關係；遠近由布局決定，並非相似度或時間。</p></section>
+<section class="canvas"><div id="docGraph"></div><output id="counts" aria-live="polite"></output><div class="graph-help-control"><span class="visually-hidden" id="layoutHelpName">文件圖譜布局</span><button type="button" class="help-trigger" aria-labelledby="layoutHelpName workbenchHelpWord" aria-describedby="layoutNote"></button></div><span id="layoutNote" class="help-tip" role="tooltip" hidden>連線表示章節隸屬或內容關係；遠近由布局決定，並非相似度或時間。</span></section>
 <aside id="details"><h2>節點詳情</h2><p>點選目錄或圖上的節點。</p></aside></main>
-<script src="/3d-force-graph.min.js"></script><script src="/documents.js"></script></body></html>
+<script src="/3d-force-graph.min.js"></script><script src="/documents.js"></script><script src="/workbench-help.js"></script></body></html>

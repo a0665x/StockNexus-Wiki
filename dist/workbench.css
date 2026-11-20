@@ -59,7 +59,7 @@ dialog::backdrop{background:#0008}dialog h2{font-size:20px;font-weight:500}dialo
 .chat-compose textarea{background:var(--panel);border-color:#46514e;border-radius:12px;padding:12px 48px 12px 12px;min-height:88px}.chat-compose .chat-send{color:var(--bg);background:var(--accent);border-radius:8px;min-height:32px;width:32px;height:32px;right:8px;bottom:8px;padding:8px}.chat-send svg{width:16px;height:16px}.chat-compose .chat-send:hover:not(:disabled){background:#a3e3d0}.chat-status{font-size:11px;min-height:16px}
 .chat-history{flex:0 1 auto;min-height:80px;max-height:300px;overflow:auto;border-block:1px solid var(--line);padding:12px 0}.chat-history[hidden]{display:none}.chat-history-heading{font-size:12px;color:var(--muted);padding:0 8px 8px}.chat-history-empty{color:var(--muted);font-size:12px;padding:0 8px}.chat-history-list{display:flex;flex-direction:column;gap:4px}.chat-history-row{display:flex;gap:4px;border-radius:8px}.chat-history-open{display:flex;flex-direction:column;gap:4px;text-align:left;min-width:0;flex:1;background:transparent!important;border:0!important;padding:8px!important}.chat-history-open span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;font-size:12px}.chat-history-open small{font-size:11px}.chat-history-row:has([aria-current=true]),.chat-history-row:hover{background:var(--raised)}.chat-history-open[aria-current=true]{box-shadow:inset 2px 0 var(--accent)}.chat-history-delete{align-self:center;width:32px;height:32px;min-height:32px!important;background:transparent!important;border:0!important;padding:8px!important;color:var(--muted)!important}.chat-history-delete svg{width:16px;height:16px}.chat-history-delete:hover:not(:disabled){color:#efa79f!important}
 .agent-operated{box-shadow:none!important}.error,.wiki-status.error{color:#efa79f}.wiki-working:before{border-color:var(--line);border-top-color:var(--accent)}
-body.documents-workbench main{height:calc(100dvh - 68px)}body.documents-workbench aside{padding:20px;background:#171a1b}body.documents-workbench output,#layoutNote{background:#1a1d1eee;color:var(--muted);border:1px solid var(--line);border-radius:8px;padding:8px 12px}body.documents-workbench .entry{color:var(--text);min-height:32px;font-size:13px}body.documents-workbench #importDocuments{border-color:var(--line);padding-bottom:16px}body.documents-workbench details>div{border-color:var(--line)}
+body.documents-workbench main{height:calc(100dvh - 68px)}body.documents-workbench aside{padding:20px;background:#171a1b}body.documents-workbench output{background:#1a1d1eee;color:var(--muted);border:1px solid var(--line);border-radius:8px;padding:8px 12px}body.documents-workbench .entry{color:var(--text);min-height:32px;font-size:13px}body.documents-workbench #importDocuments{border-color:var(--line);padding-bottom:16px}body.documents-workbench details>div{border-color:var(--line)}
 @media(max-width:1000px){.wiki-workers[open]{grid-template-columns:repeat(2,minmax(0,1fr))}.wiki-workers .wiki-worker-row:last-child:nth-child(even){grid-column:1/-1}}
 @media(max-width:700px){body>header{padding:0 12px;height:60px;gap:8px}body>header>span{display:none}.wiki-header{padding:12px;gap:8px;flex-wrap:wrap}.wiki-header h2{font-size:18px}.wiki-header button{padding:8px;font-size:12px}.wiki-controls,.wiki-detail{padding:16px}.wiki-workers[open]{grid-template-columns:1fr}.wiki-workers .wiki-worker-row{grid-column:auto}#wikiLive:has(.wiki-workers[open]){max-height:50vh;min-height:0}.wiki-toolbar{padding:12px}.wiki-counts{padding:12px}.wiki-header>a{min-height:32px;display:flex;align-items:center}.chat-toolbar button{min-height:40px}.chat-history-delete{width:40px;height:40px;min-height:40px!important;padding:12px!important}.chat-compose textarea{font-size:16px}body.documents-workbench main{height:auto}.wiki-panel input[type=date]{font-size:13px;padding:8px 4px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
@@ -85,7 +85,6 @@ body.documents-workbench main{height:calc(100dvh - 68px)}body.documents-workbenc
   display:block;position:absolute;max-width:none;height:auto;
   width:var(--brand-image-width,100%);left:var(--brand-image-left,0%);top:var(--brand-image-top,0%)
 }
-#workbenchHeader>span{flex:none;font-size:clamp(14px,calc(var(--workbench-header-height) * .22),24px)}
 #workbenchHeader :is(button,select){flex:none;white-space:nowrap}
 #headerResize{
   position:absolute;inset:auto 0 0;height:10px;cursor:ns-resize;touch-action:none;user-select:none;outline:none
@@ -103,7 +102,6 @@ body.documents-workbench main{height:calc(100dvh - 68px)}body.documents-workbenc
 }
 #workbenchHeader[data-stacked] h1{grid-column:1/-1;width:100%;contain:inline-size}
 #workbenchHeader[data-stacked] .brand-artwork{max-width:calc(var(--brand-height) * var(--brand-aspect,3))}
-#workbenchHeader[data-stacked]>span{grid-column:1/4;justify-self:start}
 #workbenchHeader[data-stacked] #openSearch{grid-column:1}
 #workbenchHeader[data-stacked] #language{grid-column:4}
 #workbenchHeader[data-stacked] :is(button,select){min-height:32px;height:32px;padding-block:2px}
@@ -160,13 +158,18 @@ body.documents-workbench main{height:calc(100dvh - 68px)}body.documents-workbenc
 .wiki-canvas-area:has(.research-visible) button#wikiTimelineLauncher{display:none}
 /* One visual language for floating readers and their movable launchers. */
 :root{--launcher-size:40px}
+/* Color follows the tool in its window, launcher and related actions. */
+:root{--source-ink:130 210 182;--time-ink:232 183 111;--wiki-ink:153 190 228}
+:is(#sourcePanel,#refreshDocuments,#documentLauncher,#importDocuments){--tool-ink:var(--source-ink)}
+:is(#timeFocusBar,#dateMode,.quick-months,#modeTimeline){--tool-ink:var(--time-ink)}
+:is(#wikiTimelineTool,#wikiTimelineLauncher,#modeWiki,#researchOpen,#wikiBrowse,#wikiCompare){--tool-ink:var(--wiki-ink)}
 #newsFloatingTools{position:fixed;inset:0;z-index:18;pointer-events:none}
 #newsFloatingTools[hidden],.pane-workspace [hidden]:is(.pane-leaf,.pane-split,.pane-divider){display:none}
 #newsFloatingTools>:is(#sourcePanel,#timeFocusBar){position:fixed;inset:auto;margin:0;pointer-events:auto;max-height:none;border:1px solid var(--line);border-radius:12px;background:var(--panel);box-shadow:0 12px 36px #0006}
 #newsFloatingTools>.floating-resizable:not(.collapsed){padding:0}
 #newsFloatingTools .floating-heading{padding:6px 12px;margin:0;border-bottom:1px solid var(--line);flex-wrap:nowrap}
 .floating-heading .panel-drag{flex:1;justify-content:flex-start;user-select:none}
-.floating-heading .panel-symbol{display:grid;place-items:center;flex:none;width:24px;height:24px;color:var(--accent)}
+.floating-heading .panel-symbol{display:grid;place-items:center;flex:none;width:24px;height:24px;color:rgb(var(--tool-ink))}
 .floating-heading .icon-control{width:32px;height:32px;min-height:32px;padding:0}
 #newsFloatingTools :is(#sourcePanelBody,#timeFocusBody){padding:8px 12px 12px}
 #newsFloatingTools>:is(#sourcePanel,#timeFocusBar).collapsed{width:var(--launcher-size);height:var(--launcher-size);min-width:0;padding:0;border:0;box-shadow:none;background:transparent}
@@ -175,11 +178,39 @@ body.documents-workbench main{height:calc(100dvh - 68px)}body.documents-workbenc
 .wiki-panel #wikiTimelineLauncher{position:fixed;z-index:12;left:8px;top:var(--wiki-top,68px)}
 #newsFloatingTools .floating-heading button.tool-launcher,.wiki-panel button#wikiTimelineLauncher{
  display:grid;grid-template:1fr / 1fr;place-content:center;place-items:center;gap:0;flex:none;width:var(--launcher-size);height:var(--launcher-size);min-height:0;padding:0;
- border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--accent);cursor:grab;touch-action:none;user-select:none
+ border:1px solid color-mix(in srgb,rgb(var(--tool-ink)) 32%,var(--panel));border-radius:8px;
+ background:color-mix(in srgb,rgb(var(--tool-ink)) 20%,var(--panel));color:rgb(var(--tool-ink));cursor:grab;touch-action:none;user-select:none
 }
 #newsFloatingTools .tool-launcher .workbench-icon,#wikiTimelineLauncher .workbench-icon{width:24px;height:24px}
-#newsFloatingTools button.tool-launcher:hover,.wiki-panel #wikiTimelineLauncher:hover{background:var(--raised);border-color:var(--quiet)}
 #newsFloatingTools button.tool-launcher:active,.wiki-panel #wikiTimelineLauncher:active{cursor:grabbing}
+
+#newsFloatingTools .floating-heading button.tool-launcher:hover,.wiki-panel button#wikiTimelineLauncher:hover{
+  background:color-mix(in srgb,rgb(var(--tool-ink)) 30%,var(--panel))
+}
+#dateMode{background:var(--panel);gap:3px}
+#dateMode::before{display:none}
+:is(#sourcePanel,#timeFocusBar) .floating-heading :is(.panel-fold,.panel-reset),
+:is(#timeBellReset,#timeBellUndo,#refreshDocuments,#modeWiki,#modeTimeline),
+.wiki-panel :is(#researchOpen,#wikiBrowse,#wikiCompare,#wikiTimelineReset,#wikiTimelineFloat,#wikiTimelineFold),
+:is(#dateMode,.quick-months) button,#importDocuments button[value=preview]{
+  color:rgb(var(--tool-ink));background:rgb(var(--tool-ink) / .09);border-color:rgb(var(--tool-ink) / .18)
+}
+:is(#sourcePanel,#timeFocusBar) .floating-heading :is(.panel-fold,.panel-reset):hover:not(:disabled),
+:is(#timeBellReset,#timeBellUndo,#refreshDocuments,#modeWiki,#modeTimeline):hover:not(:disabled),
+.wiki-panel :is(#researchOpen,#wikiBrowse,#wikiCompare,#wikiTimelineReset,#wikiTimelineFloat,#wikiTimelineFold):hover:not(:disabled),
+:is(#dateMode,.quick-months) button:is(:hover,[aria-pressed=true]),#importDocuments button[value=preview]:hover,#stage #modeTimeline.active{
+  background:rgb(var(--tool-ink) / .18);border-color:rgb(var(--tool-ink) / .34)
+}
+.graph-help-control{position:absolute;inset:auto 12px 12px auto;z-index:3}
+.graph-help-control .help-trigger{background:var(--panel);border:1px solid var(--line)}
+#form .help-heading,.wiki-controls>.help-heading,.wiki-settings>.help-heading{margin:12px 0 4px}
+#form .help-heading>label,.wiki-panel .help-heading>label,.wiki-settings .help-heading>label{margin:0}
+.wiki-controls>.help-heading+select,.wiki-settings>.help-heading+select{display:block;width:100%}
+:is(#wikiStrategyState,#searchDraftStatus,#rootSearchStatus):empty{display:none}
+.wiki-counts #wikiGroups{display:inline-flex;vertical-align:middle;margin-inline-start:8px;color:var(--muted)}
+.wiki-counts #wikiGroups[hidden]{display:none}
+.chat-context.help-heading{align-items:start;justify-content:space-between}
+.chat-context .context-selection{white-space:pre-line;overflow-wrap:anywhere}
 
 .wiki-canvas-area:has(#wikiLower:not(.research-visible):is([data-timeline=collapsed],[data-timeline=floating])) #wikiResizeTimeline{display:none}
 #wikiLower:not(.research-visible):is([data-timeline=collapsed],[data-timeline=floating]){flex:0 0 auto;min-height:0}

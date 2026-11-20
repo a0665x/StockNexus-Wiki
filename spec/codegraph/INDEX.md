@@ -12,6 +12,8 @@ codegraph explore 'initHeaderResize frameBrand initFloatingPanel' --max-files 2
 
 Follow the returned paths to the current implementation and its browser journey. HTML and CSS geometry also needs a browser measurement. [Feature-to-test index](../TESTING.md#workbench-release-verification) · [Architecture](../ARCHITECTURE.md)
 
+For tooltip timing or dismissal, `codegraph explore 'dist/workbench-help.js helpAt' --max-files 1` locates the shared controller. Its browser interactions are driven through the DOM. Use the [contextual help journey](../../tests/browser_workbench_help.py) to follow them.
+
 ## Index health
 
 `codegraph status --strict .` checks freshness. The MCP watcher updates the local index for changed files. With a CLI-only session, `codegraph sync .` refreshes an existing index incrementally. If an open MCP connection reports `statInode is not a function`, reconnect it or use the installed CLI. A fresh MCP connection and the CLI both returned the header symbols during release verification. A separate checkout starts without this local database. Use scoped source search there until the user requests indexing.

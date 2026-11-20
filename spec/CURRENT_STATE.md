@@ -4,6 +4,8 @@
 
 Use `main` for new work. The corresponding release branch is `llm_wiki_unslop`. To check the release on a later checkout, run `git rev-parse HEAD` and `git merge-base --is-ancestor origin/llm_wiki_unslop origin/main` after refreshing remote refs. An exit code of zero confirms that the fetched main includes the tip of the fetched feature branch.
 
+The dark workbench now shows secondary guidance on a 600 ms hover, keyboard focus or explicit activation. Its three floating tools use teal for sources, amber for the curve lens and mist blue for Wiki viewpoints. Start a UI task with the [contextual help contract](references/unslop-20261120.md#contextual-help-and-tool-colors) and the [executable acceptance index](TESTING.md#workbench-release-verification).
+
 News and Wiki share a left-aligned, resizable ribbon logo. Drag the bottom edge or focus it and use the arrow keys. The News source and time tools use centered database and curve-lens icons. The English acceptance record links to executable browser tests, deployment checks and the existing controls for cache, workers, Chat and document import. [Header and icon behavior](references/wiki-timeline-workbench.md#resizing-the-shared-header) · [Feature-to-test index](TESTING.md#workbench-release-verification)
 
 For a research task, read the current stock's job ledger before continuing it. Historical NVDA and TSLA publication numbers below are dated observations. [NVDA research handoff](references/nvda-research-20261120.md)

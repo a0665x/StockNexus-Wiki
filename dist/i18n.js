@@ -140,9 +140,10 @@
 
     '候選 tree 預覽 · 點一下確認 root':'Candidate tree preview · Click to confirm root','預覽中 · 點一下進入星系':'Preview · Click to enter galaxy','靠近只預覽候選 tree，點一下才確認 root。點空白或按 Esc 回全局；單一 root 閒置 5.5 秒回全局，關鍵字多星系持續鎖定。':'Hover previews a candidate tree; click to confirm a root. Click empty space or press Esc for overview. Single roots return after 5.5 idle seconds; keyword galaxies stay locked.',
     '收合':'Collapse','展開':'Expand','歸位':'Reset position','拖曳篩選框；方向鍵移動':'Drag filter panel; arrow keys to move','比對已載入新聞的標題、來源摘要、代碼與分類；不包含未抓取的全文。':'Matches loaded titles, provider summaries, symbols and categories; excludes article bodies that were not fetched.',
+    '匯入研究文件':'Import research documents','文件知識庫':'Document collection',
     '搜尋設定已自動保存在此瀏覽器。':'Search settings are saved automatically in this browser.','瀏覽器儲存不可用；重新整理後無法保留搜尋設定。':'Browser storage is unavailable; search settings cannot survive a refresh.',
     'Roots 在目前視野外，可按「重設視角」查看全圖。':'Roots are outside the current view. Use Reset view to see the full graph.',
-"圖內搜尋就緒 · v3":"Graph search ready \u00b7 v3","請輸入圖內搜尋關鍵字。":"Enter graph search keywords.","目前圖譜沒有節點，請先搜尋新聞並勾選顯示來源。":"No graph nodes. Search news and select visible sources first.","Top N 必須為 1–10 的整數。":"Top N must be an integer from 1 to 10.","搜尋中…":"Searching\u2026","個節點":"nodes","圖譜或選取已變更，請重新搜尋。":"Graph or selection changed. Search again.","已掃描":"Scanned","命中":"Matched","高亮節點":"Highlighted nodes","光暈已關閉或亮度為 0，請至光暈設定開啟。":"Glow is disabled or brightness is zero. Enable it in glow settings.","目前門檻下沒有延伸連線，僅標示 roots。":"No branches pass current thresholds; only roots are highlighted.","3D 無法使用，請查看下方 roots 清單。":"3D is unavailable. See the roots list below.","密度格不顯示星系；請切換 3D 或逐篇節點。":"Density cells do not display galaxies. Switch to 3D or individual nodes.","已套用星系；視角保持不變。":"Galaxies applied; camera unchanged.","圖內搜尋失敗；目前圖譜保留。":"Graph search failed; graph preserved.",
+"請輸入圖內搜尋關鍵字。":"Enter graph search keywords.","目前圖譜沒有節點，請先搜尋新聞並勾選顯示來源。":"No graph nodes. Search news and select visible sources first.","Top N 必須為 1–10 的整數。":"Top N must be an integer from 1 to 10.","搜尋中…":"Searching\u2026","個節點":"nodes","圖譜或選取已變更，請重新搜尋。":"Graph or selection changed. Search again.","已掃描":"Scanned","命中":"Matched","高亮節點":"Highlighted nodes","光暈已關閉或亮度為 0，請至光暈設定開啟。":"Glow is disabled or brightness is zero. Enable it in glow settings.","目前門檻下沒有延伸連線，僅標示 roots。":"No branches pass current thresholds; only roots are highlighted.","3D 無法使用，請查看下方 roots 清單。":"3D is unavailable. See the roots list below.","密度格不顯示星系；請切換 3D 或逐篇節點。":"Density cells do not display galaxies. Switch to 3D or individual nodes.","已套用星系；視角保持不變。":"Galaxies applied; camera unchanged.","圖內搜尋失敗；目前圖譜保留。":"Graph search failed; graph preserved.",
 
     '搜尋目前圖譜文字（robot 可匹配 robotics）；點圖中空白處返回全局。':'Search current graph text (robot also matches robotics). Click empty graph space to return to overview.',
     '在當下圖譜上搜尋並疊加星系；點圖中空白處返回全局。':'Search the current graph and overlay galaxies. Click empty graph space to return to overview.',
@@ -162,7 +163,7 @@
     '星系光暈與深度明暗':'Galaxy glow & depth fading','啟用漸層光暈':'Enable depth glow','光暈亮度':'Glow brightness','光暈大小（px）':'Glow size (px)','每層保留亮度':'Brightness retained per hop','非關聯節點亮度':'Unrelated node brightness','取消固定 root':'Unpin root','重設光暈':'Reset glow','各層亮度預覽':'Brightness by depth','滑鼠暫時探索；點選可固定 root，移開後仍保留。深度越深越淡，點空白或按下方按鈕取消固定。光暈只影響顯示。':'Hover to explore; click to pin a root, including on mobile. Deeper nodes fade. Click the background or unpin below to clear. Glow changes appearance only.',
 
     '文字辨識':'Text match','來源標註':'Source annotation','文章文字':'Article text','標題':'Title','摘要':'Summary',
-    '新聞關聯觀測台':'News relationship explorer','搜尋':'Search','新聞清單':'News list','真實來源 · 關聯由規則產生':'Real sources · Rule-based relationships','關閉':'Close','搜尋真實新聞':'Search real news',
+    '搜尋':'Search','新聞清單':'News list','真實來源 · 關聯由規則產生':'Real sources · Rule-based relationships','關閉':'Close','搜尋真實新聞':'Search real news',
     '分析目前觀點、引用與關聯…':'Analyze current viewpoints, citations and relations…',
 '向 Wiki 助理提問':'Ask the Wiki assistant',
 '股票識別（必填）':'Instrument (required)','搜尋關鍵字（逗號分隔，可自行補充）':'Search keywords (comma-separated, editable)','搜尋關鍵字（Google／Yahoo）':'Keywords (Google / Yahoo)','例如 半導體、NVIDIA':'e.g. semiconductors, NVIDIA','股票代碼（僅 Massive，請明確填寫）':'Ticker (Massive only, explicit symbol)','例如 NVDA、2330.TW':'e.g. NVDA, 2330.TW','起始日期（UTC）':'Start date (UTC)','結束日期（UTC，含當日）':'End date (UTC, inclusive)','搜尋來源':'Search sources','Google 新聞 RSS':'Google News RSS','Massive API key（選填）':'Massive API key (optional)','也可在伺服器環境設定':'Or configure on the server','伺服器已設定 key，可留白':'Server key configured; may leave blank',
@@ -206,8 +207,11 @@
     '拖動視窗或用方向鍵移動':'Drag the window or move it with arrow keys',
     '縮小視窗':'Minimize window','視窗歸位':'Reset window position',
     '觀點詳情':'Viewpoint details','來源原文 ↗':'Source article ↗',
-    'Wiki {instrument} · v{version} · {count} 個節點\n依目前選取與日期討論觀點；論述與引用可由工具讀取。':'Wiki {instrument} · v{version} · {count} nodes\nDiscuss viewpoints for the current selection and dates; tools can read arguments and citations.',
-    '目前範圍：{scope} · {count} 篇 · {view}\n每次提問跟隨目前選取；回答期間可繼續操作。':'Current scope: {scope} · {count} articles · {view}\nEach question follows the current selection; you can keep exploring.',
+    'Wiki {instrument} · v{version} · {count} 個節點':'Wiki {instrument} · v{version} · {count} nodes',
+    '目前範圍：{scope} · {count} 篇 · {view}':'Current scope: {scope} · {count} articles · {view}',
+    '依目前選取與日期討論觀點；論述與引用可由工具讀取。':'Discuss viewpoints for the current selection and dates. Tools can read arguments and citations.',
+    '對話範圍說明':'About the chat scope','圖譜操作':'Graph controls','圖上顯示來源':'Visible sources',
+    '依來源分組':'Group by source','曲線塑形':'Curve shape','圖譜日期區間':'Graph date range',
     '對話連線已失效，請重新開啟 Chat。':'Chat session expired; reopen Chat to reconnect.',
     'Chat 連線失敗 ({code})':'Chat connection failed ({code})',
     'Chat 服務未啟動。請執行 ./run.sh chat start。':'Chat service is not running. Run ./run.sh chat start.',
@@ -229,7 +233,7 @@
     for(const name of ['placeholder','aria-label','title']){if(!node.hasAttribute(name))continue;let state=attributes.get(node);if(!state){state={};attributes.set(node,state);}const current=node.getAttribute(name),old=state[name],source=old&&current===old.rendered?old.source:current,rendered=t(source);state[name]={source,rendered};if(current!==rendered)node.setAttribute(name,rendered);}
     for(const child of node.childNodes)translateNode(child);
   }
-  function refresh(){if(typeof document==='undefined')return;document.documentElement.lang=lang;document.title=lang==='en'?'StockNexus Wiki · News relationship explorer':'StockNexus Wiki · 新聞關聯觀測台';translateNode(document.body);}
+  function refresh(){if(typeof document==='undefined')return;document.documentElement.lang=lang;document.title='StockNexus Wiki';translateNode(document.body);}
   function setLanguage(value,{persist=true}={}){lang=value==='en'?'en':'zh-Hant';if(persist)try{localStorage.setItem('graphnews.language',JSON.stringify(lang));}catch{}refresh();if(typeof document!=='undefined'){const picker=document.getElementById('language');if(picker)picker.value=lang;}if(typeof root.dispatchEvent==='function')root.dispatchEvent(new Event('atlas-language'));}
   root.addEventListener?.('storage',event=>{if(event.key!==null&&event.key!=='graphnews.language')return;try{if(event.storageArea!==localStorage)return;const value=JSON.parse(localStorage.getItem('graphnews.language'));if(value!==null&&value!=='en'&&value!=='zh-Hant')return;const next=value==='en'?'en':'zh-Hant';if(next!==lang)setLanguage(next,{persist:false});}catch{}});
   function start(){if(typeof MutationObserver==='undefined')return;refresh();observer=new MutationObserver(records=>{for(const r of records){if(r.type==='childList')for(const n of r.addedNodes)translateNode(n);else translateNode(r.target);}});observer.observe(document.body,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['placeholder','aria-label','title']});}

@@ -4,6 +4,8 @@ Start a new `project-spec-graph-onboarding` session on `main`. The November 20 w
 
 The shared News and Wiki tool contract covers the resizable header, centered launcher icons, chart gestures, split restoration and the path for replacing the logo. [Window behavior and browser acceptance](references/wiki-timeline-workbench.md)
 
+For on-demand UI guidance and functional colors, open the [contextual help contract](references/unslop-20261120.md#contextual-help-and-tool-colors). Its source and test links lead directly to the shared controller and browser acceptance journey.
+
 The current News-to-Wiki navigation, incremental reads, classifier recovery and their acceptance scenarios are covered in the [cache and classifier contract](references/wiki-cache-classifier-20261120.md).
 
 全圖原始碼查核：2026-11-06；2026-11-09 對 `8285c09` 核對 Wiki 分組／分類統計、研究恢復與空資料啟動契約（不是全庫重新查核）。這是目前工作目錄的實作地圖，不代表 GitHub main 或正在執行的 server 已同步。

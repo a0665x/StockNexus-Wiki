@@ -9,6 +9,7 @@ import threading
 from unittest.mock import patch
 
 from browser_chat_language import Browser
+from browser_wiki_timeline import click, key
 import server
 from news_atlas.documents import query
 from news_atlas.graph_storage import GraphRepository
@@ -44,6 +45,14 @@ def main():
                 browser = Browser(folder / 'browser')
                 page = browser.page(url + '/documents')
                 page.wait("document.querySelector('#importDocuments')?.onsubmit != null")
+                page.check('document graph keeps layout guidance behind a named control',
+                           "document.querySelector('#layoutNote').hidden&&!!document.querySelector('[aria-describedby=layoutNote]')")
+                click(page,'button[aria-describedby=layoutNote]')
+                page.check('opening layout help explains distance and leaves import idle',
+                           "document.querySelector('#layoutNote').innerText.includes('遠近由布局決定')&&"
+                           "!document.querySelector('#importStatus').textContent")
+                key(page,'Escape',27)
+                assert page.js("document.querySelector('#layoutNote').hidden")
 
                 def upload(path, mode='apply', source='manuals'):
                     page.js("document.querySelector('[name=source]').value=" + json.dumps(source))
@@ -134,6 +143,13 @@ def main():
                 page.wait("document.querySelector('#details h2').textContent === 'note-b'")
                 page.check('unrelated article remains in the same graph',
                            "[...document.querySelectorAll('#outline .entry')].some(el=>el.textContent==='other')")
+                docs = browser.page(url + '/docs')
+                docs.wait("!!document.querySelector('#swagger-ui .info')&&!!document.querySelector('#workbenchHelpWord')")
+                click(docs,'button[aria-describedby=apiUsageHelp]')
+                docs.check('API navigation exposes its help and both machine-readable contracts',
+                           "document.querySelector('#apiUsageHelp').innerText.includes('快取')&&"
+                           "!!document.querySelector('nav a[href=\"/openapi.json\"]')&&!!document.querySelector('nav a[href=\"/api/schema\"]')")
+                assert docs.js('window.languageErrors') == []
                 assert not unexpected, unexpected
                 assert page.js('window.languageErrors') == []
                 print('PASS heading-free, undated articles: converter -> validator -> Web upload -> explained content link', flush=True)

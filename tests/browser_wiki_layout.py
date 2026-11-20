@@ -155,7 +155,14 @@ def main():
             js("fixtureWiki.nodes.push({id:'c',kind:'Claim',title:'Unrelated',citations:[]});fixtureWiki.total_nodes=3;await AtlasWiki.refresh()")
             js("window.beforeNodes=fixtureWikiRenderer.graphData().nodes.slice();window.beforeCamera=JSON.stringify(fixtureWikiRenderer.cameraPosition());fixtureWikiRenderer.onNodeClick()(beforeNodes[0])")
             results['keep_full_graph']=js("fixtureWikiRenderer.graphData().nodes.length===3&&fixtureWikiRenderer.graphData().nodes.every((n,i)=>n===beforeNodes[i])")
-            results['no_graph_buttons']=js("$('wikiCounts').querySelectorAll('button').length===0")
+            results['counts_only_offer_group_help']=js("""(()=>{
+                const buttons=$('wikiCounts').querySelectorAll('button');
+                if(buttons.length!==1||buttons[0].getAttribute('aria-describedby')!=='wikiGroupHelp')return false;
+                buttons[0].click();
+                const valid=!$('wikiGroupHelp').hidden&&AtlasWiki.runtime.state().root_ids[0]==='a';
+                buttons[0].click();
+                return valid&&$('wikiGroupHelp').hidden;
+            })()""")
             print(json.dumps(results),flush=True)
             assert all(results.values()),results
             def drag_element(id,dx,dy,back=False):

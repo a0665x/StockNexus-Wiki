@@ -1,0 +1,36 @@
+.visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.help-heading{display:flex;align-items:center;gap:4px;min-width:0}
+.help-heading>label,.help-heading>h2,.help-heading>h3{margin:0}
+body button.help-trigger,body :is(.wiki-panel,.wiki-settings,#newsFloatingTools) button.help-trigger{
+  display:inline-grid;place-items:center;flex:none;min-width:24px;width:24px;min-height:24px;height:24px;
+  margin:0;padding:0;border:0;border-radius:6px;color:var(--muted,#a2abaa);
+  background:transparent;box-shadow:none;cursor:help;touch-action:manipulation
+}
+button.help-trigger::before{
+  content:'';width:15px;height:15px;background:currentColor;
+  mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 11v5m0-9v.2'/%3E%3C/svg%3E") center/contain no-repeat
+}
+body button.help-trigger:is(:hover,:focus-visible),body :is(.wiki-panel,.wiki-settings,#newsFloatingTools) button.help-trigger:is(:hover,:focus-visible){
+  background:var(--raised,#303637);color:var(--text,#eceeed)
+}
+button.help-trigger:focus-visible{outline:2px solid var(--accent,#86d5bf);outline-offset:1px}
+body .help-tip[role=tooltip]{
+  position:fixed;inset:auto;z-index:2000;box-sizing:border-box;width:max-content;max-width:min(320px,calc(100vw - 16px));
+  max-height:min(18rem,calc(100dvh - 16px));overflow:auto;overscroll-behavior:contain;
+  margin:0;padding:10px 12px;border:1px solid #484f50;border-radius:8px;background:#222728;color:#e3e8e6;
+  font:400 13px/1.5 "Segoe UI",system-ui,sans-serif;white-space:normal;overflow-wrap:anywhere;
+  text-align:start;pointer-events:auto;box-shadow:0 4px 16px #0004
+}
+.help-tip[hidden]{display:none!important}
+.help-tip>span{display:block}.help-tip>span+span{margin-top:6px}
+.api-navigation{
+  display:flex;align-items:center;flex-wrap:wrap;gap:8px 20px;padding:12px 24px;
+  background:#171a1b;color:#dbe3e1;font:14px/1.5 system-ui,sans-serif
+}
+.api-navigation a{color:#a8dccb;text-decoration:none}.api-navigation a:hover{text-decoration:underline}
+.api-navigation .help-heading{margin-inline-start:auto}
+@media(pointer:coarse){
+  body button.help-trigger,body :is(.wiki-panel,.wiki-settings,#newsFloatingTools) button.help-trigger{
+    width:36px;height:36px
+  }
+}

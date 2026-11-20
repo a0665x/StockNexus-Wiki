@@ -88,14 +88,20 @@ def main():
             for key in ['entity','topic','title']:click('relation-'+key)
             click('relationApply');ready()
             checks['AdaptiveRestored']=js("relations.length>0&&basePayload.relation_settings.adaptive===true")
+            # Wait for the Apply progress row to collapse before pointing at the centered dialog.
+            for _ in range(100):
+                if js("document.getElementById('relationProgress').hidden"):break
+                time.sleep(.05)
             point=js("(()=>{const e=document.querySelector('[data-rule-help=adaptive]');e.scrollIntoView();const r=e.getBoundingClientRect();return {x:r.x+90,y:r.y+r.height/2};})()")
-            call('Input.dispatchMouseEvent',{'type':'mouseMoved',**point});time.sleep(.6)
+            call('Input.dispatchMouseEvent',{'type':'mouseMoved',**point});time.sleep(.35)
+            checks['TooltipWaitsForHover']=js("!document.getElementById('relationTooltip').classList.contains('visible')")
+            time.sleep(.55)
             checks['TooltipVisible']=js("Number(getComputedStyle(document.getElementById('relationTooltip')).opacity)>.9")
             time.sleep(2.6)
             checks['TooltipFades']=js("Number(getComputedStyle(document.getElementById('relationTooltip')).opacity)<.1")
             # The settings layout can settle after the tooltip fades. Move within the current label.
             point=js("(()=>{const r=document.querySelector('[data-rule-help=adaptive]').getBoundingClientRect();return {x:r.left+94,y:r.top+r.height/2}})()")
-            call('Input.dispatchMouseEvent',{'type':'mouseMoved',**point});time.sleep(.6)
+            call('Input.dispatchMouseEvent',{'type':'mouseMoved',**point});time.sleep(.9)
             checks['TooltipReturnsOnMove']=js("Number(getComputedStyle(document.getElementById('relationTooltip')).opacity)>.9")
             click('relationClose')
             js("exportMeta={start:'2025-11-03',end:'2026-11-02'};timelineCutoff=null")

@@ -89,7 +89,7 @@ def main():
             })()""")
             time.sleep(1.7) # Let the initial News Graph fit/first-tick camera settle.
             js("newsBefore.camera=JSON.stringify(graph.cameraPosition());AtlasWiki.show()")
-            check('Wiki opens independently with selected news',"!$('wikiPanel').hidden&&$('wikiSelection').textContent.includes('全局模式')&&$('wikiModel').value==='gpt-6.1-sol|low'&&$('wikiModel').tagName==='SELECT'")
+            check('Wiki opens independently with selected news',"!$('wikiPanel').hidden&&/^已載入 [0-9]+ 篇$/.test($('wikiSelection').textContent)&&$('wikiScopeHelp').hidden&&$('wikiScopeHelp').textContent.includes('新聞資料庫')&&!!document.querySelector('button[aria-describedby=wikiScopeHelp]')&&$('wikiModel').value==='gpt-6.1-sol|low'&&$('wikiModel').tagName==='SELECT'")
             check('saved Wiki date mode and date slider restored',"$('wikiRange').value==='all'&&$('wikiStartDate').value<$('wikiEndDate').value&&$('wikiRangeStart').type==='range'")
             js("$('wikiOperation').value='review';$('wikiOperation').dispatchEvent(new Event('input'))")
             check('review cannot silently enable continuous spending',"$('wikiContinuous').disabled&&!$('wikiContinuous').checked")

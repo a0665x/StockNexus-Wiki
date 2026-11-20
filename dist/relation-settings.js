@@ -32,7 +32,7 @@
   }
   function tooltip($,read){
     const box=$('relationTooltip'),form=$('relationForm');let timer=null,active=null,last=null;
-    function hide(){clearTimeout(timer);box.classList.remove('visible');box.setAttribute('aria-hidden','true');}
+    function hide(){clearTimeout(timer);active=last=null;box.classList.remove('visible');box.setAttribute('aria-hidden','true');}
     function content(key){const cfg=read();
       const texts={
         adaptive:say('先保留嚴格規則的連線，再以欄位設定的較寬範圍替孤立節點補線；不新增無證據的關聯。','Keep strict-rule edges, then use these broader limits to connect isolated nodes with qualifying evidence.'),
@@ -54,17 +54,21 @@
     function show(target,event,keyboard=false){
       const key=target?.dataset?.ruleHelp;if(!key)return;
       if(!keyboard&&active===target&&last?.x===event.clientX&&last?.y===event.clientY)return;
-      active=target;last=keyboard?null:{x:event.clientX,y:event.clientY};clearTimeout(timer);
-      box.textContent=content(key);box.classList.add('visible');box.setAttribute('aria-hidden','false');
-      const rect=target.getBoundingClientRect(),width=box.getBoundingClientRect().width;
-      box.style.left=Math.max(12,Math.min(innerWidth-width-12,keyboard?rect.left:event.clientX+12))+'px';
-      box.style.top=Math.max(12,Math.min(innerHeight-box.getBoundingClientRect().height-12,keyboard?rect.bottom+8:event.clientY+18))+'px';
-      if(!keyboard)timer=setTimeout(hide,2000);
+      hide();active=target;last=keyboard?null:{x:event.clientX,y:event.clientY};
+      function display(){
+        box.textContent=content(key);box.classList.add('visible');box.setAttribute('aria-hidden','false');
+        const rect=target.getBoundingClientRect(),width=box.getBoundingClientRect().width;
+        box.style.left=Math.max(12,Math.min(innerWidth-width-12,keyboard?rect.left:last.x+12))+'px';
+        box.style.top=Math.max(12,Math.min(innerHeight-box.getBoundingClientRect().height-12,keyboard?rect.bottom+8:last.y+18))+'px';
+        if(!keyboard)timer=setTimeout(hide,2000);
+      }
+      if(keyboard)display();else timer=setTimeout(display,600);
     }
     form.addEventListener('pointermove',e=>{const target=e.target.closest?.('[data-rule-help]');if(target)show(target,e);else{active=null;last=null;hide();}});
     form.addEventListener('pointerleave',()=>{active=null;last=null;hide();});
     form.addEventListener('focusin',e=>{const target=e.target.closest?.('[data-rule-help]');if(target)show(target,e,true);});
     form.addEventListener('focusout',hide);
+    form.addEventListener('keydown',e=>{if(e.key==='Escape'&&active){hide();e.preventDefault();}});
     $('relationDialog').addEventListener('close',hide);
     return {hide};
   }

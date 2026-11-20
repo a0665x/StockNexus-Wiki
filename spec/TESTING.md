@@ -2,10 +2,11 @@
 
 ## Workbench release verification
 
-Run the listed scripts from the repository root. On this host, use `/usr/bin/python3` for Chromium journeys. Each journey opens an isolated profile with controlled data. The current release changes the shared header and News tool icons. The paths below also locate the acceptance records for features brought into `main` with it.
+Run the listed scripts from the repository root. On this host, use `/usr/bin/python3` for Chromium journeys. Each journey opens an isolated profile with controlled data. The workbench release includes the shared header, tool colors and contextual explanations.
 
 | Area | Contract | Executable regression |
 | --- | --- | --- |
+| Secondary copy, three tool colors and input access | [Interaction and color scenarios](references/unslop-20261120.md#contextual-help-and-tool-colors) | [Hover, accessibility tree, keyboard and touch](../tests/browser_workbench_help.py), [rule settings](../tests/browser_native_controls.py), [document and API help](../tests/browser_documents.py), [bilingual Chat](../tests/browser_chat_language.py) |
 | Ribbon, header edge, centered tool icons, chart and comparison | [Workbench gestures and expected results](references/wiki-timeline-workbench.md#resizing-the-shared-header) | [Header resize and image substitution](../tests/browser_workbench_header.py), [News and Wiki launchers](../tests/browser_wiki_timeline.py), [Wiki pane geometry](../tests/browser_wiki_layout.py), [News controls](../tests/browser_user_journeys.py) |
 | Stock alignment, preparation and Chat history | [Workbench and Chat](references/unslop-20261120.md) | [Browser entry and conversations](../tests/browser_unslop.py), [saved identity](../tests/browser_wiki_identity.py), [Chat history storage](../tests/chat-history.test.mjs) |
 | Parallel L1 tree work and progress | [Worker and tree units](WIKI_RUNTIME.md#2026-11-20--parallel-tree-workers-and-consistent-progress) | [Concurrent work and checkpoints](../tests/test_wiki_parallel.py), [worker progress in the browser](../tests/browser_wiki_workers.py) |
@@ -14,11 +15,21 @@ Run the listed scripts from the repository root. On this host, use `/usr/bin/pyt
 | L2 evidence, bilingual Chat, context and viewpoint comparison | [Research scenarios](CHAT_RESEARCH_BDD.md), [research layers](RESEARCH_LAYERS.md) | [L2 and Chat](../tests/browser_research_chat_bdd.py), [context API](../tests/test_context_api.py), [comparison](../tests/test_viewpoint_comparison.py) |
 | Client articles, missing metadata, JSONL preview and graph relations | [Document import](DOCUMENT_IMPORT.md) | [Schema, replay and relation reasons](../tests/test_document_import.py), [file upload through Chromium](../tests/browser_documents.py) |
 
+On November 20, the help journey measured **611 ms** from the last pointer move to visibility on a configured 600 ms delay. Hidden descriptions and localized names were present in Chromium's accessibility tree. The fixture exercised mouse, Tab, Enter, Escape, early departure, outside dismissal and emulated touch. Stored Wiki results, Chinese/English Chat, research facets, rule settings, document import and the API guide also passed their browser journeys. Wiki layout passed 51 checks, including opening group help with a node selected. The source, time and Wiki launcher backgrounds sampled after their transitions were `#2f413c`, `#433c2e` and `#333d46`.
+
+The Tailscale check compared 13 served assets and pages with the checkout and opened the published TSLA v124 Wiki from a fresh browser profile. The live date explanation appeared after **606 ms**. The source, time and Wiki backgrounds matched the fixture. Wiki group, scope and mobile settings help appeared within the viewport. The read-only check observed zero unexpected API writes and zero browser errors. Before deployment all 18 Wiki stores were idle. The resulting container was healthy on image `fdb4f628b60a0f160b9ba3b048d0beae4a45285be382413cefde7e717a4ed3bb`. The pre-update image is tagged `news-atlas:before-context-help-20261120`.
+
 The full Python suite passed 372 tests. The combined Node command passed 48 tests. The header journey measured visible image pixels on desktop and compact screens, exercised mouse, keyboard, emulated touch and reload, and exposed a phone layout overflow during development. The final fixture kept every header action reachable. The timeline journey checked the rendered SVG path centers, the Wiki layout regression passed all 51 checks and the News journey passed its interaction checks.
 
 During a second full run, the simulated Docker terminal attempted to acquire the live launcher's lock while a deployment was starting. The terminal fixture now starts its child with a private temporary directory for its lock and simulated data. It can exercise the real terminal menu alongside a running service. The independent lock test still covers mutual exclusion. [Launcher tests](../tests/test_docker_launcher.py)
 
 ```sh
+/usr/bin/python3 tests/browser_workbench_help.py
+/usr/bin/python3 tests/browser_native_controls.py
+/usr/bin/python3 tests/browser_documents.py
+/usr/bin/python3 tests/browser_chat_language.py
+/usr/bin/python3 tests/browser_research_locale.py
+/usr/bin/python3 tests/browser_wiki_results.py
 /usr/bin/python3 tests/browser_workbench_header.py
 /usr/bin/python3 tests/browser_wiki_timeline.py
 /usr/bin/python3 tests/browser_wiki_layout.py
