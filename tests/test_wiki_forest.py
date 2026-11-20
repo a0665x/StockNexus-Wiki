@@ -81,6 +81,7 @@ class ForestTests(unittest.TestCase):
         self.assertEqual(self.store.graph()['version'],1)
         self.assertEqual(self.calls[0]['_covered_articles'],[])
         self.assertGreater(self.calls[0]['_group']['parts'],1)
+        published_first=self.calls[0]['_checkpoint']
         self.calls=[]
         def success(store,job,a,c):
             self.calls.append(a);return {'proposal':proposal(a),'usage':{}}
@@ -88,7 +89,7 @@ class ForestTests(unittest.TestCase):
         self.service.resume({'instrument':'NASDAQ:TSLA'});self.service.tick()
         self.assertEqual(self.store.jobs()[0]['status'],'completed')
         self.assertEqual(self.service.coverage(self.store)['scope_done'],15)
-        self.assertEqual(len({a['id'] for call in self.calls for a in call['_evidence']}),15)
+        self.assertTrue(all(call['_checkpoint']!=published_first for call in self.calls),'Published segments must not be replayed on explicit resume')
         self.assertEqual(sum(len(a['_covered_articles']) for a in self.calls),15)
         # Bookkeeping can contain the whole tree, but must not inflate LLM input.
         bodies=[]

@@ -14,7 +14,7 @@ def identity(*parts):
 
 def convert(root, path):
     relative = path.relative_to(root).as_posix()
-    doc = {'id':identity(relative),'path':relative,'kind':'document','title':path.stem}
+    doc = {'id':identity(relative),'path':relative,'kind':'document','title':path.stem.strip() or 'Untitled document'}
     if path.parent != root:
         doc['parent_id'] = identity('folder', path.parent.relative_to(root).as_posix())
     current = doc

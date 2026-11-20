@@ -14,6 +14,10 @@ Read /stocknexus-document-import/SKILL.md and process <path to the article or fo
 
 When the agent returns the validated `records.jsonl`, choose **Import documents** on the homepage, select the file and click **匯入並開啟圖譜** (import and open graph). You can use the default collection and source.
 
+The document workspace is at `/documents`. Preview with **只預覽** before importing. Web uploads accept JSONL up to 32 MiB; Markdown/text conversion is bundled, while PDF, Word and other formats need extraction by your agent. The document page currently uses Chinese labels.
+
+Imported documents form a separate knowledge collection. Browsing it does not start a model or feed documents into the stock LLM Wiki. Your agent can include L1/L2 claims with citations when requested. See the [English document import guide](spec/DOCUMENT_IMPORT.md) for the full workflow, update behavior and local tests.
+
 ## What does it help you do?
 
 - **Cut through news overload**: collect Google News RSS, Yahoo news and Massive articles, deduplicate them, and explore related events in a news graph.

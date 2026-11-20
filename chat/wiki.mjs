@@ -35,13 +35,14 @@ function schemaFor(languages,count=1,taxonomy=null){const schema=structuredClone
 export function createWikiCompiler(makeThread,{validateModel}={}){
  const active=new Map();
  return {
-  cancel(id){active.get(id)?.abort();},
-  close(){for(const c of active.values())c.abort();},
+  cancel(id){for(const [key,value] of active)if(key===id||value.parent===id)value.controller.abort();},
+  close(){for(const value of active.values())value.controller.abort();},
   async run(b){
    if(!makeThread)throw Object.assign(Error('Wiki LLM bridge is unavailable'),{status:503});
    if(typeof b.job_id!=='string'||!/^[a-f0-9]{32}$/.test(b.job_id)||typeof b.model!=='string'||!b.model||b.model.length>100||typeof b.instrument!=='string'||!b.article||!Array.isArray(b.context)||b.context.length>12||JSON.stringify(b).length>200000)throw Object.assign(Error('Invalid Wiki compiler input'),{status:400});
-   if(active.size)throw Object.assign(Error('Wiki compiler is busy; retry the job later'),{status:409});
-   const controller=new AbortController();active.set(b.job_id,controller);
+   if(b.parent_job_id!==undefined&&(typeof b.parent_job_id!=='string'||!/^[a-f0-9]{32}$/.test(b.parent_job_id)))throw Object.assign(Error('Invalid parent job'),{status:400});
+   if(active.has(b.job_id)||active.size>=10)throw Object.assign(Error('Wiki compiler capacity is busy'),{status:409});
+   const controller=new AbortController();active.set(b.job_id,{controller,parent:b.parent_job_id||b.job_id});
    // Batch extraction/classification cost is not bounded by reasoning depth.
    // Keep this below the Python compiler's 640-second socket deadline.
    let timedOut=false;

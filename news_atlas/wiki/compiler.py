@@ -63,7 +63,7 @@ class WikiService:
         finally: conn.close()
 
     def bridge(self,store,job,article,context):
-        return self.bridge_request('/wiki/compile',{'job_id':job['id'],'instrument':store.instrument,'model':job['payload']['model'],'article':{k:v for k,v in article.items() if k!='_covered_articles'},'context':context,'operation':job['payload'].get('operation','update'),'repair':job.get('repair'),**{k:job['payload'].get(k) for k in ('reasoning_effort','languages')}},timeout=640)
+        return self.bridge_request('/wiki/compile',{'job_id':job.get('call_id',job['id']),'parent_job_id':job['id'],'instrument':store.instrument,'model':job['payload']['model'],'article':{k:v for k,v in article.items() if k not in ('_covered_articles','_checkpoint')},'context':context,'operation':job['payload'].get('operation','update'),'repair':job.get('repair'),**{k:job['payload'].get(k) for k in ('reasoning_effort','languages')}},timeout=640)
 
     def news_catalog(self):
         """Only nonempty, explicitly identified news DBs; never guess exchanges."""
@@ -142,6 +142,8 @@ class WikiService:
         model=self.options(body);options=settings(body);store=self.store(body.get('instrument'))
         operation=body.get('operation','update')
         if operation not in ('update','review'):raise ValueError('無效維護方式')
+        if options['workers']>1 and (options['strategy']!='root' or operation!='update'):
+            raise ValueError('Parallel workers require Graph root incremental update')
         dates=self.date_range(body)
         if body.get('news_db'):
             if body.get('scope','global')!='global':raise ValueError('新聞 DB 模式使用全局範圍')
@@ -204,7 +206,7 @@ class WikiService:
             self.plans[plan['id']]=plan
         with store.connection() as db:used=db.execute('SELECT count(*) FROM calls WHERE day=?',(now()[:10],)).fetchone()[0]
         dated=sorted(news_day(a['published_at']) for a in rows if a['published_at'])
-        return {'date_bounds':{'start':dated[0],'end':dated[-1]} if dated else None,'graph_selection':options.get('graph_selection'),'grouping_edges':len(options['graph_edges']),'usage':usage_summary(store,(dates or {}).get('start'),(dates or {}).get('end')),**{k:options[k] for k in ('reasoning_effort','languages','evidence_size','strategy')},'daily_used':used,'plan_id':plan['id'],'instrument':store.instrument,'base_version':base,'selected':len(rows),'pending':pending,'next_batch':pending,'reused':len(rows)-len(unseen),'model':model,'date_range':dates,'operation':operation,'watch_sources':subscriptions,'expires_in':600,'note':'只處理本次日期範圍；增量模式跨模型重用既有成果，不受新聞edge設定與渲染數影響。局部校正需另行明確選擇，仍會消耗token。'}
+        return {'date_bounds':{'start':dated[0],'end':dated[-1]} if dated else None,'graph_selection':options.get('graph_selection'),'grouping_edges':len(options['graph_edges']),'usage':usage_summary(store,(dates or {}).get('start'),(dates or {}).get('end')),**{k:options[k] for k in ('workers','reasoning_effort','languages','evidence_size','strategy')},'daily_used':used,'plan_id':plan['id'],'instrument':store.instrument,'base_version':base,'selected':len(rows),'pending':pending,'next_batch':pending,'reused':len(rows)-len(unseen),'model':model,'date_range':dates,'operation':operation,'watch_sources':subscriptions,'expires_in':600,'note':'只處理本次日期範圍；增量模式跨模型重用既有成果，不受新聞edge設定與渲染數影響。局部校正需另行明確選擇，仍會消耗token。'}
 
     def start(self,body):
         if not isinstance(body.get('continuous',False),bool) or not isinstance(body.get('classify_missing',False),bool): raise ValueError('無效持續維護設定')
@@ -311,7 +313,9 @@ class WikiService:
         done=len(rows)-len(missing)
         with store.connection() as db:
             reviewed=db.execute('SELECT count(*) FROM review_coverage WHERE revision IN (SELECT value FROM json_each(?))',(json.dumps(ids),)).fetchone()[0]
-        return {'scope_total':len(rows),'scope_done':done,'scope_pending':len(missing),'scope_percent':round(100*done/len(rows),2) if rows else 0,
+        from .parallel import tree_coverage
+        trees=tree_coverage(cfg,rows,missing)
+        return {'trees':trees,'scope_total':len(rows),'scope_done':done,'scope_pending':len(missing),'scope_percent':round(100*done/len(rows),2) if rows else 0,
             'review_done':reviewed,'review_total':done,'captured_revisions':captured,'extracted_revisions':extracted,
             'daily_calls':used,'rejected_responses':rejected,'usage':usage_summary(store,(cfg.get('date_range') or {}).get('start'),(cfg.get('date_range') or {}).get('end')),
             'storage':str(store.path.relative_to(self.data_root)),'instrument':store.instrument,'date_range':cfg.get('date_range'),
@@ -417,6 +421,15 @@ class WikiService:
             cfg['catch_up']=False;store.configure(cfg)
 
     def process(self,store,max_groups=None):
+        with store.connection() as db:
+            row=db.execute("SELECT payload FROM jobs WHERE status='queued' ORDER BY created_at LIMIT 1").fetchone()
+        payload=json.loads(row[0]) if row else {}
+        if payload.get("graph_selection",{}).get("mode")=="coverage" and payload.get("operation")!="review":
+            from .parallel import process
+            return process(self,store,max_groups)
+        return self._process_serial(store,max_groups)
+
+    def _process_serial(self,store,max_groups=None):
         with store.connection() as db:
             db.execute('BEGIN IMMEDIATE')
             raw=db.execute("SELECT * FROM jobs WHERE status='queued' ORDER BY created_at LIMIT 1").fetchone()

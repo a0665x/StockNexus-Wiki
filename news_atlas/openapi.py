@@ -109,7 +109,7 @@ def specification():
     operation('/api/documents/import','post','import_document_collection','預覽或匯入研究文件 JSONL','Documents',
               parameters=[{'in':'query','name':key,'required':True,'schema':schema} for key,schema in
                           [('collection',string(64)),('source',string(64)),('mode',{'enum':['preview','apply']})]],
-              description='Send a UTF-8 JSONL file up to 32 MiB from an allowed same-origin client. Preview validates without writing. Apply imports the complete source batch and returns counts.',writes=True)
+              description='Send a UTF-8 JSONL file up to 32 MiB from an allowed same-origin client. Preview validates without writing. Apply imports the complete source batch and returns counts. Records require display titles but publication dates may be absent/null. Explicit content links accept an optional non-empty rationale of at most 2000 characters; importing does not infer relationships or semantic distances.',writes=True)
     upload=paths['/api/documents/import']['post']
     upload['requestBody']={'required':True,'content':{'application/x-ndjson':{'schema':{'type':'string'}}}}
     upload['responses'].update({str(code):{'description':message} for code,message in
@@ -162,7 +162,7 @@ def specification():
     maintenance={'instrument':string(40),'model':string(100),'news_db':{'type':'boolean'},
                  'scope':{'enum':['global','loaded','focus']},'operation':{'enum':['update','review']},
                  'date_range':obj({'start':date,'end':date},['start','end']),
-                 'reasoning_effort':string(),'continuous':{'type':'boolean'}}
+                 'reasoning_effort':string(),'workers':{'type':'integer','enum':[1,3,5,10],'default':1,'description':'Concurrent tree workers for Graph root incremental update; a concurrency cap, not a guaranteed speed multiplier.'},'continuous':{'type':'boolean'}}
     for action in ('plan','apply'):
         payload=paths['/api/wiki/'+action]['post']['requestBody']['content']['application/json']
         payload['schema']=obj(maintenance,['instrument','model'])

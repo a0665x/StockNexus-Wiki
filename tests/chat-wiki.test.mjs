@@ -15,7 +15,7 @@ test('Wiki rejects tool use and malformed output; releases busy state',async()=>
 });
 test('Wiki single flight cancellation prevents late result',async()=>{
  let release;const compiler=createWikiCompiler(()=>({run:()=>new Promise(r=>{release=r;})}));
- const pending=compiler.run(input);await assert.rejects(compiler.run({...input,job_id:'b'.repeat(32)}),/busy/);
+ const pending=compiler.run(input);await assert.rejects(compiler.run(input),/busy/);
  compiler.cancel(input.job_id);release({items:[],finalResponse:'{}'});await assert.rejects(pending,/cancelled/);
 });
 
@@ -110,4 +110,13 @@ test('comparison uses the verdict contract and the selected model',async()=>{
  }}));
  const response=await compiler.run({...input,operation:'compare_viewpoints',reasoning_effort:'medium',article:{viewpoints:[]}});
  assert.equal(response.proposal.verdict,'insufficient');
+});
+
+test('ten independent slots, capacity bound and parent cancellation',async()=>{
+ const releases=[];const compiler=createWikiCompiler(()=>({run:()=>new Promise(r=>releases.push(r))}));
+ const parent='f'.repeat(32),pending=Array.from({length:10},(_,i)=>compiler.run({...input,job_id:i.toString(16).repeat(32),parent_job_id:parent}));
+ await assert.rejects(compiler.run({...input,job_id:'e'.repeat(32)}),/capacity/);
+ compiler.cancel(parent);releases.forEach(r=>r({items:[],finalResponse:'{}'}));
+ const results=await Promise.allSettled(pending);assert.ok(results.every(r=>r.status==='rejected'&&/cancelled/.test(r.reason.message)));
+ assert.deepEqual((await (async()=>{const p=compiler.run(input);releases.at(-1)({items:[],finalResponse:'{}'});return p;})()).proposal,{});
 });

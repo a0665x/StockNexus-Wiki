@@ -18,7 +18,7 @@ from news_atlas.storage import Store
 from news_atlas.wiki.store import WikiStore, digest, instrument, folder_name
 
 NEWS = {'articles','memberships','membership_origins','coverage','attempts','snapshots','snapshot_articles','snapshot_relations','channels','daily_prices','price_downloads','graph_metadata'}
-WIKI = {'metadata','articles','versions','nodes','edges','extractions','jobs','review_coverage','reviews','calls','rejected_proposals'}
+WIKI = {'wiki_segments','metadata','articles','versions','nodes','edges','extractions','jobs','review_coverage','reviews','calls','rejected_proposals'}
 from news_atlas.wiki.research import TABLES as RESEARCH_TABLES
 WIKI |= RESEARCH_TABLES
 AUX = {'merge_conflicts','merge_versions','merge_records'}
@@ -182,6 +182,10 @@ def wiki_merge(src,dst,stats,stamp):
                     continue
                 p=json.loads(r['payload']);p['available_at']=stamp;p['decision_as_of']=stamp;r['payload']=encoded(p)
             union_row(dst,t,r,stats,ignore=(v,))
+    if 'wiki_segments' in st:
+        for raw in src.execute('SELECT * FROM wiki_segments'):
+            r=dict(raw);r['version']=version_map[r['version']]
+            union_row(dst,'wiki_segments',r,stats,ignore=('version','job_id'))
     for t in ('jobs','calls','reviews','rejected_proposals'):
         if t not in st:continue
         for raw in src.execute('SELECT * FROM '+t):

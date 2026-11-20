@@ -62,12 +62,14 @@ def validate(row, source):
     if not isinstance(links, list):
         raise ValueError('Expected a links array')
     for link in links:
-        if not isinstance(link, dict) or set(link) - {'type','source','id','revision'} or link.get('type') not in RELATIONS:
+        if not isinstance(link, dict) or set(link) - {'type','source','id','revision','rationale'} or link.get('type') not in RELATIONS:
             raise ValueError('Invalid link')
         slug(link.get('source',source))
         node_id(link.get('id'))
         if 'revision' in link and (type(link['revision']) is not int or link['revision'] < 1):
             raise ValueError('Invalid citation revision')
+        if 'rationale' in link:
+            string(link['rationale'], 'link rationale', 2000)
     if row.get('kind') == 'claim':
         if row.get('layer') not in ('L1','L2') or not any(l['type']=='cites' and 'revision' in l for l in links):
             raise ValueError('Claims need a layer and a citation to a specific revision')

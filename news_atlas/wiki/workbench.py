@@ -13,6 +13,8 @@ def news_day(value):
 
 
 def settings(body):
+    workers=body.get('workers',1)
+    if type(workers) is not int or workers not in (1,3,5,10):raise ValueError('Worker count must be 1, 3, 5 or 10')
     effort=body.get('reasoning_effort','low')
     if effort not in ('minimal','low','medium','high','xhigh','max','ultra','persistent'):raise ValueError('無效思考深度')
     languages=body.get('languages',['zh-Hant','en'])
@@ -32,7 +34,7 @@ def settings(body):
     from .evidence import graph_options
     horizon=body.get('price_horizon',3)
     if type(horizon) is not int or horizon not in (1,3,5,7):raise ValueError('無效股價交易日範圍')
-    return dict(reasoning_effort=effort,languages=languages,evidence_size=size,strategy=strategy,graph_edges=clean,graph_settings=graph_options(body.get('graph_settings')),price_horizon=horizon)
+    return dict(workers=workers,reasoning_effort=effort,languages=languages,evidence_size=size,strategy=strategy,graph_edges=clean,graph_settings=graph_options(body.get('graph_settings')),price_horizon=horizon)
 
 
 def batches(rows,config):

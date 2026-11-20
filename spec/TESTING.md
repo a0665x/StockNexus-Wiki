@@ -1,5 +1,53 @@
 # 測試與驗收
 
+## 2026-11-20 — Parallel tree processing
+
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONWARNINGS=ignore::ResourceWarning python3 -m unittest discover -s tests -p 'test_wiki*.py' -q`: **95 passed**, including seven real threaded/SQLite worker tests (overlap, unequal trees, cancellation, failure, checkpoint resume, checkpoint merge, strict settings). Local HTTP tests require host socket permission; an initial sandbox socket denial was rerun successfully with that permission. Existing SQLite ResourceWarnings were suppressed in this run.
+- `node --test tests/chat-wiki.test.mjs tests/chat-service.test.mjs`: **13 passed**, including ten slots, capacity rejection, duplicate call rejection and parent cancellation.
+- `PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 tests/browser_wiki_workers.py`: **10 checks passed** in real Chromium with isolated fixtures. Covers tree/article units, three bars, disclosure after refresh, English labels, exact frozen-tree navigation with no writes, 1/3/5/10 settings, mobile overflow and no JS errors. Desktop/mobile inspected; expanded live area uses full width. No production inference used for these tests.
+- `PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 tests/browser_wiki_root.py`: **15 checks passed** for exact root navigation, render budget and wrong-stock guards.
+- Production Tailscale UI verified all three live lanes using `gpt-6.1-sol`, independent saved-segment progress and publication from v184 through v188. This verifies actual operation, not a measured 3× speedup or annual completion.
+- Added a job-history query-plan regression: initially failed with `USE TEMP B-TREE FOR ORDER BY`; passed after the timestamp index, along with all seven parallel tests. Three simultaneous production jobs GETs returned HTTP 200 after the fix. The same index was applied online to NVDA after production logs showed `database or disk is full` during progress reads (28.7 MB payload sort, 32 MB container `/tmp`, ample data disk capacity).
+- JavaScript syntax and `git diff --check` passed. Impeccable mechanical detector returned `[]` for the changed UI. Existing forest failure/resume regression now asserts that the exact already-published checkpoint is not replayed, while final tree credit remains atomic.
+
+The private annual orchestrator is operational tooling, not a product scheduler. Check its live ledger separately from these tests or the app's parent job.
+
+## 2026-11-20 — Restart and NVDA workflow
+
+User-authorized rebuild and Chat restart completed. The production container is healthy, `/documents` returns 200 with bytes matching checkout, `/api/capabilities` returns 200, and Chat/Wiki report ready. The live model catalog contains `gpt-6.2-sol`. This supersedes the earlier 404 observation; no customer document was uploaded to production as a test.
+
+The document-import unit suite was rerun: 6 passed. JavaScript syntax and `git diff --check` passed. All 139 local links across the updated handoff/map/changelog/preferences/execution reference resolved.
+
+Six isolated tests for the private NVDA controller passed, covering dependency ordering, exact saved run identity, pending annual evidence, uncertain submissions and cancellation without stopping a replacement job. These tests do not certify model output. Production L1 published version 131 from base 130 at 00:23 UTC with the authorized job still running; this is real incremental progress, not full-year completion. Real annual L1/L2 completion remains tracked in [the execution handoff](references/nvda-research-20261120.md) and private live ledger.
+
+## 2026-11-20 — Untitled/undated articles and content relations
+
+User-confirmed scenario: the skill reads article content, exports supported cross-article relations, and the UI displays them in one collection without requiring original titles or publication dates.
+
+- RED: the new integration case initially failed with `Line 3: Invalid link` for a link rationale; the new blank-filename case returned a whitespace title. Chromium reproduced the missing relation explanation after an otherwise successful upload.
+- GREEN: `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_document_import.py -v` passed **6 tests**. Added scenarios cover multiple untitled/undated articles, same display names with distinct path-based IDs, unchanged original bodies, no converter-invented links, explicit reasons surviving validation/import/readback, invalid reasons rejected, idempotent replay and blank-label fallback.
+- GREEN: `PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 tests/browser_documents.py` passed the earlier journey plus real converter → validator → native file upload of three heading-free, undated articles. Two articles have an explicit reasoned link and the unrelated article stays visible. The UI shows unknown dates, follows the target, and renders reason markup literally. No model calls, production writes or JavaScript errors.
+- `node --check dist/documents.js` and the system skill creator's `quick_validate.py skills/stocknexus-document-import` passed. Actual semantic extraction by an independent model and customer corpus quality were not exercised; relationship reasoning is supplied as a controlled fixture.
+
+The optional rationale field is backward-compatible for existing exports, but new exports containing it require the updated importer. Deployment status remains separate from these temporary-DB results.
+
+## 2026-11-20 — Document upload readiness (fresh local evidence)
+
+Baseline: `llm_wiki` / `228f6a7`. These checks use temporary fixtures, not customer files or production SQLite.
+
+| Command / action | Observed result and scope |
+| --- | --- |
+| `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_document_import.py -v` | PASS, 4 tests: preview without storage, replay/revisions/pinned citations, invalid graphs/batches, upload handler origin check, portable single-file/folder conversion and validation. |
+| `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tests python3 -m unittest test_agent_workflow test_viewpoint_comparison -v` | PASS, 4 tests: HTTP agent workflow with real SQLite and fixture providers/models, full graph pagination, stop behavior and merge/comparison flow. Python 3.13 emitted SQLite connection `ResourceWarning`s; no assertion failed. |
+| `PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 tests/browser_documents.py` | PASS, real Chromium and real HTTP routes with temporary SQLite: native file input, preview without document storage, import with 3D canvas and hierarchy, identical retry, revision update, cross-source L2 claim citing original v1 text, combined sources/layer filter, invalid upload preservation and reload. No unexpected POST or JavaScript errors. No Wiki worker/model calls. |
+| `node --check dist/documents.js` | PASS. |
+| `python3 spec/scripts/verify_docs.py` and `git diff --check` | PASS: 41 spec Markdown files have valid local links and required entrypoints; no whitespace errors. |
+| Host `docker ps` and `GET http://127.0.0.1:8765/documents` | Existing atlas container healthy, document route **404**. This is a deployment gap, not a passing production smoke test. Initial sandbox connection failure was resolved by host-level read-only inspection. |
+
+The new browser regression is [browser_documents.py](../tests/browser_documents.py); it reuses the existing Chromium/WebSocket harness and rejects non-document POSTs. The source contract and reproducible workflow are in [DOCUMENT_IMPORT](DOCUMENT_IMPORT.md).
+
+Not covered: real customer PDF/OCR extraction quality, paid inference, large collections, complete document-page English localization, or rebuilding the production Docker image. No production data or active Wiki work was changed. Prior test records below remain historical.
+
 ## 2026-11-10：整理成果可見性與變更區上邊界
 
 正式唯讀查核時 GOOGL 已有 611 個 nodes 紀錄、v47；主機保存的 Wiki controls 為 L1／最新版本／wikiAssessment=__pending。已有資料不能直接推論畫面可見，尚待分類篩選會隱藏已分類成果。本輪未改工作內容或重送模型。

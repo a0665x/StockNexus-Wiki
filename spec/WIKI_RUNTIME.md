@@ -1,5 +1,19 @@
 # LLM Wiki 執行與維護
 
+## 2026-11-20 — Parallel tree workers and consistent progress
+
+Graph root incremental updates support **1 / 3 / 5 / 10 concurrent workers**. This is a concurrency limit, not a promised speed multiplier. Other grouping methods and manual review remain serial. Every worker uses the job's selected model/effort and owns a different tree; segments within a tree execute in order. Fair scheduling processes at most one tree per lane before giving other stocks/classification a turn. There is one parent job, shared append-only Wiki and transactional publication, rather than separate Wikis per worker.
+
+The primary progress unit is **completed trees / total trees** over the frozen forest and selected evidence. A tree is complete only when every eligible target revision has extraction credit, including reused evidence. A tree's ordinal is its identity, not a completed-tree count. Article coverage remains secondary because trees differ in size and can share context; target articles remain uniquely assigned. Expanded worker rows show model, stage, tree identity, saved segments and target/context sizes. Each row opens its exact frozen tree. Disclosure survives polling; labels support Chinese and English. Non-root jobs continue to show article progress.
+
+Workers coordinate when their model context includes the same mutable opinion revision, rereading context after waiting. Independent proposals may observe different committed snapshots; parallel execution is not equivalent to serial reasoning order. Existing UPDATES conflict checks remain authoritative. The bridge admits at most ten independent calls and cancels all children by parent job ID. Stop/cancel prevents late publication. A worker failure stops further assignment while successful in-flight siblings may commit; no failed model turn is automatically replayed. Existing single bounded schema-repair behavior remains.
+
+Successful tree segments now write `wiki_segments` in the **same transaction** as their published version. The checkpoint key includes prompt version, root, exact ordered evidence revisions, target revisions and segment index. Explicit resumption reuses matching saved segments across model changes, while only the final segment credits target coverage. Input changes invalidate matching. Legacy segments have no checkpoints and may replay when an unfinished legacy tree resumes. Service restart still interrupts active work and requires explicit resumption. Checkpoints merge idempotently with remapped version references.
+
+`plan`/`apply` accept `workers`; frozen config/job payloads retain it. `coverage.trees` returns `total`, `done`, `pending`. `jobs[].payload.workers_state` maps lane numbers to real stage, root, segment and completion values. Parallel dispatch and progress belong to `news_atlas/wiki/parallel.py`; publication/checkpoints to `store.py`; bounded model calls to `chat/wiki.mjs`. Current serial-only and no-segment-checkpoint descriptions below are historical where superseded by this section.
+
+Validation: 94 Wiki tests (including six threaded/checkpoint/merge tests), 13 Node Chat/bridge tests, and ten real Chromium worker interaction checks passed. The browser fixture covers disclosure, exact-tree navigation without writes, translated states, worker choices and mobile overflow. Mechanical design scan returned no findings. Production model throughput is a separate observation, not established by fixture timings.
+
 ## 2026-11-14：股票選擇與既有新聞 DB
 
 - 「已建立的 Wiki」選定後，股票下拉唯讀且綁定該 instrument；讀圖、維護與研究都使用此唯一識別。輸入事件不能改成另一股。

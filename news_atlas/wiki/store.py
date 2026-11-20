@@ -77,7 +77,11 @@ class WikiStore:
             # A normal read must not acquire SQLite's writer lock. Migrate only
             # incomplete schemas; never cache row data or skip stock validation.
             tables={r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-            required={'metadata','articles','versions','nodes','edges','extractions','jobs','review_coverage','reviews','calls','rejected_proposals','research_objects','research_lenses','research_jobs'}
+            # Sort only the timestamp index, not multi-megabyte frozen payloads.
+            # Checking first preserves the read-only fast path after migration.
+            if 'jobs' in tables and not db.execute("SELECT 1 FROM sqlite_master WHERE type='index' AND name='jobs_created'").fetchone():
+                db.execute('CREATE INDEX IF NOT EXISTS jobs_created ON jobs(created_at DESC)')
+            required={'wiki_segments','metadata','articles','versions','nodes','edges','extractions','jobs','review_coverage','reviews','calls','rejected_proposals','research_objects','research_lenses','research_jobs'}
             if required<=tables:
                 row=db.execute("SELECT value FROM metadata WHERE key='instrument'").fetchone()
                 if row:
@@ -94,10 +98,12 @@ class WikiStore:
             CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,status TEXT NOT NULL,payload TEXT NOT NULL,done INTEGER NOT NULL DEFAULT 0,error TEXT,usage TEXT NOT NULL DEFAULT '{}');
             CREATE TABLE IF NOT EXISTS review_coverage (revision TEXT PRIMARY KEY,evidence_epoch INTEGER NOT NULL);
             CREATE TABLE IF NOT EXISTS reviews (job_id TEXT NOT NULL,revision TEXT NOT NULL,PRIMARY KEY(job_id,revision));
+            CREATE TABLE IF NOT EXISTS wiki_segments (key TEXT PRIMARY KEY,job_id TEXT NOT NULL,root_id TEXT NOT NULL,part INTEGER NOT NULL,version INTEGER NOT NULL);
             CREATE TABLE IF NOT EXISTS calls (id TEXT PRIMARY KEY,day TEXT NOT NULL,job_id TEXT NOT NULL,revision TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS rejected_proposals (id INTEGER PRIMARY KEY,job_id TEXT NOT NULL,revision TEXT NOT NULL,created_at TEXT NOT NULL,error TEXT NOT NULL,proposal TEXT,usage TEXT NOT NULL);
             CREATE INDEX IF NOT EXISTS edges_endpoints ON edges(source,target,created_version);
             CREATE INDEX IF NOT EXISTS nodes_version ON nodes(created_version DESC,id);
+            CREATE INDEX IF NOT EXISTS jobs_created ON jobs(created_at DESC);
             PRAGMA user_version=1;
             ''')
             from .research import migrate
@@ -154,7 +160,7 @@ class WikiStore:
             if active: return active[0]
             rows=self.pending(model,limit,revision_ids,review=operation=='review')
             ident=uuid.uuid4().hex;stamp=now()
-            payload={**{k:self.config()[k] for k in ('reasoning_effort','languages','evidence_size','strategy','graph_edges','graph_settings','price_horizon','settings_version','graph_selection','graph_universe') if k in self.config()},'context_revisions':self.config().get('graph_context_revisions',self.config().get('revision_ids')) if self.config().get('strategy')=='root' else None,'model':model,'revisions':[r['revision_id'] for r in rows],'prompt_version':PROMPT_VERSION,'operation':operation}
+            payload={**{k:self.config()[k] for k in ('workers','reasoning_effort','languages','evidence_size','strategy','graph_edges','graph_settings','price_horizon','settings_version','graph_selection','graph_universe') if k in self.config()},'context_revisions':self.config().get('graph_context_revisions',self.config().get('revision_ids')) if self.config().get('strategy')=='root' else None,'model':model,'revisions':[r['revision_id'] for r in rows],'prompt_version':PROMPT_VERSION,'operation':operation}
             db.execute('INSERT INTO jobs(id,created_at,updated_at,status,payload) VALUES (?,?,?,?,?)',(ident,stamp,stamp,'queued' if rows else 'completed',encode(payload)))
         return ident
 
@@ -216,6 +222,8 @@ class WikiStore:
             db.execute('BEGIN IMMEDIATE')
             state=db.execute('SELECT status FROM jobs WHERE id=?',(job['id'],)).fetchone()
             if not state or state[0]!='running': return False
+            checkpoint=article.get('_checkpoint')
+            if checkpoint and db.execute('SELECT 1 FROM wiki_segments WHERE key=?',(checkpoint,)).fetchone():return True
             review=job['payload'].get('operation')=='review'
             if not review and db.execute('SELECT 1 FROM extractions WHERE revision=?',(article['revision_id'],)).fetchone(): return True
             if review and db.execute('SELECT 1 FROM reviews WHERE job_id=? AND revision=?',(job['id'],article['revision_id'])).fetchone(): return True
@@ -258,6 +266,8 @@ class WikiStore:
             for k,v in usage.items():
                 if isinstance(v,int) and not isinstance(v,bool) and v>=0: totals[k]=old.get(k,0)+v
             db.execute('UPDATE jobs SET done=done+?,updated_at=?,usage=? WHERE id=?',(len(covered),stamp,encode(totals),job['id']))
+            if checkpoint:
+                db.execute('INSERT INTO wiki_segments VALUES (?,?,?,?,?)',(checkpoint,job['id'],article['_group']['root_id'],article['_group']['part'],version))
             self.receipt(db,job,article,usage,'published')
         return True
 

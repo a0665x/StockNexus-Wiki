@@ -1,5 +1,9 @@
 # AI 開發協作與互動驗證偏好
 
+## 客戶文件 Graph（2026-11-20，active）
+
+使用者明確要求驗證無原始標題／無時間序的文章也能從 skill 產生 Web UI 可用 JSONL，並確認由 skill 閱讀內容建立跨文章關係。適用於文件知識庫；不把股票新聞的日期、標題或距離規則套入。關係須能回到文章內容，無依據者保留未連線。實作契約見 [DOCUMENT_IMPORT](DOCUMENT_IMPORT.md)，驗證涵蓋轉換、驗證、實際上傳、圖與關係閱讀；模型判斷品質不以 fixture 成功代替。
+
 ## Wiki 股票選擇（2026-11-14，active）
 
 使用者明確要求：選取既有 Wiki 後股票識別強制一致；僅新建模式開放從既有新聞 DB 下拉選股，不再自由輸入。年度 L1 後續模型改為 gpt-6.1-sol / medium，取代此批先前 high；重用已發布成果。模型額度故障與新聞資料可用性分開回報，不把排隊或設定保存稱為整理完成。
@@ -177,3 +181,13 @@ README 分為繁體中文與英文兩份，頂端互相切換，各自嵌入對�
 
 ## API 情境取用（2026-11-14，active）
 使用者要求 Chat 能依股票／時間直接取得新聞、關聯、行情、既有 L1 與 L2，不受 3D 載入子集限制；API 可組合、按情境分類，並提供獨立 skill。唯讀回答重用 DB 與模型成果，不以提問暗示重新抓取或付費整理。驗收包含空資料、日期、跨股、owner、來源引用及工具入口；契約見 [API](API.md)。
+
+
+## NVDA model and research scope (2026-11-20, active)
+
+The user explicitly selected 6.2 Sol for the refreshed NVDA annual L1 and requested two L2 viewpoints: panic selling, and future drawdown magnitude/duration. This supersedes the earlier 6.1 model choice for this NVDA run only. Preserve published revisions and reuse completed evidence; do not restart unrelated stocks. New L1 calls use medium reasoning, L2 high. Verify real progress through committed versions and coverage; distinguish queued research from saved results. The run-specific scope and source gaps are in [the execution handoff](references/nvda-research-20261120.md).
+
+
+## Tree-based parallel progress (2026-11-20, active)
+
+The user requested 1/3/5/10 worker choices and explicitly selected **three GPT-6.1 Sol workers for the current NVDA L1 run**, superseding its earlier 6.2 Sol L1 choice. L2 research remains as previously requested. Use completed trees as the primary root-job unit, preserve article coverage as supporting detail, and provide expandable per-worker bars plus exact tree navigation. Do not label concurrency as guaranteed acceleration or a current tree ordinal as completed work. Validate actual overlapping calls, transactional publication, cancellation, segment resumption, and browser disclosure/navigation. Contracts: [Wiki runtime](WIKI_RUNTIME.md).

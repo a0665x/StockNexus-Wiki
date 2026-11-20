@@ -10,7 +10,7 @@
 
 本輪年度資料／L1 更新及市場報告交接：[2026-11-14 批次](references/annual-research-batch-20261114.md)。讀取即時 private ledger 後再續作，不沿用歷史工作數字。
 
-文件知識庫從 [外部 agent 匯入規格與範例](../skills/stocknexus-document-import/SKILL.md) 開始。資料選用獨立的 documents.sqlite3，由首頁來源區進入。
+文件知識庫從 [英文功能與本機測試契約](DOCUMENT_IMPORT.md) 或 [外部 agent 匯入規格與範例](../skills/stocknexus-document-import/SKILL.md) 開始。使用獨立的 documents.sqlite3，由首頁進入 `/documents`；不自動送入股票 Wiki 編譯。2026-11-20 已核對 `228f6a7`，最新 Git／實測／部署差異見 CURRENT_STATE 頂部。
 
 ## 新 session 的最短閱讀路徑
 
@@ -23,6 +23,7 @@
 
 | 任務／領域 | Level 2 入口 | 優先原始碼 |
 | --- | --- | --- |
+| 客戶文章／資料夾、JSONL 上傳、文件 Graph | [DOCUMENT_IMPORT.md](DOCUMENT_IMPORT.md)（English） | news_atlas/documents.py、dist/documents.js、skills/stocknexus-document-import/ |
 | 計算定義、輸入／顯示範圍、進度與目的 | [CALCULATION_METHODS.md](CALCULATION_METHODS.md) | model.py、exploration.py、price_lens.py、wiki/forest.py |
 | 操作、設定、刷新、快照、開發交付 | [WORKFLOWS.md](WORKFLOWS.md) | run.sh、server.py、dist/app.js、dist/workspace.js、news_atlas/workspace.py |
 | 整體架構、資料流、模組邊界 | [ARCHITECTURE.md](ARCHITECTURE.md) | server.py、news_atlas/、dist/app.js |
@@ -53,6 +54,8 @@
 - Edge settings 成功套用後保存；圖譜快取必須匹配當前文章與規則。
 
 ## Level 3 與既有文件
+
+- [NVDA annual research, 2026-11-20](references/nvda-research-20261120.md): authorized restart, annual source coverage, 6.2 Sol workflow and live-ledger resume rules.
 
 - [語系、重連與多視窗教訓](references/lesson-20261106-language-runtime.md)：翻譯責任、晚回應、同來源偏好同步與入口／時序驗證。
 

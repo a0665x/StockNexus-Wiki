@@ -13,7 +13,11 @@
 
 ## 合約要點
 
-POST 需 application/json。一般 body 上限 16384 bytes；snapshots、classify 及 api.POST_PATHS 接受最多 268435456 bytes（256 MiB；超過明確拒絕，不截斷）。驗證錯誤 400，找不到資源 404，Content-Type 錯誤 415，建立快照 201。HTTP 200 不等於來源成功或歷史完整。
+一般 POST 需 application/json；文件匯入例外使用 application/x-ndjson，見下節。一般 body 上限 16384 bytes；snapshots、classify 及 api.POST_PATHS 接受最多 268435456 bytes（256 MiB；超過明確拒絕，不截斷）。驗證錯誤 400，找不到資源 404，Content-Type 錯誤 415，建立快照 201。HTTP 200 不等於來源成功或歷史完整。
+
+## Document collections (2026-11-19)
+
+`GET /api/documents` reads the collection/source catalog, current nodes or an exact historical revision. `POST /api/documents/import` requires `collection`, `source` and `mode=preview|apply`, with a raw UTF-8 JSONL body (`application/x-ndjson`, maximum 32 MiB). Preview does not persist document data; apply appends changed revisions. Both endpoints use the existing allowed-host/same-origin guard. The UI is `/documents`; this route is independent of stock Wiki jobs and the JSON-body limits above. Full parameters, persistence and source owners: [DOCUMENT_IMPORT](DOCUMENT_IMPORT.md).
 
 `/api/search` 是 NDJSON：cache/status/source/heartbeat/done，一行一物件。`/api/search/result` 聚合成單一 JSON，檢查 partial 及每來源 warnings/error/cache。兩者會外連並寫 acquisition cache。
 
@@ -71,3 +75,8 @@ Swagger 首頁列出下列可串接的操作。整條 HTTP 流程的隔離驗收
 6. GET `/api/chat/models` 回傳目前 Codex 全目錄。`POST /api/chat/turn` 可指定 model。Wiki 的目錄只列名稱屬於 Sol、Luna、Mini、Nano 的模型，兩處重用主機五分鐘的 model/list 快取。
 
 7. 合併後可用 research/comparison-candidates 以 q、offset 搜尋同股的精確觀點 ref。POST research/compare 傳 instrument、refs（兩個）、model 與選用 reasoning_effort；GET research/job 查看狀態，完成後依 payload.comparison_id 讀 research/comparison。research/comparisons 可分頁查看本機比對紀錄。
+
+
+### Parallel Wiki tree jobs (2026-11-20)
+
+`POST /api/wiki/plan|apply` accepts integer `workers: 1|3|5|10` (default 1). Values above 1 require Graph root incremental update. This caps concurrent calls; it does not multiply a throughput estimate. Config and parent job payloads freeze the count and model. `GET /api/wiki/jobs` and graph coverage return `coverage.trees: {total,done,pending}` for a coverage forest, otherwise null. Each tree completes after all its targets have extraction credit; `scope_done/scope_total` still measure articles. `jobs[].payload.workers_state` exposes per-lane `status`, `stage`, `model`, `root_id`, `tree`, `total_trees`, `parts`, `completed_parts`, `targets`, `context_articles`, and any error. Tree ordinals are identifiers, not progress numerators. Stop cancels the parent and all bridge calls; committed segments remain available for explicit resumption. See [Wiki runtime](WIKI_RUNTIME.md).

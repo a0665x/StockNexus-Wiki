@@ -1,5 +1,27 @@
 # 變更與驗證 log
 
+## 2026-11-20 — Parallel L1 tree workers
+
+Added bounded 1/3/5/10 Graph root workers, independent bridge calls with parent cancellation, per-lane progress, and transactional segment checkpoints for explicit resume. Progress now leads with completed trees, retains article coverage and opens each worker's frozen tree. Cross-machine merge preserves checkpoints with local version mapping. The user selected three GPT-6.1 Sol workers for NVDA L1. Validation: 94 Wiki tests, 13 Node tests and ten browser checks; see [TESTING](TESTING.md) and [runtime contract](WIKI_RUNTIME.md). Deployment observations are recorded in CURRENT_STATE separately.
+
+## 2026-11-20 — Authorized restart and NVDA annual research
+
+Rebuilt the local service and restarted Chat at the user's request. Production `/documents` is now 200 and matches checkout assets; the previous image and all existing data were retained. This supersedes the pre-deployment observations below.
+
+Acquired missing NVDA source days for November 20, 2025 through November 19, 2026 and verified 10,755 provider records. Massive has 365 stored complete days; RSS has remaining coverage gaps. Stored 250 daily OHLC sessions through November 18. Verified `gpt-6.2-sol` availability and started a finite annual L1 → two saved L2 workflow, with no automatic replay after model failure. Completion is tracked separately in the [execution handoff](references/nvda-research-20261120.md); the research is not yet complete.
+
+## 2026-11-20 — Missing document metadata and explained content links
+
+Confirmed the document collection is one graph of multiple article trees and explicit relations, with force-layout distance independent of title/date similarity. Updated the portable import skill to handle untitled/undated input and perform an evidence-based content-link pass. Added `Untitled document` for blank filename stems and optional link rationales (1–2000 characters), preserved in revisions and displayed as literal text beside link targets. Existing exports remain valid; the UI now explains layout distance.
+
+Six document tests and the expanded real HTTP/Chromium workflow passed after reproducing the missing fallback/rationale behavior. See [TESTING](TESTING.md) and [DOCUMENT_IMPORT](DOCUMENT_IMPORT.md). These application changes remain in the working tree; no production restart or model job was performed.
+
+## 2026-11-20 — English onboarding and document import readiness
+
+Verified that the November 19 document graph, Web UI JSONL import and single-article handoff commits are already in local/remote `llm_wiki` at `228f6a7`. Added the English [document import contract](DOCUMENT_IMPORT.md), routed it from PROJECT_MAP, architecture, API and storage docs, and clarified the English README. CURRENT_STATE now separates source readiness from the existing 8765 container, whose `/documents` route still returns 404.
+
+Added a real HTTP/Chromium regression for preview, upload, graph rendering, repeat import, revisions, pinned citations, source/layer filtering, invalid files and reload. It passed with temporary SQLite; 8 focused Python tests and JavaScript syntax also passed. Verification scope and existing Python 3.13 SQLite warnings are recorded in [TESTING](TESTING.md). No application behavior, production data, deployment or model work was changed.
+
 ## 2026-11-10：整理成果可見性與變更區上邊界
 
 正式唯讀查核時 GOOGL 已有 611 個 nodes 紀錄、v47；主機保存的 Wiki controls 為 L1／最新版本／wikiAssessment=__pending。已有資料不能直接推論畫面可見，尚待分類篩選會隱藏已分類成果。本輪未改工作內容或重送模型。

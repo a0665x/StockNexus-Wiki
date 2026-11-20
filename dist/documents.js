@@ -72,6 +72,7 @@
         } catch(error) { if(ticket===reading) fail(error); }
       };
       panel.append(button);
+      if (link.rationale) panel.append(make('p', '關聯依據：' + link.rationale));
     }
   }
   function render() {
