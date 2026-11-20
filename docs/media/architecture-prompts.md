@@ -2,7 +2,7 @@
 
 ## Published November 20, 2026
 
-ImageGen adapted the previous English figure into a transparent strip illustrating news trees, the L1 robot arranging viewpoints and citations, and a magnifier inspecting an L2 viewpoint. The bilingual SVG adds the labels, arrows, L1 output boxes and the separate JSONL collection path. Edit the SVG and render both languages for factual or wording changes. [Source and export commands](README.md#update-the-figures)
+Use the original localized research diagrams as the art direction and base artwork for every update. Preserve the illustrated research-methodology style, inked robot outlines, bold serif headings, hand-lettered module labels, nested pastel containers, branching connectors and thick feedback arrows. Extend the diagram around its existing composition. The current edition uses ImageGen for the document-handling robot in the import inset. The other robots, pyramid and research modules come directly from the originals. [Source and export commands](README.md#update-the-figures)
 
 ## November 7–8 artwork history
 

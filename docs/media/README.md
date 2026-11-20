@@ -4,16 +4,16 @@ The [English README](../../README.md) uses [the English figure](stocknexus-archi
 
 ## Update the figures
 
-Edit the labels and connectors in [architecture.svg](architecture.svg). Both languages share one layout and one [unlettered illustration](architecture-art.png). The blue, green and purple panels follow stock news through L1 and L2. The document import below them has its own collection database. [Research contract](../../spec/RESEARCH_LAYERS.md) · [Tree workers](../../spec/WIKI_RUNTIME.md) · [Document import](../../spec/DOCUMENT_IMPORT.md)
+The [English original](architecture-sources/original-en.png) and [Traditional Chinese original](architecture-sources/original-zh-TW.png) from commit `5c7e45e` are the visual masters. Keep them at their native 1536 × 1024 scale. Edit the [bilingual overlay](architecture.svg) for corrections or additions. It updates the Yahoo source badge and appends two illustrated insets for tree workers and personal document collections. The [document robot](architecture-sources/document-robot.png) matches the original L1 mascot.
 
-With librsvg, DejaVu Sans and Noto Sans CJK TC installed, run these commands from the repository root.
+With librsvg, Liberation Sans Narrow, DejaVu Serif and Noto CJK fonts installed, run these commands from the repository root.
 
 ```bash
-rsvg-convert --accept-language en --width 1800 --output docs/media/stocknexus-architecture-en.png docs/media/architecture.svg
-rsvg-convert --accept-language zh-TW --width 1800 --output docs/media/stocknexus-architecture-zh-TW.png docs/media/architecture.svg
+rsvg-convert --accept-language en -o docs/media/stocknexus-architecture-en.png docs/media/architecture.svg
+rsvg-convert --accept-language zh-TW -o docs/media/stocknexus-architecture-zh-TW.png docs/media/architecture.svg
 ```
 
-Inspect both exports at README width after editing. The [illustration notes](architecture-prompts.md) record the artwork's provenance.
+Inspect both 1536 × 1186 exports. In each upper panel, a pixel comparison with its visual master should show differences only inside the edited Yahoo badge. Check the localized footer for clipping at full size and at README width. [Illustration notes](architecture-prompts.md) · [Tree workers](../../spec/WIKI_RUNTIME.md) · [Document import](../../spec/DOCUMENT_IMPORT.md)
 
 ## 歷史影片資產
 

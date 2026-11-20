@@ -1,5 +1,9 @@
 # 變更與驗證 log
 
+## 2026-11-20 — Restore the illustrated research figures
+
+Both figures use the original bilingual research artwork from `5c7e45e`. The Yahoo source label has been corrected, and the footer adds L1 tree workers and the independent JSONL import. Keep the illustrated modules, role-specific robots, pastel panels, typography and arrows when updating the architecture. [Masters, export commands and visual checks](../docs/media/README.md#update-the-figures)
+
 ## 2026-11-20 — English repository landing page and architecture figures
 
 The [English guide](../README.md) and [Traditional Chinese guide](../README.zh-TW.md) link to one another at the top right. Both figures now show tree workers in stock L1 and the independent JSONL document collection. The original PNG URLs and the previous English README link still resolve. [Bilingual figure source and export commands](../docs/media/README.md)
