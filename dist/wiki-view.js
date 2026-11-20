@@ -40,7 +40,9 @@
  const dialog=el('dialog',undefined,'wiki-settings');dialog.id='wikiSettings';dialog.dataset.ownI18n='true';dialog.innerHTML=`<form method="dialog"><button id="wikiSettingsClose">×</button></form><h2 id="wikiSettingsTitle"></h2><label><span id="wikiLanguageLabel"></span><select id="wikiLanguages"><option value="both"></option><option value="zh-Hant">繁體中文</option><option value="en">English</option></select></label><label><span id="wikiStrategyLabel"></span><select id="wikiStrategy"><option value="lexical"></option><option value="chronological"></option><option value="root"></option><option value="fusion"></option></select></label><p id="wikiStrategyNote" class="wiki-note"></p><label><span id="wikiEvidenceLabel"></span><select id="wikiEvidenceSize"><option>5</option><option>10</option><option>15</option><option>20</option></select></label><p id="wikiEvidenceNote" class="wiki-note"></p><label><span id="wikiWorkersLabel"></span><select id="wikiWorkers"><option>1</option><option>3</option><option>5</option><option>10</option></select></label><p id="wikiWorkersNote" class="wiki-note"></p><div class="wiki-settings-actions"><span id="wikiApplyStatus" role="status"></span><button id="wikiApply" class="wiki-primary" hidden>Apply</button></div>`;document.body.append(dialog);
  const open=el('button','LLM Wiki');open.id='modeWiki';$('modeTimeline').after(open);
  let data=null,info=null,graph=null,plan=null,busy=false,models=[],pollTimer=null,previewTimer=null,generation=0,request=0,previewSerial=0;
- let catalogAt=0,catalogPending=null,polling=false,showPending=null,loading=0,pollError=null;const graphRequests=new Map();
+ let catalogAt=0,catalogPending=null,polling=false,showPending=null,loading=0,pollError=null;const cache=root.AtlasWikiCache.create(api);
+ let displayedEpoch=null,displayedKey=null,openEpoch=0,warmTimer=null,warmKey=null,warmAt=0;
+ const savedViews=new Map();
  let fitPending=false,fitKey='';
  let baseData=null,researchRun=null,reveal=Infinity,revealTimer=null,hoverNode=null,glow=null,classStamp='';
  let workerExpanded=false;
@@ -83,10 +85,16 @@
   strategyNote();modelChoices();savedChoices();versionChoices();selection();sliderLabel();paintPlan();activity();render();if(selectedDetail)details(selectedDetail,selectedEdge);
   if(!panel.hidden)$('relationOpen').textContent=t('Wiki 設定','Wiki settings');
  }
- function syncGraphUniverse(){const news=hooks.selection('global');if(news.graph_universe?.articles?.length&&news.graph_universe.ticker===current().split(':')[1]){graphUniverse=news.graph_universe;graphSettings=news.graph_settings;}}
+ function syncGraphUniverse(news=hooks.selection('global')){if((!news.search?.instrument||news.search.instrument===current())&&news.graph_universe?.articles?.length&&news.graph_universe.ticker===current().split(':')[1]){graphUniverse=news.graph_universe;graphSettings=news.graph_settings;}}
  function strategyNote(){const notes={lexical:['先依詞彙重疊組合新聞，再找相關舊觀點。','Group by word overlap, then retrieve related existing viewpoints.'],chronological:['依新聞日期由早至晚，逐組建立脈絡。','Process news oldest first in adjacent date groups.'],root:['從完整新聞圖譜自動採樣 root，直到涵蓋此日期範圍全部新聞；跳過重複覆蓋，包含未渲染與孤立節點。整棵樹送入模型，區間外成員僅作脈絡；超出輸入容量才分段。','Automatically sample roots over the complete News graph until every article in the Wiki date range is covered, including unrendered and isolated nodes. Skip redundant coverage. Send the whole tree; outside-range members are context. Split only for input capacity.'],fusion:['優先相關但不同來源的新聞，保留分歧及各自的證據邊界。','Prefer related news from different sources; preserve disagreements and their evidence boundaries.']};$('wikiStrategyNote').textContent=t(...notes[$('wikiStrategy').value])+' '+t('所有方式共用同一觀點庫；切換不會清空已整理內容。','All methods share one opinion store; switching keeps completed work.');$('wikiEvidenceSize').disabled=$('wikiStrategy').value==='root';$('wikiWorkers').disabled=$('wikiStrategy').value!=='root'||$('wikiOperation').value==='review';if($('wikiStrategy').value==='root')$('wikiStrategyNote').textContent+=' '+(graphUniverse?.articles?.length?t(`新聞圖譜完整範圍：${graphUniverse.articles.length} 篇。無需手動點選。`,`Full News universe: ${graphUniverse.articles.length} articles. No manual selection needed.`):t('請先載入此股票的新聞圖譜。','Load the News graph for this stock first.'));dirtySettings();}
 
- async function api(path,body){const r=await fetch('/api/wiki/'+path,body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const value=await r.json();if(!r.ok)throw Error(value.error||t('Wiki 請求失敗','Wiki request failed'));return value;}
+ async function api(path,body){
+  const ident=body&&(body.instrument||current());
+  const r=await fetch('/api/wiki/'+path,body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const value=await r.json();if(!r.ok)throw Error(value.error||t('Wiki 請求失敗','Wiki request failed'));
+  if(ident&&['jobs','apply','resume','stop','cancel','configure'].includes(path))cache.invalidateState(ident);
+  return value;
+ }
  const pendingActions=new Set();let jobStateEpoch=0;
  async function buttonAction(button,label,work,success=''){
   const ident=current(),key=button.id?ident+':'+button.id:button,mine=generation;
@@ -110,7 +118,7 @@
  function sliderLabel(){if(!$('wikiRangeStart').value)return;const r=range();$('wikiInterval').textContent=r?r.start+' → '+r.end:t('全部日期','All dates');const a=Number($('wikiRangeStart').min),b=Number($('wikiRangeStart').max),den=b-a||1;document.querySelector('.wiki-dual').style.setProperty('--from',100*(Number($('wikiRangeStart').value)-a)/den+'%');document.querySelector('.wiki-dual').style.setProperty('--to',100*(Number($('wikiRangeEnd').value)-a)/den+'%');}
  function sliders(reset=true){const a=stamp($('wikiStartDate').value),b=stamp($('wikiEndDate').value);if(!Number.isFinite(a)||!Number.isFinite(b)||a>b)return;for(const id of ['wikiRangeStart','wikiRangeEnd']){$(id).min=a;$(id).max=b;$(id).step=1;if(reset)$(id).value=id==='wikiRangeStart'?a:b;}$('wikiDates').hidden=false;sliderLabel();}
  function preset(){const end=new Date(),start=new Date(end);start.setUTCMonth(start.getUTCMonth()-($('wikiRange').value==='quarter'?3:1));if(['month','quarter'].includes($('wikiRange').value)){$('wikiStartDate').value=day(start);$('wikiEndDate').value=day(end);}sliders();}
- function selection(){let selected=hooks.selection($('wikiScope').value);if(selected.search?.ticker!==current().split(':')[1]||!$('wikiSaved').value)selected={articles:[],sources:[],search:{ticker:current().split(':')[1]}};selected.graph_selection=rootSelection||lastConfig.graph_selection||selected.graph_selection;if(![1,3,5,7].includes(selected.price_horizon))selected.price_horizon=lastConfig.price_horizon||3;$('wikiSelection').textContent=t(`已載入 ${selected.articles.length} 篇；全局模式另查 DB。`,`Loaded ${selected.articles.length} articles; global scope also reads the DB.`);return selected;}
+ function selection(selected=hooks.selection($('wikiScope').value)){if((selected.search?.instrument&&selected.search.instrument!==current())||selected.search?.ticker!==current().split(':')[1]||!$('wikiSaved').value)selected={articles:[],sources:[],search:{ticker:current().split(':')[1]}};selected.graph_selection=rootSelection||lastConfig.graph_selection||selected.graph_selection;if(![1,3,5,7].includes(selected.price_horizon))selected.price_horizon=lastConfig.price_horizon||3;$('wikiSelection').textContent=t(`已載入 ${selected.articles.length} 篇；全局模式另查 DB。`,`Loaded ${selected.articles.length} articles; global scope also reads the DB.`);return selected;}
  function meter(parent,label,value,total){if(!total){parent.append(el('small',t('此範圍沒有新聞','No articles in this range')));return;}const box=el('div',undefined,'wiki-meter');box.append(el('span',`${label} · ${value}/${total} · ${(100*value/total).toFixed(2)}%`));const bar=el('progress');bar.max=total;bar.value=value;bar.setAttribute('aria-label',label);box.append(bar);parent.append(box);}
  function tokenText(usage){return `${usage?.input_tokens||0} ${t('輸入','in')} / ${usage?.output_tokens||0} ${t('輸出','out')}`;}
  function miningIcon(){const span=el('span',undefined,'wiki-worker');span.setAttribute('aria-hidden','true');span.innerHTML=`<svg viewBox="0 0 96 86" focusable="false"><use href="/knowledge-mining.svg#base"/><use class="wiki-scan" href="/knowledge-mining.svg#scan"/><use class="wiki-signal" href="/knowledge-mining.svg#signal"/></svg>`;return span;}
@@ -132,7 +140,7 @@
  }
  function workUnits(job){
   const p=job.payload;
-  return {total:p.operation==='classify_l1'?p.total:p.revisions?.length,done:job.done??p.done??0};
+  return {total:p.total??p.revisions?.length,done:job.done??p.done??0};
  }
  function remainingMs(job){
   const {done,total}=workUnits(job);
@@ -203,10 +211,18 @@
   const title=active?.payload.operation==='classify_l1'?t('LLM 正在補足通用觀點分類','LLM is classifying existing L1 opinions'):running?labels[active.payload.stage]||labels.compiling:waiting?t('等待背景整理開始','Waiting for background work'):lastCoverage?.scope_pending?t('尚有新聞待補；模型目前沒有運行','Evidence pending; model is idle'):t('目前沒有進行中的整理','No active work');
   const worker=box.querySelector('.wiki-worker')||miningIcon(),existingStop=box.querySelector('#wikiStop');const retainedStop=existingStop?.dataset.jobId===active?.id?existingStop:null;if(!worker.isConnected)box.append(worker);for(const child of [...box.children])if(child!==worker&&child!==retainedStop)child.remove();const content=el('div');content.append(el('strong',title));
   scopeProgress(content);
-  if(active){const p=active.payload;if(!lastCoverage?.trees)jobProgress(content,active);else content.append(workerDetails(active));if(!p.workers_state){content.append(el('small',t('目前方法：','Current method: ')+({lexical:t('詞彙相關','Word overlap'),chronological:t('時間順序','Chronological'),root:t('Graph 全範圍 root 覆蓋','Graph root coverage'),fusion:t('多來源融合','Source fusion')})[p.strategy||'lexical']));content.append(el('small',p.model),el('small',(p.operation==='review'?t('↻ 重新檢視觀點','↻ Re-evaluating viewpoints'):t('✧ 新證據與觀點更新','✧ New evidence and viewpoint updates'))+' · '+(p.current_date?.slice(0,10)||'—')),el('p',p.current_title||t('準備證據…','Preparing evidence…'),'wiki-current-title'));if(!p.workers_state&&p.group_info?.groups){const info=p.group_info,tree=p.graph_selection?.trees?.find(x=>x.root_id===info.root_id),line=el('div',undefined,'wiki-root-progress');const link=el('button',t(`查看新聞樹 #${info.group} ↗`,`View news tree #${info.group} ↗`),'wiki-root-link');link.type='button';link.id='wikiCurrentRoot';link.disabled=!tree||!hooks.showRoot;link.onclick=()=>{try{hooks.showRoot({instrument:current(),tree,group:info.group,groups:info.groups});hide();}catch(error){status(error.message,true);}};line.append(link,el('small',t(`本樹待涵蓋 ${info.targets} 篇目標；整樹含脈絡 ${info.context_articles??tree?.articles.length??'—'} 篇`,`This tree covers ${info.targets} pending targets; ${info.context_articles??tree?.articles.length??'—'} articles including context`)));content.append(line);} if(p.current_size)content.append(el('small',p.current_size+t(' 篇送入本段',' articles in this segment')+(p.group_info?.parts>1?' · '+p.group_info.part+'/'+p.group_info.parts+t(' 段',' parts'):'')));
+  if(active){const p=active.payload;if(p.operation==='classify_l1'||!lastCoverage?.trees)jobProgress(content,active);else content.append(workerDetails(active));if(!p.workers_state&&p.operation!=='classify_l1'){content.append(el('small',t('目前方法：','Current method: ')+({lexical:t('詞彙相關','Word overlap'),chronological:t('時間順序','Chronological'),root:t('Graph 全範圍 root 覆蓋','Graph root coverage'),fusion:t('多來源融合','Source fusion')})[p.strategy||'lexical']));content.append(el('small',p.model),el('small',(p.operation==='review'?t('↻ 重新檢視觀點','↻ Re-evaluating viewpoints'):t('✧ 新證據與觀點更新','✧ New evidence and viewpoint updates'))+' · '+(p.current_date?.slice(0,10)||'—')),el('p',p.current_title||t('準備證據…','Preparing evidence…'),'wiki-current-title'));if(!p.workers_state&&p.group_info?.groups){const info=p.group_info,tree=p.graph_selection?.trees?.find(x=>x.root_id===info.root_id),line=el('div',undefined,'wiki-root-progress');const link=el('button',t(`查看新聞樹 #${info.group} ↗`,`View news tree #${info.group} ↗`),'wiki-root-link');link.type='button';link.id='wikiCurrentRoot';link.disabled=!tree||!hooks.showRoot;link.onclick=()=>{try{hooks.showRoot({instrument:current(),tree,group:info.group,groups:info.groups});hide();}catch(error){status(error.message,true);}};line.append(link,el('small',t(`本樹待涵蓋 ${info.targets} 篇目標；整樹含脈絡 ${info.context_articles??tree?.articles.length??'—'} 篇`,`This tree covers ${info.targets} pending targets; ${info.context_articles??tree?.articles.length??'—'} articles including context`)));content.append(line);} if(p.current_size)content.append(el('small',p.current_size+t(' 篇送入本段',' articles in this segment')+(p.group_info?.parts>1?' · '+p.group_info.part+'/'+p.group_info.parts+t(' 段',' parts'):'')));
    content.append(el('small',t('本組 token：等待模型回報','Current batch tokens: awaiting model report')+(p.last_usage?' · '+t('上一組 ','Previous batch ')+tokenText(p.last_usage):'')),el('small',t('本次工作累計 ','Current job total ')+tokenText(active.usage||p.usage)));}
    const stop=retainedStop||el('button');stop.id='wikiStop';stop.dataset.jobId=active.id;box.append(stop);
 
+  }
+  const classifier=lastJobs.find(job=>job.payload.operation==='classify_l1');
+  if(classifier){
+   const p=classifier.payload,count=p.failed_count??p.failed_ids?.length??0;
+   if(active!==classifier&&isActive(classifier))jobProgress(content,classifier);
+   if(isActive(classifier)&&p.recovering)content.append(el('small',t('正在分批重試觀點分類','Retrying classification in smaller batches')));
+   if(count)content.append(el('small',t(`分類已保存 ${p.done}/${p.total} 個觀點，${count} 個待補。可在本次工作結束後繼續整理。`,`Classification saved for ${p.done}/${p.total} opinions. ${count} need another attempt after this job.`)));
+   if(classifier.status==='failed'&&classifier!==lastJobs[0]&&!count)content.append(el('small',classifier.error||t('觀點分類已停止','Opinion classification stopped')));
   }
   if(!active&&lastJobs[0]?.payload.last_usage)content.append(el('small',t('最近一組已回報 token ','Latest reported batch tokens ')+tokenText(lastJobs[0].payload.last_usage)));
   const usage=plan?.usage||lastCoverage?.usage;if(usage){content.append(el('small',t('所選新聞時段累計 ','Selected news interval total ')+tokenText(usage.reported)));if(usage.legacy_jobs_without_attribution)content.append(el('small',t('較早版本沒有逐批用量資料，未納入此區間統計。','Older jobs lack per-batch usage and are excluded from interval totals.')));}
@@ -239,33 +255,103 @@
 
  function requestBody(settings=appliedSettings||draftSettings()){const [model,reasoning_effort]=$('wikiModel').value.split('|');const body={...selection(),news_db:!$('wikiSaved').value,instrument:current(),model,reasoning_effort,scope:$('wikiSaved').value?$('wikiScope').value:'global',date_range:range(),operation:$('wikiOperation').value,...settings};if(body.strategy==='root'&&body.graph_universe)delete body.graph_selection;return body;}
  function query(){const p=new URLSearchParams({instrument:current()});if($('wikiVersion').value)p.set('version',$('wikiVersion').value);const dates=range();if(dates){p.set('start',dates.start);p.set('end',dates.end);}return p;}
- function clearStock(){appliedSettings=null;rootSelection=null;graphUniverse=null;graphSettings=null;latestPublishedVersion=0;graphLoadError=null;researchRun=null;baseData=null;clearTimeout(revealTimer);root.dispatchEvent(new CustomEvent('atlas-wiki-stock'));invalidate();request++;data=null;lastCoverage=null;lastJobs=[];lastConfig={};selectedDetail=null;detailRequest++;chartWindow=null;focusRoot=null;focusIds=null;fitKey='';treeOpen.clear();versionChoices();$('wikiViewStart').value='';$('wikiViewEnd').value='';$('wikiDetail').replaceChildren();$('wikiCounts').textContent=t('尚未載入此股票 Wiki','This stock Wiki is not loaded');$('wikiVersionInfo').replaceChildren();$('wikiTimeline').replaceChildren();$('wikiInsights').replaceChildren();graph?.graphData({nodes:[],links:[]});activity();}
+ function clearStock(){for(const id of ['wikiKind','wikiRelation','wikiAssessment'])$(id).value='';$('wikiLayer').value='L1';displayedKey=null;displayedEpoch=null;classStamp='';appliedSettings=null;rootSelection=null;graphUniverse=null;graphSettings=null;latestPublishedVersion=0;graphLoadError=null;researchRun=null;baseData=null;clearTimeout(revealTimer);root.dispatchEvent(new CustomEvent('atlas-wiki-stock'));invalidate();request++;data=null;lastCoverage=null;lastJobs=[];lastConfig={};selectedDetail=null;detailRequest++;chartWindow=null;focusRoot=null;focusIds=null;fitKey='';treeOpen.clear();versionChoices();$('wikiViewStart').value='';$('wikiViewEnd').value='';$('wikiDetail').replaceChildren();$('wikiCounts').textContent=t('尚未載入此股票 Wiki','This stock Wiki is not loaded');$('wikiVersionInfo').replaceChildren();$('wikiTimeline').replaceChildren();$('wikiInsights').replaceChildren();graph?.graphData({nodes:[],links:[]});activity();}
  function restore(cfg){if(!cfg)return;if(cfg.model){const value=cfg.model+'|'+(cfg.reasoning_effort||'low');if([...$('wikiModel').options].some(o=>o.value===value))$('wikiModel').value=value;}$('wikiWorkers').value=String(cfg.workers||1);$('wikiLanguages').value=cfg.languages?.length===1?cfg.languages[0]:'both';$('wikiEvidenceSize').value=String([5,10,15,20].includes(cfg.evidence_size)?cfg.evidence_size:5);$('wikiStrategy').value=cfg.strategy||'lexical';$('wikiRange').value=cfg.date_range?'custom':'all';if(cfg.date_range){$('wikiStartDate').value=cfg.date_range.start;$('wikiEndDate').value=cfg.date_range.end;}sliders();if(!rootSelection?.ticker&&cfg.graph_selection?.mode!=='coverage')rootSelection=cfg.graph_selection;if(cfg.graph_universe){graphUniverse=cfg.graph_universe;graphSettings=cfg.graph_settings;}appliedSettings={...draftSettings(),...(cfg.strategy==='root'?{graph_universe:cfg.graph_universe||null,graph_settings:cfg.graph_settings||{}}: {})};strategyNote();}
- async function load(restoreSettings=false){
-  const mine=++request,ident=current();if(!ident)return false;loading++;status(t('正在讀取已保存的 Wiki 圖譜…','Loading saved Wiki graph…'),false,true);activity();
-  try{
-   // Restore the saved range from lightweight state before loading the graph.
-   // This avoids building a graph for the default month only to discard it.
-   if(restoreSettings){const meta=await api('jobs?'+new URLSearchParams({instrument:current()}));if(mine!==request||panel.hidden)return false;restore(meta.config||{});}
-   const key=String(query());
-   if(!graphRequests.has(key)){const work=api('graph?'+key).finally(()=>graphRequests.delete(key));graphRequests.set(key,work);}
-   const value=await graphRequests.get(key);if(mine!==request||panel.hidden||current()!==ident)return false;if(value.instrument!==ident)throw Error(t('Wiki 股票識別不一致，未載入此回應。','Wiki instrument mismatch; response was not loaded.'));
-   if(data&&data.version!==value.version){selectedDetail=null;$('wikiDetail').replaceChildren(el('p',t('點選此版本的節點查看引用。','Select a node in this version to view its citations.')));}
-   graphLoadError=null;latestPublishedVersion=Math.max(latestPublishedVersion,Number(value.version)||0);baseData=value;combine();lastJobs=[...(value.jobs||[]),...(value.classification_jobs||[])];lastConfig=value.config||{};lastCoverage=value.coverage;
-   classStamp=JSON.stringify((value.classification_jobs||[]).map(j=>[j.status,j.updated_at]));
-   savedChoices();versionChoices();classificationChoices();activity();
-   if(focusRoot&&!data.nodes.some(n=>n.id===focusRoot)){focusRoot=null;focusIds=null;}
-   if(String(query())!==key&&lastJobs.some(isActive))return load();
+ function applyState(value){
+  lastJobs=[...(value.jobs||[]),...(value.classification_jobs||[])];
+  lastConfig=value.config||{};lastCoverage=value.coverage;latestPublishedVersion=Number(value.version)||0;
+ }
+ function classificationStamp(state){return JSON.stringify((state.classification_jobs||[]).map(j=>[j.status,j.updated_at]));}
+ function paintSnapshot(entry,key,meta){
+  const value=entry.value,changed=!entry.token||baseData!==value||displayedKey!==key;
+  if(data&&data.version!==value.version){selectedDetail=null;detailRequest++;$('wikiDetail').replaceChildren(el('p',t('點選此版本的節點查看引用。','Select a node in this version to view its citations.')));}
+  if(meta)applyState(meta);
+  if(!entry.token&&value.jobs)applyState({...meta,...value}); // Older servers also return live activity here.
+  graphLoadError=null;displayedEpoch=entry.epoch;displayedKey=key;
+  latestPublishedVersion=Math.max(latestPublishedVersion,Number(value.version)||0);
+  classStamp=classificationStamp(meta||value);
+  if(changed){
+   baseData=value;combine();savedChoices();versionChoices();classificationChoices();
    render();if(focusRoot&&data.nodes.some(n=>n.id===focusRoot))focusGalaxy(focusRoot,false);
-   if(restoreSettings)schedulePreview();if(!busy)status('');return true;
-  }catch(e){if(mine===request){graphLoadError=e.message;status(e.message,true);}return false;}
-  finally{loading--;if(!loading&&!busy){$('wikiStatus').classList.remove('wiki-working');$('wikiStatus').setAttribute('aria-busy','false');}activity();}
+  }
+  activity();
+ }
+ async function load(restoreSettings=false,saved=null,verifiedState=null){
+  const mine=++request,ident=current();if(!ident)return false;
+  const valid=()=>mine===request&&!panel.hidden&&current()===ident;
+  loading++;let prepared=false,restoredFilters=false;
+  function prepare(meta){
+   if(restoreSettings&&!prepared&&meta){
+    applyState(meta);restore(meta.config);
+    if(saved?.instrument===ident){
+     const pin=saved.controls?.wikiVersion;
+     if(pin&&![...$('wikiVersion').options].some(o=>o.value===pin))$('wikiVersion').add(option('v'+pin,pin));
+     restoreRuntime(saved);
+    }
+    activity();prepared=true;
+   }
+  }
+  function showEntry(entry,key,meta){
+   paintSnapshot(entry,key,meta);
+   if(saved?.controls?.wikiAssessment&&!restoredFilters){
+    const choice=$('wikiAssessment'),term=saved.controls.wikiAssessment;
+    if([...choice.options].some(o=>o.value===term)){choice.value=term;render();}
+    restoredFilters=true;
+   }
+  }
+  try{
+   const cached=cache.peekState(ident);
+   prepare(cached);
+   const earlyKey=String(query()),early=cache.peekGraph(earlyKey);
+   if(early&&(!restoreSettings||prepared))showEntry(early,earlyKey,cached);
+   else if(!baseData||displayedKey!==earlyKey)status(t('正在讀取已保存的 Wiki 圖譜…','Loading saved Wiki graph…'),false,true);
+   activity();
+   const meta=verifiedState||await cache.state(ident);
+   if(!valid())return false;
+   if(prepared&&!saved&&cached?.config_token!==meta.config_token)restore(meta.config);
+   prepare(meta);applyState(meta);activity();
+   const key=String(query()),hit=cache.peekGraph(key);
+   if(hit&&baseData!==hit.value)showEntry(hit,key,meta);
+   const shared=cache.hasPendingGraph(key);
+   let entry=await cache.graph(key);
+   if(shared&&valid()&&key===String(query())&&meta.epoch&&entry.epoch!==meta.epoch)entry=await cache.graph(key);
+   if(!valid()||key!==String(query()))return false;
+   showEntry(entry,key,meta);
+   if(String(query())!==key)return load();
+   if(restoreSettings){
+    schedulePreview();
+    if(saved&&$('wikiLayer').value!=='L1'&&!researchRun)root.dispatchEvent(new CustomEvent('atlas-wiki-layer',{detail:{runId:saved.research_run}}));
+   }
+   if(!busy)status('');return true;
+  }catch(e){
+   if(valid()&&$('wikiVersion').value&&e.message.includes('只保留最近 10 個可切換版本')){
+    $('wikiVersion').value='';const ok=await load();if(ok)status(t('先前固定的版本已超出保留範圍，已開啟最新版。','The pinned version expired. Showing the latest version.'));return ok;
+   }
+   if(valid()){graphLoadError=e.message;status(e.message,true);}return false;
+  }
+  finally{loading--;if(!loading&&!busy){$('wikiStatus').classList.remove('wiki-working');$('wikiStatus').setAttribute('aria-busy','false');}if(!panel.hidden)activity();}
  }
  async function refreshCatalog(force=false){
   if(panel.hidden)return;if(catalogPending)return catalogPending;if(!force&&Date.now()-catalogAt<5000)return;
-  catalogAt=Date.now();catalogPending=(async()=>{try{const value=await api('status');if(panel.hidden)return;const changed=JSON.stringify([value.instruments,value.news_databases])!==JSON.stringify([info?.instruments,info?.news_databases]);info=value;if(changed)savedChoices(true);}catch{}finally{catalogPending=null;}})();return catalogPending;
+  catalogAt=Date.now();catalogPending=(async()=>{try{const value=await cache.catalog('status',force?0:5000);if(panel.hidden)return;const changed=JSON.stringify([value.instruments,value.news_databases])!==JSON.stringify([info?.instruments,info?.news_databases]);info=value;if(changed)savedChoices(true);}catch{}finally{catalogPending=null;}})();return catalogPending;
  }
- async function poll(){if(panel.hidden||polling)return;polling=true;try{await refreshCatalog();if(panel.hidden||!current()||!$('wikiSaved').value)return;const ident=current(),mine=request,epoch=jobStateEpoch;try{const value=await api('jobs?'+new URLSearchParams({instrument:ident}));if(panel.hidden||current()!==ident||mine!==request||epoch!==jobStateEpoch)return;if(pollError&&$('wikiStatus').textContent===pollError&&!busy&&!loading)status('');pollError=null;const was=lastJobs.some(j=>['queued','running'].includes(j.status));lastJobs=[...(value.jobs||[]),...(value.classification_jobs||[])];lastConfig=value.config||{};lastCoverage=value.coverage;latestPublishedVersion=Number(value.version)||0;const priorQuery=String(query());activity();const nextStamp=JSON.stringify((value.classification_jobs||[]).map(j=>[j.status,j.updated_at]));if(String(query())!==priorQuery||!data||graphLoadError||(!$('wikiVersion').value&&(data.version!==value.version||classStamp!==nextStamp))){classStamp=nextStamp;await load();}if(was&&!lastJobs.some(j=>['queued','running'].includes(j.status)))schedulePreview();}catch(e){if(panel.hidden||current()!==ident||mine!==request||epoch!==jobStateEpoch)return;pollError=e.message;$('wikiLive').dataset.state='offline';$('wikiLive').replaceChildren(el('strong',t('連線中斷；無法確認模型狀態','Connection lost; model status unknown')));status(e.message,true);}}finally{polling=false;}}
+ async function poll(){
+  if(panel.hidden||polling||loading)return;polling=true;
+  try{
+   await refreshCatalog();
+   if(panel.hidden||!current()||!$('wikiSaved').value)return;
+   const ident=current(),mine=request,epoch=jobStateEpoch;
+   const valid=()=>!panel.hidden&&current()===ident&&mine===request&&epoch===jobStateEpoch;
+   try{
+    const value=await cache.state(ident);if(!valid())return;
+    if(pollError&&$('wikiStatus').textContent===pollError&&!busy)status('');pollError=null;
+    const was=lastJobs.some(isActive);applyState(value);activity();
+    if(!data||graphLoadError||displayedKey!==String(query())||
+      (value.epoch?displayedEpoch!==value.epoch:!$('wikiVersion').value&&(data.version!==value.version||classStamp!==classificationStamp(value))))await load(false,null,value);
+    if(was&&!lastJobs.some(isActive))schedulePreview();
+   }catch(e){if(valid()){pollError=e.message;$('wikiLive').dataset.state='offline';$('wikiLive').replaceChildren(el('strong',t('連線中斷，無法確認模型狀態','Connection lost. Model status unknown.')));status(e.message,true);}}
+  }finally{polling=false;}
+ }
  const termColor=n=>data?.taxonomy?.terms.find(t=>(n.classification_terms||[]).includes(t.id))?.color;
  const roleName=role=>role==='support'?t('支持論證','Supporting arguments'):t('反對論證','Counterarguments');
  const roleColor=role=>role==='support'?'#73ddca':'#efa88c';
@@ -425,7 +511,7 @@
  function viewpoints(){const bounds=selectedBounds();return (data?.opinion_index||[]).flatMap(n=>{const dates=(n.dates||[]).filter(d=>!bounds||(stamp(d)>=bounds.start&&stamp(d)<=bounds.end));return bounds&&!dates.length?[]:[{...n,date:dates.at(-1)||'unknown'}];});}
  function chartTerms(){const rows=viewpoints(),chosen=$('wikiAssessment').value;return classificationTerms().filter(c=>(!chosen||chosen===c.id)&&rows.some(n=>classificationTags(n).includes(c.id)));}
 
- async function openViewpoint(item){const mine=++detailRequest,ident=current(),version=data.version;try{const n=await api('node?'+new URLSearchParams({instrument:ident,id:item.id,version,price_horizon:selection().price_horizon||3}));if(mine===detailRequest&&ident===current()&&data.version===version)details(n);}catch(e){status(e.message,true);}}
+ async function openViewpoint(item){const mine=++detailRequest,ident=current(),version=data.version;try{const n=await api('node?'+new URLSearchParams({instrument:ident,id:item.id,version,price_horizon:selection().price_horizon||3}));if(mine===detailRequest&&!panel.hidden&&ident===current()&&data?.version===version)details(n);}catch(e){if(mine===detailRequest&&!panel.hidden&&ident===current())status(e.message,true);}}
  function viewpointButtons(box,items){let shown=0;const more=el('button',t('顯示更多','Show more'));function append(){const chunk=items.slice(shown,shown+20);shown+=chunk.length;for(const n of chunk){const button=el('button',copy(n).title,'wiki-viewpoint');button.onclick=()=>buttonAction(button,t('正在讀取觀點…','Loading opinion…'),()=>openViewpoint(n));box.insertBefore(button,more);}more.hidden=shown>=items.length;}more.onclick=append;box.append(more);append();}
  function categoryDetail(key,start,end){filterTerm(key);detailRequest++;selectedDetail=null;const box=$('wikiDetail'),items=viewpoints().filter(n=>classificationTags(n).includes(key)&&stamp(n.date)>=start&&stamp(n.date)<=end),term=classificationTerms().find(x=>x.id===key);box.replaceChildren(el('h3',termLabel(term)||key),el('p',day(new Date(start*86400000))+' → '+day(new Date(end*86400000))),el('strong',items.length+t(' 個觀點群',' opinion groups')));viewpointButtons(box,items);if(innerWidth<=800)box.scrollIntoView({behavior:'smooth'});}
  function overview(){const box=$('wikiInsights'),rows=viewpoints();box.replaceChildren(el('summary',t('觀點群與分類','Opinion groups and classifications')));for(const term of chartTerms()){const items=rows.filter(n=>classificationTags(n).includes(term.id)),branch=el('details',undefined,'wiki-category');branch.dataset.category=term.id;branch.open=treeOpen.has(term.id);branch.append(el('summary',termLabel(term)+' · '+items.length));const populate=()=>{if(branch.dataset.loaded)return;branch.dataset.loaded='true';viewpointButtons(branch,items);};branch.ontoggle=()=>{branch.open?treeOpen.add(term.id):treeOpen.delete(term.id);if(branch.open)populate();};if(branch.open)populate();box.append(branch);}}
@@ -497,7 +583,7 @@
   }
   const ident=data.instrument;for(const c of item.evidence_refs||item.citations||[]){box.append(el('blockquote',c.quote));const b=el('button',t('查看引用來源','View cited source'));b.onclick=()=>buttonAction(b,t('正在讀取來源…','Loading source…'),async()=>{const a=await api('article?'+new URLSearchParams({instrument:ident,id:c.article_revision_id}));const link=el('a',a.title);link.href=a.url;link.target='_blank';link.rel='noopener noreferrer';b.replaceWith(link);});box.append(b);}
  }
- function saveRuntime(){if(!initialized||restoringUI)return;const controls=Object.fromEntries(runtimeKeys.map(id=>[id,$(id).type==='checkbox'?$(id).checked:$(id).value]));const c=graph?.cameraPosition();const value={instrument:current(),controls,layout:layout.state(),root_selection:rootSelection,graph_universe:graphUniverse,graph_settings:graphSettings,root:focusRoot,selected:selectedDetail?.id||null,...(c?{camera:{x:c.x,y:c.y,z:c.z}}:{})};try{localStorage.setItem('stocknexus.wikiRuntime',JSON.stringify(value));}catch{}root.AtlasWorkspace?.save('wiki',value);}
+ function saveRuntime(){if(!initialized||restoringUI)return;const controls=Object.fromEntries(runtimeKeys.map(id=>[id,$(id).type==='checkbox'?$(id).checked:$(id).value]));const c=graph?.cameraPosition();const value={instrument:current(),research_run:researchRun?.id||null,controls,layout:layout.state(),root_selection:rootSelection,graph_universe:graphUniverse,graph_settings:graphSettings,root:focusRoot,selected:selectedDetail?.id||null,...(c?{camera:{x:c.x,y:c.y,z:c.z}}:{})};if(value.instrument){savedViews.delete(value.instrument);savedViews.set(value.instrument,value);if(savedViews.size>4)savedViews.delete(savedViews.keys().next().value);}try{localStorage.setItem('stocknexus.wikiRuntime',JSON.stringify(value));}catch{}root.AtlasWorkspace?.save('wiki',value);}
  function restoreRuntime(saved){if(!saved)return;restoringUI=true;try{layout.restore(saved.layout);if(saved.instrument)instrumentChoices(saved.instrument);for(const [id,value] of Object.entries(saved.controls||{}))if(runtimeKeys.includes(id)&&id!=='wikiRangeStart'&&id!=='wikiRangeEnd'){$(id).type==='checkbox'?$(id).checked=!!value:$(id).value=value;}sliders();for(const id of ['wikiRangeStart','wikiRangeEnd'])if(saved.controls?.[id]!==undefined)$(id).value=saved.controls[id];if(lastJobs.some(isActive)||lastConfig.enabled||lastConfig.catch_up)lockDates(true,true);rootSelection=saved.root_selection||rootSelection;graphUniverse=saved.graph_universe||graphUniverse;graphSettings=saved.graph_settings||graphSettings;focusRoot=saved.root||null;sliderLabel();strategyNote();}finally{restoringUI=false;}}
  const archive=el('dialog',undefined,'wiki-settings');
  document.body.append(archive);
@@ -539,47 +625,114 @@
   const [model,effort]=$('wikiModel').value.split('|');
   if(current())root.openWikiComparison({instrument:current(),model,effort,t});
  };
- function show(){if(showPending)return showPending;showPending=openWiki().finally(()=>{showPending=null;});return showPending;}
- async function openWiki(){
-  panel.hidden=false;layout.refresh();hooks.visible(true);status(t('正在載入 Wiki 狀態…','Loading Wiki status…'),false,true);
-  await root.AtlasWorkspace?.ready;
-  const selected=hooks.selection('global').graph_selection;if(selected?.trees?.length)rootSelection=selected;
-  panel.hidden=false;layout.refresh();hooks.visible(true);graph?.resumeAnimation();translate();
-  try{
-   const [nextInfo,catalog]=await Promise.all([api('status'),api('models').catch(error=>{if(!initialized)throw error;return {models};})]);info=nextInfo;catalogAt=Date.now();
-   models=catalog.models;modelChoices();
-   // The graph's confirmed identity wins over a remembered Wiki from another
-   // stock. A search-field draft is deliberately not used here.
-   const news=hooks.selection('global').search||{};
-   const matching=(info.news_databases||[]).find(x=>x.ticker===news.ticker||x.instrument.split(':')[1]===news.ticker);
-   const newsInstrument=news.instrument||matching?.instrument;
-   const aligned=newsInstrument&&(info.instruments.some(x=>x.instrument===newsInstrument)||(info.news_databases||[]).some(x=>x.instrument===newsInstrument))?newsInstrument:null;
-   if(!initialized){
-    const remembered=root.AtlasWorkspace?.state.wiki||JSON.parse(localStorage.getItem('stocknexus.wikiRuntime')||'null');
-    const saved=!aligned||remembered?.instrument===aligned?remembered:null;
-    if(aligned){savedChoices(true);$('wikiSaved').value=info.instruments.some(x=>x.instrument===aligned)?aligned:'';instrumentChoices(aligned);}
-    savedChoices(true);if(saved?.instrument){$('wikiSaved').value=info.instruments.some(x=>x.instrument===saved.instrument)?saved.instrument:'';instrumentChoices(saved.instrument);}
-    else if(!current()){const id=hooks.selection('global').search?.instrument;const existing=info.instruments.find(x=>x.instrument===id)||info.instruments.filter(x=>x.version>0).sort((a,b)=>b.version-a.version)[0];if(existing){$('wikiSaved').value=existing.instrument;instrumentChoices(existing.instrument);}}
-    savedChoices();
-    if(info.instruments.some(x=>x.instrument===current()))await load(true);
-    if(saved&&Object.keys(saved.controls||{}).length){const before=String(query());restoreRuntime(saved);if(String(query())!==before&&info.instruments.some(x=>x.instrument===current()))await load();else render();if(saved.selected){const n=data?.nodes.find(n=>n.id===saved.selected);if(n){details(n);if(n.kind!=='ArticleRevision'&&n.layer!=='L2')await openViewpoint(n);}}if(saved.camera){fitPending=false;graph?.cameraPosition(saved.camera);}}
-    else if(!data){const preferred=catalog.default_model+'|medium';if([...$('wikiModel').options].some(o=>o.value===preferred))$('wikiModel').value=preferred;}
-    initialized=true;
-   }else if(aligned&&aligned!==current()){
-    clearStock();savedChoices(true);$('wikiSaved').value=info.instruments.some(x=>x.instrument===aligned)?aligned:'';instrumentChoices(aligned);
-    if($('wikiSaved').value)await load(true);
-   }else{savedChoices();if(data)poll();else if(info.instruments.some(x=>x.instrument===current()))await load();}
-   if(selected?.trees?.length)rootSelection=selected;syncGraphUniverse();strategyNote();schedulePreview();saveRuntime();
-   if(info.bridge_ready&&!$('wikiStatus').classList.contains('error'))status('');if(!info.bridge_ready)status(t('模型橋接尚未就緒；啟動前請檢查 Chat 服務。','Model bridge is not ready; check the Chat service before starting.'),true);
-  }catch(e){status(e.message,true);}
-  clearInterval(pollTimer);pollTimer=setInterval(poll,2000);$('wikiBack').focus();
+ function rememberedView(ident){
+  if(ident&&savedViews.has(ident))return savedViews.get(ident);
+  let saved=root.AtlasWorkspace?.state.wiki;
+  if(!saved){try{saved=JSON.parse(localStorage.getItem('stocknexus.wikiRuntime')||'null');}catch{}}
+  return !ident||saved?.instrument===ident?saved:null;
  }
- function hide(e){e?.preventDefault();saveRuntime();panel.hidden=true;dialog.close();clearInterval(pollTimer);clearTimeout(previewTimer);invalidate();request++;graph?.pauseAnimation();hooks.visible(false);$('relationOpen').textContent=root.AtlasI18n?.t('關聯設定')||'Edge settings';open.focus();}
+ function alignedInstrument(news,catalog){
+  const stocks=[...(catalog.instruments||[]),...(catalog.news_databases||[])];
+  if(news.instrument)return stocks.some(row=>row.instrument===news.instrument)?news.instrument:null;
+  const matches=[...new Set(stocks.filter(row=>news.ticker&&row.instrument.split(':')[1]===news.ticker).map(row=>row.instrument))];
+  return matches.length===1?matches[0]:null;
+ }
+ function warmQuery(ident,meta){
+  const controls=rememberedView(ident)?.controls,p=new URLSearchParams({instrument:ident});
+  if(controls?.wikiVersion)p.set('version',controls.wikiVersion);
+  const locked=[...(meta.jobs||[]),...(meta.classification_jobs||[])].some(isActive)||meta.config.enabled||meta.config.catch_up;
+  let dates=meta.config.date_range;
+  if(controls&&!locked){
+   if(controls.wikiRange==='all')dates=null;
+   else if(controls.wikiRangeStart&&controls.wikiRangeEnd)dates={start:day(new Date(Number(controls.wikiRangeStart)*86400000)),end:day(new Date(Number(controls.wikiRangeEnd)*86400000))};
+  }
+  if(dates){p.set('start',dates.start);p.set('end',dates.end);}
+  return String(p);
+ }
+ function preload(news){
+  if(!panel.hidden||!(news?.ticker||news?.instrument))return;
+  const requested=news.instrument||news.ticker;
+  if(warmKey===requested&&Date.now()-warmAt<5000)return;
+  clearTimeout(warmTimer);warmKey=requested;warmAt=Date.now();
+  warmTimer=setTimeout(async()=>{
+   try{
+    const catalog=await cache.catalog('status',5000);
+    if(warmKey!==requested||!panel.hidden)return;
+    const ident=alignedInstrument(news,catalog);
+    if(!ident||!catalog.instruments.some(stock=>stock.instrument===ident))return;
+    const meta=await cache.state(ident);
+    if(warmKey===requested&&panel.hidden)await cache.graph(warmQuery(ident,meta));
+   }catch{if(warmKey===requested)warmAt=0;} // The foreground read retries a failed prefetch.
+  },80);
+ }
+ function show(){
+  if(showPending)return showPending;
+  const ticket=++openEpoch;
+  showPending=openWiki(ticket).finally(()=>{if(ticket===openEpoch)showPending=null;});
+  return showPending;
+ }
+ async function openWiki(ticket){
+  const valid=()=>ticket===openEpoch&&!panel.hidden;
+  const confirmed=()=>hooks.confirmedSearch?.()||hooks.selection('global').search||{};
+  const news=confirmed();
+  if(news.instrument&&data&&data.instrument!==news.instrument)clearStock();
+  panel.hidden=false;layout.refresh();hooks.visible(true);
+  if(!data)status(t('正在載入 Wiki 狀態…','Loading Wiki status…'),false,true);
+  try{
+   await root.AtlasWorkspace?.ready;if(!valid())return;
+   const search=confirmed();if(data&&((search.instrument&&search.instrument!==data.instrument)||(search.ticker&&search.ticker!==data.instrument.split(':')[1])))clearStock();
+   graph?.resumeAnimation();$('relationOpen').textContent=t('Wiki 設定','Wiki settings');
+   const modelCatalog=cache.catalog('models',30000).then(catalog=>{
+    if(valid()){models=catalog.models;modelChoices();if(!models.length)activity();}
+    return catalog;
+   }).catch(()=>null);
+   const known=cache.peekCatalog('status');
+   const warm=known&&alignedInstrument(search,known);
+   info=warm?known:await cache.catalog('status',known?0:5000);
+   if(!valid())return;
+   catalogAt=warm?0:Date.now();
+   const aligned=alignedInstrument(search,info),previous=current(),saved=rememberedView(aligned||previous);
+   const unmatched=!!(search.instrument||search.ticker)&&!aligned;
+   let target=aligned||(!unmatched&&(previous||saved?.instrument));
+   if(!target&&!unmatched)target=(info.instruments||[]).filter(row=>row.version>0).sort((a,b)=>b.version-a.version)[0]?.instrument;
+   const changed=previous!==target||!data;
+   if(changed&&data)clearStock();
+   savedChoices(true);
+   const exists=info.instruments.some(row=>row.instrument===target);
+   $('wikiSaved').value=exists?target:'';instrumentChoices(target||'');
+   const openingStock=current();
+   let restored=null;
+   if(exists){
+    if(changed)restored=saved?.instrument===target?saved:null;
+    const mounted=cache.peekGraph(String(query()));
+    if(!changed&&!graphLoadError&&mounted&&!mounted.token)await poll();
+    else await load(changed,restored);
+    if(!valid()||current()!==openingStock)return;
+    if(restored?.selected){const n=data?.nodes.find(n=>n.id===restored.selected);if(n){details(n);if(n.kind!=='ArticleRevision'&&n.layer!=='L2')await openViewpoint(n);}}
+    if(restored?.camera){fitPending=false;graph?.cameraPosition(restored.camera);}
+   }
+   if(!valid()||current()!==openingStock)return;
+   const newsView=hooks.selection('global'),selected=newsView.graph_selection;
+   if(selected?.ticker===openingStock.split(':')[1]&&selected.trees?.length)rootSelection=selected;
+   syncGraphUniverse(newsView);selection($('wikiScope').value==='global'?newsView:undefined);strategyNote();schedulePreview();
+   clearInterval(pollTimer);pollTimer=setInterval(poll,2000);
+   const modelInfo=await modelCatalog;if(!valid()||current()!==openingStock)return;
+   if(!initialized||changed){
+    const preferred=restored?.controls?.wikiModel||(lastConfig.model?lastConfig.model+'|'+(lastConfig.reasoning_effort||'low'):modelInfo?.default_model+'|medium');
+    if([...$('wikiModel').options].some(o=>o.value===preferred))$('wikiModel').value=preferred;
+   }
+   initialized=true;saveRuntime();activity();
+   if(info.bridge_ready&&!graphLoadError)status(unmatched?t('目前新聞股票尚無可讀取的 Wiki。','No saved Wiki matches the current News stock.'):'');
+   if(!info.bridge_ready||!models.length)status(t('模型橋接或目錄尚未就緒，仍可檢視已保存的 Wiki。','Model bridge or catalog unavailable. Saved Wikis remain available.'),true);
+  }catch(e){if(valid())status(e.message,true);}
+  if(valid())$('wikiBack').focus();
+ }
+ function hide(e){e?.preventDefault();saveRuntime();panel.hidden=true;openEpoch++;showPending=null;dialog.close();clearInterval(pollTimer);clearTimeout(previewTimer);invalidate();request++;graph?.pauseAnimation();hooks.visible(false);$('relationOpen').textContent=root.AtlasI18n?.t('關聯設定')||'Edge settings';open.focus();}
  $('wikiSaved').addEventListener('focus',()=>refreshCatalog(true));root.addEventListener('focus',()=>refreshCatalog(true));
  open.onclick=show;$('wikiBack').onclick=hide;
  $('relationOpen').addEventListener('click',e=>{if(panel.hidden)return;e.preventDefault();e.stopImmediatePropagation();appliedSettings=appliedSettings||draftSettings();syncGraphUniverse();strategyNote();dialog.showModal();},true);
- $('wikiSaved').onchange=async()=>{clearStock();instrumentChoices('');if($('wikiSaved').value)await load(true);else{status(t('選擇新聞 DB 後即可建立 Wiki。','Choose a news database to create a Wiki.'));schedulePreview();}saveRuntime();};
- for(const id of ['wikiInstrument','wikiScope','wikiModel','wikiOperation'])$(id).addEventListener('input',()=>{if(id==='wikiInstrument'){if($('wikiSaved').value){instrumentChoices();return;}clearStock();$('wikiScope').value='global';if(info?.instruments.some(x=>x.instrument===current())){$('wikiSaved').value=current();instrumentChoices();load(true);return;}saveRuntime();}if(id==='wikiOperation'){$('wikiContinuous').disabled=$('wikiOperation').value==='review';if($('wikiContinuous').disabled)$('wikiContinuous').checked=false;}strategyNote();selection();schedulePreview();});
+ $('wikiSaved').onchange=async()=>{clearStock();instrumentChoices('');if($('wikiSaved').value)await load(true,rememberedView(current()));else{status(t('選擇新聞 DB 後即可建立 Wiki。','Choose a news database to create a Wiki.'));schedulePreview();}saveRuntime();};
+ for(const id of ['wikiInstrument','wikiScope','wikiModel','wikiOperation'])$(id).addEventListener('input',()=>{if(id==='wikiInstrument'){if($('wikiSaved').value){instrumentChoices();return;}clearStock();$('wikiScope').value='global';if(info?.instruments.some(x=>x.instrument===current())){$('wikiSaved').value=current();instrumentChoices();load(true,rememberedView(current()));return;}saveRuntime();}if(id==='wikiOperation'){$('wikiContinuous').disabled=$('wikiOperation').value==='review';if($('wikiContinuous').disabled)$('wikiContinuous').checked=false;}strategyNote();selection();schedulePreview();});
  for(const id of ['wikiLanguages','wikiEvidenceSize','wikiStrategy','wikiWorkers'])$(id).oninput=()=>{strategyNote();dirtySettings();};
  $('wikiApply').onclick=async()=>{if(busy)return;busy=true;let applyError='';dirtySettings();$('wikiApply').classList.add('wiki-working');$('wikiApply').setAttribute('aria-busy','true');$('wikiApplyStatus').textContent=t('正在套用設定…','Applying settings…');try{const result=await api('apply',{...requestBody(draftSettings()),continuous:$('wikiContinuous').checked});appliedSettings=draftSettings();invalidate();dialog.close();await load();status(result.status==='noop'?t('設定已套用；選取範圍皆已處理，模型保持停止。','Settings applied; selected evidence is complete. Model remains idle.'):result.resumed?t('已停止舊工作，依新設定接續。','Old work stopped; continuing with new settings.'):t('設定已套用。','Settings applied.'));schedulePreview();}catch(e){applyError=e.message;status(e.message,true);$('wikiApplyStatus').textContent=e.message;}finally{busy=false;$('wikiApply').classList.remove('wiki-working');$('wikiApply').setAttribute('aria-busy','false');dirtySettings();if(applyError)$('wikiApplyStatus').textContent=applyError;activity();}};
  $('wikiRange').onchange=()=>{preset();dateSelectionChanged();};for(const id of ['wikiStartDate','wikiEndDate'])$(id).oninput=()=>{$('wikiRange').value='custom';sliders();dateSelectionChanged();};
@@ -606,7 +759,7 @@
  $('wikiVersionInfo').addEventListener('toggle',()=>{$('wikiResizeChanges').hidden=!$('wikiVersionInfo').open;layout.refresh();});
  const layout=root.AtlasWikiLayout.init(panel,saveRuntime);
  for(const event of ['input','change'])for(const surface of [panel,dialog])surface.addEventListener(event,()=>{if(initialized)saveRuntime();});
- root.addEventListener('pagehide',saveRuntime);root.addEventListener('atlas-language',translate);preset();translate();appliedSettings=draftSettings();root.AtlasWiki={show,refresh:load,setResearch,filterTerm,selectNode:id=>{if(!data?.nodes.some(n=>n.id===id))return;focusGalaxy(id);details(data.nodes.find(n=>n.id===id));},graph:()=>graph,l1Busy:()=>lastJobs.some(j=>['queued','running'].includes(j.status)),classification:()=>data?.taxonomy};
+ root.addEventListener('pagehide',saveRuntime);root.addEventListener('atlas-language',translate);preset();translate();appliedSettings=draftSettings();root.AtlasWiki={show,preload,refresh:load,setResearch,filterTerm,selectNode:id=>{if(!data?.nodes.some(n=>n.id===id))return;focusGalaxy(id);details(data.nodes.find(n=>n.id===id));},graph:()=>graph,l1Busy:()=>lastJobs.some(j=>['queued','running'].includes(j.status)),classification:()=>data?.taxonomy};
  let chatRevision=0,chatFingerprint='';
  const wikiRuntime={
   state(){const scope=focusIds?[...focusIds]:selectedDetail?.id?[selectedDetail.id]:(graph?.graphData().nodes||[]).map(n=>n.id);const controls=['wikiLayer','wikiKind','wikiRelation','wikiAssessment','wikiVersion'].map(id=>({id,kind:'set',value:$(id).value,options:[...$(id).options].map(o=>({value:o.value,label:o.textContent})),disabled:$(id).disabled}));const state={surface:'wiki',layer:$('wikiLayer').value,research_run:researchRun?.id||null,research_question:researchRun?.bundle.lens.query||null,language:language(),instrument:current(),version:data?.version||0,dataset:JSON.stringify([current(),data?.version,range(),$('wikiLayer').value,researchRun?.id,data?.taxonomy?.revision_id,classStamp]),date_range:range(),scope_ids:scope,scope_kind:focusIds?'galaxy':selectedDetail?'node':'wiki',selected_node:selectedDetail,root_ids:focusRoot?[focusRoot]:[],counts:{loaded:data?.nodes.length||0,visible:graph?.graphData().nodes.length||0,scope:scope.length,edges:data?.edges.length||0},controls,busy:{wiki:lastJobs.some(j=>['queued','running'].includes(j.status))}};const fingerprint=JSON.stringify(state);if(fingerprint!==chatFingerprint){chatFingerprint=fingerprint;chatRevision++;}return {...state,revision:chatRevision};},
@@ -619,6 +772,7 @@
   }if(action.revision!==wikiRuntime.state().revision)throw Error('Wiki 已更新，請重新讀取狀態');if(action.kind==='select_article'){const n=data.nodes.find(n=>n.id===action.id);if(!n)throw Error('Unknown Wiki node');focusGalaxy(n.id);details(n);if(n.kind!=='ArticleRevision'&&n.layer!=='L2')await openViewpoint(n);}else if(action.kind==='set'&&wikiRuntime.state().controls.some(c=>c.id===action.id&&c.options.some(o=>o.value===String(action.value)))){const control=$(action.id);control.value=action.value;if(action.id==='wikiVersion')await selectVersion();else if(action.id==='wikiLayer')$(action.id).dispatchEvent(new Event('change'));else render();saveRuntime();}else throw Error('此 Wiki 操作不在允許清單');return wikiRuntime.state();}
  };
  root.AtlasWiki.runtime=wikiRuntime;
+ root.AtlasWorkspace?.ready.then(()=>preload(hooks.confirmedSearch?.()));
  root.AtlasWiki.chat=root.AtlasChatPanel?.mount({runtime:wikiRuntime,detail:$('wikiSide'),prefix:'wiki',title:'觀點詳情'});
 
 })(globalThis);

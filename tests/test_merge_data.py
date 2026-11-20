@@ -70,12 +70,13 @@ class MergeDataTests(unittest.TestCase):
 
     def test_new_stock_is_paused_and_private_excluded(self):
         a=self.wiki(self.sa,[row()]);cfg=a.config();cfg.update(enabled=True,catch_up=True);a.configure(cfg)
-        (self.a/'private').mkdir();(self.a/'private/secret').write_text('secret')
+        (self.a/'private').mkdir(exist_ok=True);(self.a/'private/secret').write_text('secret')
         fresh=self.root/'fresh';run(self.a,fresh)
+        self.assertFalse((fresh/'private').exists())  # Check the merge before startup creates a local trace.
         service=WikiService(GraphRepository(fresh/'news-atlas.sqlite3'),start_worker=False)
         b=service.store('NASDAQ:TSLA')
         self.assertFalse(b.config()['enabled']);self.assertFalse(b.config()['catch_up'])
-        self.assertEqual(b.graph()['version'],1);self.assertFalse((fresh/'private').exists())
+        self.assertEqual(b.graph()['version'],1);self.assertFalse((fresh/'private/secret').exists())
 
     def test_dry_run_no_target_and_no_source_changes(self):
         self.sa.save('massive','query',[row()],[])

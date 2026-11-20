@@ -1,5 +1,9 @@
 # AI 開發協作與互動驗證偏好
 
+## Wiki navigation and classifier recovery, November 20
+
+The user requested background loading for the stock being explored, a responsive cached return, incremental updates, less repeated evidence, and failures confined to small classification batches. Record Given/When/Then scenarios, actual results, measurement limits and remaining directions in the English spec. [Accepted behavior and verification](references/wiki-cache-classifier-20261120.md)
+
 ## Web UI 與 Chat 歷史（2026-11-20，active）
 
 使用者明確要求進入 Wiki 自動對齊新聞圖譜股票，避免反覆下拉選取；Chat 提供可重開／續聊與可刪除的歷史對話。已確認 unslop 設計方向為深色研究工作台、石墨灰底、少量品牌青綠，將色彩集中於圖譜內容。修改獨立提交於 `llm_wiki_unslop`。行為與保存邊界見 [改版契約](references/unslop-20261120.md)；驗證須涵蓋跨股、重新整理、服務重啟及刪除取消。

@@ -90,6 +90,7 @@ def main():
               const factory=ForceGraph3D;window.ForceGraph3D=(...args)=>{window.fixtureWikiRenderer=factory(...args);return fixtureWikiRenderer;};window.wikiCalls=[];window.planRelease=null;window.deferPlan=false;window.failGraph=false;window.deferPoll=false;window.pollRelease=null;
               window.fixtureWiki={instrument:'NASDAQ:TSLA',version:1,versions:[{version:1,created_at:'2026-11-04T00:00:00Z'}],nodes:[{id:'a',kind:'ArticleRevision',title:'Fixture evidence',summary:'Evidence only',url:'https://example.test',status:'source'},{id:'b',kind:'Claim',title:'<img src=x onerror=alert(1)> Claim',scope:'fixture',summary:'待判讀',status:'proposed',citations:[{article_revision_id:'a',field:'title',start:0,end:7,quote:'Fixture'}]}],edges:[{source:{stable_id:'a',kind:'ArticleRevision'},target:{stable_id:'b',kind:'Claim'},relation_type:'SUPPORTS',status:'proposed',rationale:'Fixture',evidence_refs:[]}],total_nodes:2,config:{enabled:false},jobs:[],truncated:false};
               fixtureWiki.coverage={instrument:'NASDAQ:TSLA',scope_total:10,scope_done:2,scope_pending:8,review_done:0,review_total:2,daily_calls:2,daily_limit:20,captured_revisions:10,extracted_revisions:2,storage:'llm_wiki/TSLA/wiki.sqlite3',subscriptions:[],rejected_responses:0,note:'分母為已確認範圍'};
+              fixtureWiki.opinion_index=[{...fixtureWiki.nodes[1],dates:['2026-11-04']}];
               fixtureWiki.perspectives={categories:{direct:1},theses:[],total_theses:0,note:'模型局部觀點彙整，未以股價驗證'};fixtureWiki.nodes[1].assessment={category:'direct',rationale:'營運線索，未測試股價',status:'unverified'};
               const prior=window.fetch;window.fetch=async(url,options)=>{
                 if(!url.startsWith('/api/wiki/'))return prior(url,options);
@@ -212,7 +213,10 @@ def main():
             js("Array.from($('wikiTimeline').querySelectorAll('rect')).find(r=>r.dataset.category==='analysis.fact_check').id='fixtureTaxBar'")
             click('fixtureTaxBar')
             check('bar selection synchronizes dropdown graph and opinion detail',"$('wikiAssessment').value==='analysis.fact_check'&&fixtureWikiRenderer.graphData().nodes.map(n=>n.id).sort().join(',')==='a,b'&&$('wikiDetail').querySelectorAll('.wiki-viewpoint').length===1&&wikiCalls.filter(c=>c.body).length===writesBefore")
-            js("$('wikiAssessment').value='';$('wikiAssessment').dispatchEvent(new Event('change'));window.toolbarBefore=document.querySelector('.wiki-toolbar').getBoundingClientRect().toJSON();window.canvasBefore=$('wikiCanvas').getBoundingClientRect().toJSON()")
+            js("$('wikiAssessment').value='';$('wikiAssessment').dispatchEvent(new Event('change'));$('wikiAssessment').scrollIntoView({block:'nearest'})")
+            # Let the preceding filter and its ResizeObservers settle before measuring a new interaction.
+            js("new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))")
+            js("window.toolbarBefore=document.querySelector('.wiki-toolbar').getBoundingClientRect().toJSON();window.canvasBefore=$('wikiCanvas').getBoundingClientRect().toJSON()")
             click('wikiAssessment')
             check('native dropdown opens without a second menu or layout shift',"document.activeElement===$('wikiAssessment')&&!$('wikiClassLegend')&&$('wikiAssessment').size<=1&&JSON.stringify(document.querySelector('.wiki-toolbar').getBoundingClientRect().toJSON())===JSON.stringify(toolbarBefore)&&JSON.stringify($('wikiCanvas').getBoundingClientRect().toJSON())===JSON.stringify(canvasBefore)")
             call('Input.dispatchKeyEvent',{'type':'keyDown','key':'Escape','code':'Escape','windowsVirtualKeyCode':27})

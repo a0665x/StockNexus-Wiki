@@ -201,6 +201,7 @@ function rebuild(payload,relationUpdate=false) {
   if(viewMode==='timeline') currentView=AtlasTimeline.filter(currentView,channelFilter,timelineCutoff);
   articles = currentView.articles; relations = currentView.relations;lockedRoots=lockedRoots.filter(id=>focusView.articles.some(a=>a.id===id));pinnedRoot=focusRoot();if(!lockedRoots.length)keywordLocked=false;if(rootSearchState)renderRootResults();
   exportMeta.total_articles = basePayload.total_articles ?? articles.length;
+  if(payload&&!relationUpdate&&(exportMeta.ticker||exportMeta.instrument))globalThis.AtlasWiki?.preload(exportMeta);
   hovered = null;activeTrace=AtlasView.trace([],null);showTrace(null,activeTrace); showPreview(null);
   $('count').textContent = articles.length; $('edges').textContent = relations.length;
   updateGraphMessage(); $('export').disabled = !focusView.articles.length;
@@ -859,6 +860,7 @@ function showWikiRoot({instrument,tree,group,groups:total}){
 // Wiki uses an independent renderer/store; opening it never rebuilds News Graph.
 globalThis.AtlasWikiContext={
   showRoot:showWikiRoot,
+  confirmedSearch:()=>({instrument:exportMeta.instrument||'',ticker:exportMeta.ticker||''}),
   selection(mode){
     const groups=AtlasView.groups(basePayload),visibleSources=mode==='global'?providers:viewSources();
     const focus=new Set([selected,...lockedRoots,...graphTrace().nodes.keys()].filter(Boolean));

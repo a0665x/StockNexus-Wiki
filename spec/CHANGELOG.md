@@ -1,5 +1,9 @@
 # 變更與驗證 log
 
+## 2026-11-20 — Conditional Wiki reads and isolated classification failures
+
+News warms the matching published Wiki. A tab can display a saved scope during refresh, coalesce in-flight reads and apply graph differences after publication. Compact worker status suppresses repeated forest and configuration transfers. L1 backfill shares equivalent premises and quotes, limits input by UTF-8 bytes, and records outstanding opinions when a split child fails. The host launch probe now uses the same inexpensive capabilities GET as Docker. See [acceptance, measurements and follow-up](references/wiki-cache-classifier-20261120.md).
+
 ## 2026-11-20 — Correlated Wiki execution logs
 
 Added bounded private JSONL traces for preparation, worker dispatch/context waits, model calls, validation/publication, classification and L2 synthesis/review. Python and the host bridge share job/call IDs; bridge heartbeats distinguish a live wait from a completed call. Safe errors preserve category and source locations without copying prompts, evidence or credentials. Added `scripts/wiki_trace_report.py` for stock/job summaries and unfinished spans. Model policies and research results are unchanged. See [runtime contract and measured baseline](WIKI_OBSERVABILITY.md) and [tests](TESTING.md).

@@ -120,3 +120,12 @@ test('ten independent slots, capacity bound and parent cancellation',async()=>{
  const results=await Promise.allSettled(pending);assert.ok(results.every(r=>r.status==='rejected'&&/cancelled/.test(r.reason.message)));
  assert.deepEqual((await (async()=>{const p=compiler.run(input);releases.at(-1)({items:[],finalResponse:'{}'});return p;})()).proposal,{});
 });
+
+test('backfill prompt resolves shared evidence and identifies invalid batch output',async()=>{
+ const compiler=createWikiCompiler(()=>({run:async(prompt)=>{
+  assert.match(prompt,/article\.nodes keys are revision IDs/);
+  assert.match(prompt,/zero-based indices/);
+  return {items:[],finalResponse:'[truncated'};
+ }}));
+ await assert.rejects(compiler.run({...input,operation:'classify_l1',article:{opinions:[{id:'a'}],nodes:{a:{}}}}),/Invalid Wiki classification response/);
+});

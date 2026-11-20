@@ -1,6 +1,12 @@
 # Current handoff — 2026-11-20 (Asia/Taipei)
 
-## Latest update: Wiki execution logs enabled
+## Latest update on November 20
+
+The branch `llm_wiki_unslop` now includes News-to-Wiki background reads, exact-scope caching, incremental graph updates and bounded L1 classification recovery. The shared-evidence size comparison and Given/When/Then scenarios are in the [English acceptance record](references/wiki-cache-classifier-20261120.md).
+
+Production HTTPS returned **NASDAQ:NVDA v231** with 1,893 nodes and 1,353 edges for October 7 through November 7, 2026. The [current verification ledger](TESTING.md) records response sizes and deployment recovery. The pre-deployment check covered 18 Wiki databases with zero queued/running model jobs and no enabled maintenance or catch-up. The existing annual controller remains stopped and the new policy takes effect on a subsequent authorized job. The normal launcher completed on healthy image `0fdac2459b0eb1db3208de7b072a50863d59d86669eeeb09c55041ead395c4df`. The rollback image is `news-atlas:before-wiki-cache-20261120`. A fresh Chromium profile on Tailscale rendered 800 of 1,893 loaded NVDA nodes and received a full graph followed by an unchanged acknowledgement, with zero model submissions or browser errors.
+
+## Earlier update: Wiki execution logs enabled
 
 Added correlated, rotating private stage logs under `data/private/wiki-trace/` and a command-line report. Preparation, L1 worker context/dispatch/model/validation/publication, classification, L2 fusion and its separate semantic review can now be traced by job/call ID. The bridge emits 15-second heartbeats during a live call. Read [observability](WIKI_OBSERVABILITY.md) for commands, retention and limits; old model timing cannot be reconstructed.
 

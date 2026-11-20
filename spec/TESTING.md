@@ -1,5 +1,29 @@
 # 測試與驗收
 
+## November 20, 2026 — Cached switching and bounded L1 backfill
+
+The [English acceptance matrix](references/wiki-cache-classifier-20261120.md) links each user journey to an executable test. These runs used isolated storage and controlled model replies, except for the explicitly identified production GETs.
+
+| Validation | Result and coverage |
+| --- | --- |
+| `PYTHONPATH=.:tests /usr/bin/python3 -m unittest discover -s tests -p 'test_*.py' -q` | 369 tests passed across the repository, including classification, graph sync, tree work, L2, storage, merge and document import. |
+| `node --test tests/chat*.test.mjs` and `node tests/wiki-cache.test.mjs` | 24 Chat/bridge tests and 4 client cache tests cover model routing, malformed classifier replies, history, stale tokens, ordering, deletion, fallback and coalescing. |
+| `tests/browser_wiki_cache.py` | 10 assertions on the real SQLite/HTTP/Chromium path cover warm paint while status is held, an intervening publication during prefetch, pinned/stock isolation, ignored drafts, conditional updates and missing Wiki behavior. |
+| `tests/browser_wiki.py`, `browser_wiki_identity.py`, `browser_wiki_results.py`, `browser_wiki_workers.py` | 50 workbench, 9 identity, 11 published-results and 10 worker checks passed. The workbench fixture now drives the current single maintenance button and real taxonomy groups. The separate layout suite passed 51 physical interaction checks, including native dropdown geometry, stale pre-stop polling, resizing and failed reads. |
+| `tests/browser_unslop.py` and `browser_documents.py` | The 14 workbench/Chat checks passed stock alignment, preparation, conversation reopen/continue/delete and narrow-screen checks. The document suite passed upload, idempotence, exact revision citations, missing title/date and explained cross-article links. |
+| `tests/browser_research.py` | Real HTTP/Chromium passed L2 generation with a fixture, cited sources, live save, cross-stock availability, read-failure recovery, late-layer response isolation, pinned history and desktop/mobile layout. The test uses the saved-Wiki stock selector. |
+| Production HTTPS GETs | For the saved NVDA v231 date range, the graph body was **8,952,360 bytes** and the unchanged response **204 bytes**. Full jobs used **31,767,337 bytes**, initial compact state **478,699 bytes**, and repeated compact state **9,834 bytes**. Six served frontend assets matched the checkout and the bridge reported ready. A fresh Chromium profile opened NVDA v231 over Tailscale, rendered 800 of 1,893 nodes and observed full and unchanged replies with zero model submissions or script errors. |
+
+A first timed loopback conditional read took 3,105 ms and the next two took 6 ms each. A write can invalidate the physical-file fast path and trigger server-side projection work even when the output agrees. A warm tab renders during that wait. These are individual host samples.
+
+The focused Python suite passed all eight classification and four sync scenarios. A test of the legacy resume endpoint first exposed classification extending outside the resumed news interval, then passed after it forwarded its computed dates.
+
+The sandbox's first broad runs encountered local socket restrictions. The full host-socket suites passed. A legacy merge fixture assumed no local private directory after service startup. Its assertions now check the destination immediately after merge and the private secret after startup, preserving the exclusion test with private traces enabled.
+
+The first production launch reached Docker healthy, then its extra five-second host probe timed out reading full corpus statistics and the launcher removed its own container. The retained data and image were reused. Both readiness checks now use `/api/capabilities`. `tests/test_healthcheck.py` exercises both against a store that refuses corpus statistics. The standard launcher completed on the final image. The authenticated host bridge reported ready and the HTTPS smoke passed.
+
+Earlier November 20 sections below retain the original regression results for private execution traces, the unslop workbench, saved Chat, parallel workers, the NVDA workflow and customer document ingestion. Current measurements and proposed next observations appear in the [acceptance record](references/wiki-cache-classifier-20261120.md#nvda-measurements).
+
 ## 2026-11-20 — Wiki execution observability
 
 - Initial red loop: `python3 -m unittest discover -s tests -p test_wiki_trace.py -k test_stage_log -q` failed because the real tree-worker/model/publication path produced no durable stage trace. A controlled 25 ms model delay was otherwise unaccounted for. After instrumentation the same assertion passes and attributes the delay to `model_call`.

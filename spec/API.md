@@ -1,5 +1,7 @@
 # REST、Swagger 與 MCP 邊界
 
+The optional graph sync and compact jobs query parameters are documented alongside their [response and fallback contracts](references/wiki-cache-classifier-20261120.md#runtime-behavior). Existing callers can still read the full endpoints.
+
 入口：[PROJECT_MAP.md](PROJECT_MAP.md)。完整操作表與 request 示意保留於 [docs/API.md](../docs/API.md)，此處只提供開發定位，避免兩份巨型 API 清單漂移。
 
 ## 文件與路由

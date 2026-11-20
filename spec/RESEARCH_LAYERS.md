@@ -1,5 +1,7 @@
 # 雙層研究 Wiki 契約與 BDD 邊界
 
+For the current L1 backfill packet format, partial classification, L2 reading and the distinction between a published graph and ongoing work, see the [November 20 acceptance record](references/wiki-cache-classifier-20261120.md).
+
 狀態：第一版垂直流程已接入；驗證與限制見本文末段。
 
 ## 已確認產品意圖與取代關係（2026-11-07）

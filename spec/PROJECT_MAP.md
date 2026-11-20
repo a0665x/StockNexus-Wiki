@@ -1,5 +1,7 @@
 # StockNexus-Wiki — 專案入口
 
+The current News-to-Wiki navigation, incremental reads, classifier recovery and their acceptance scenarios are covered in the [cache and classifier contract](references/wiki-cache-classifier-20261120.md).
+
 全圖原始碼查核：2026-11-06；2026-11-09 對 `8285c09` 核對 Wiki 分組／分類統計、研究恢復與空資料啟動契約（不是全庫重新查核）。這是目前工作目錄的實作地圖，不代表 GitHub main 或正在執行的 server 已同步。
 
 真實新聞搜尋與可解釋關聯圖：Google RSS、Yahoo 地區新聞（經 Google RSS）、Massive → 標準化／規則關聯 → SQLite 快取 → 3D 星系及時間軸。Python 標準函式庫後端、原生 JavaScript 前端，支援 Docker／Compose、無前端建置程序。

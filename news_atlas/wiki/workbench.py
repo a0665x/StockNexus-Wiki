@@ -69,19 +69,18 @@ def batches(rows,config):
         yield group
 
 
-def enrich_graph(store,version,start=None,end=None):
+def enrich_graph(db,version,start=None,end=None):
     for value in (start,end):
         if value:dt.date.fromisoformat(value)
     if start and end and start>end:raise ValueError('開始日期不得晚於結束日期')
-    with store.connection() as db:
-        nodes={r['id']:json.loads(r['payload']) for r in db.execute('SELECT * FROM nodes WHERE created_version<=?',(version,))}
-        edges=[json.loads(r[0]) for r in db.execute('SELECT e.payload FROM edges e JOIN nodes a ON a.id=e.source JOIN nodes b ON b.id=e.target WHERE e.created_version<=?',(version,))]
-        articles={r['id']:json.loads(r['payload']) for r in db.execute('SELECT id,payload FROM articles')}
-        changes=[]
-        for v in db.execute('SELECT * FROM versions WHERE version<=? ORDER BY version DESC LIMIT 10',(version,)):
-            fresh=[n for n in nodes.values() if n.get('version')==v['version']]
-            links=[json.loads(r[0]) for r in db.execute('SELECT e.payload FROM edges e JOIN nodes a ON a.id=e.source JOIN nodes b ON b.id=e.target WHERE e.created_version=?',(v['version'],))]
-            changes.append({**dict(v),'added':len(fresh),'relations':len(links),'updates':sum(e['relation_type']=='UPDATES' for e in links),'titles':[n['title'] for n in fresh if n['kind']!='ArticleRevision'][:8], 'node_ids':[n['id'] for n in fresh], 'edge_ids':[e['stable_id'] for e in links]})
+    nodes={r['id']:json.loads(r['payload']) for r in db.execute('SELECT * FROM nodes WHERE created_version<=?',(version,))}
+    edges=[json.loads(r[0]) for r in db.execute('SELECT e.payload FROM edges e JOIN nodes a ON a.id=e.source JOIN nodes b ON b.id=e.target WHERE e.created_version<=?',(version,))]
+    articles={r['id']:json.loads(r['payload']) for r in db.execute('SELECT id,payload FROM articles')}
+    changes=[]
+    for v in db.execute('SELECT * FROM versions WHERE version<=? ORDER BY version DESC LIMIT 10',(version,)):
+        fresh=[n for n in nodes.values() if n.get('version')==v['version']]
+        links=[json.loads(r[0]) for r in db.execute('SELECT e.payload FROM edges e JOIN nodes a ON a.id=e.source JOIN nodes b ON b.id=e.target WHERE e.created_version=?',(v['version'],))]
+        changes.append({**dict(v),'added':len(fresh),'relations':len(links),'updates':sum(e['relation_type']=='UPDATES' for e in links),'titles':[n['title'] for n in fresh if n['kind']!='ArticleRevision'][:8], 'node_ids':[n['id'] for n in fresh], 'edge_ids':[e['stable_id'] for e in links]})
     def dates(n):
         if n['kind']=='ArticleRevision':return [news_day(n.get('published_at'))]
         return [news_day(articles.get(c['article_revision_id'],{}).get('published_at')) for c in n.get('citations',[])]
@@ -129,12 +128,11 @@ def usage_summary(store,start=None,end=None):
     """Sum complete reported calls touching interval; overlapping calls counted once."""
     total=defaultdict(int);calls=0;legacy=0
     with store.connection() as db:
-        for r in db.execute('SELECT payload,usage FROM jobs'):
-            p=json.loads(r['payload'])
-            if 'receipts' not in p:
+        for r in db.execute("SELECT json_extract(payload,'$.receipts') AS receipts,usage FROM jobs"):
+            if r['receipts'] is None:
                 if any(json.loads(r['usage']).values()):legacy+=1
                 continue
-            for receipt in p['receipts']:
+            for receipt in json.loads(r['receipts']):
                 if (start or end) and not any(a.get('date') and (not start or news_day(a['date'])>=start) and (not end or news_day(a['date'])<=end) for a in receipt['articles']):continue
                 calls+=1
                 for k,v in receipt['usage'].items():

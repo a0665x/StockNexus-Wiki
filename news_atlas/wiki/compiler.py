@@ -12,6 +12,7 @@ from ..chat_proxy import UnixConnection
 from ..search import query_key
 from .workbench import settings, batches, usage_summary, news_day
 
+from .view_sync import GraphViews
 from .evidence import OPTION_KEYS, selected_graph_rows, bounded_groups, cached_market
 
 from .trace import span, timed, emit, job_fields, admitted, job_state, error_fields
@@ -22,6 +23,7 @@ class WikiService:
     def __init__(self,news,runner=None,start_worker=True):
         self.news=news;self.data_root=getattr(news,'data_root',news.path.parent);migrate_legacy(self.data_root);self.root=self.data_root/'llm_wiki'
         emit(self,'state','service',status='started')
+        self.graph_views=GraphViews()
         self.runner=runner or self.bridge
         self._coverage_cache={};self._coverage_lock=threading.RLock()
         self.plans={};self.lock=threading.RLock();self.stop=threading.Event();self.wake=threading.Event()
@@ -117,7 +119,8 @@ class WikiService:
             with store.connection() as db:
                 version=db.execute('SELECT COALESCE(max(version),0) FROM versions').fetchone()[0]
                 total=db.execute('SELECT count(*) FROM nodes').fetchone()[0]
-            stocks.append({'instrument':store.instrument,'version':version,'nodes':total,'enabled':store.config()['enabled']})
+                enabled=db.execute("SELECT json_extract(value,'$.enabled') FROM metadata WHERE key='config'").fetchone()
+            stocks.append({'instrument':store.instrument,'version':version,'nodes':total,'enabled':bool(enabled and enabled[0])})
         return {'instruments':stocks,'news_databases':self.news_catalog(),'bridge_ready':bridge.get('wiki_ready',False),'default_model':bridge.get('wiki_model',''),'storage':'llm_wiki/<ticker>/wiki.sqlite3','prompt_version':PROMPT_VERSION}
 
     @staticmethod
@@ -354,7 +357,7 @@ class WikiService:
             store.ingest(rows);cfg.update(date_range=dates,revision_ids=[a['revision_id'] for a in rows],catch_up=True)
             store.configure(cfg);self._refresh(store)
             from .classifier import enqueue
-            classification=enqueue(store,cfg['model'],cfg.get('reasoning_effort','high'))
+            classification=enqueue(store,cfg['model'],cfg.get('reasoning_effort','high'),date_range=dates)
             self.wake.set()
             return {'instrument':store.instrument,'coverage':self.coverage(store),'config':store.config(),'classification':classification}
 

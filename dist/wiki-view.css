@@ -61,7 +61,7 @@
 /* Independent, persistent split panes. No graph data changes during resizing. */
 @media(min-width:801px){
  .wiki-layout{grid-template-columns:var(--wiki-left,280px) 10px minmax(260px,1fr) 10px var(--wiki-right,280px)}
- .wiki-controls,#wikiSide{min-width:0}.wiki-canvas-area{overflow:auto}
+ .wiki-controls,#wikiSide{min-width:0}.wiki-canvas-area{overflow:auto;scrollbar-gutter:stable}
  .wiki-graph-stage{min-height:140px}.wiki-graph-stage .wiki-canvas{min-height:140px}
  .wiki-lower{display:flex;flex-direction:column;flex:0 0 var(--wiki-bottom,260px);min-height:140px;overflow:hidden}
  .wiki-lower .wiki-timeline{flex:1;min-height:105px;display:flex;flex-direction:column;overflow:auto}

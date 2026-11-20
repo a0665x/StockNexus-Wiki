@@ -222,9 +222,7 @@ def up(args):
             run(COMPOSE+['up','-d','--no-build','--wait','--wait-timeout','90','--remove-orphans','--scale','atlas=1'])
             final=containers()
             if len(final)!=1 or final[0]['state'].get('Health',{}).get('Status')!='healthy':raise RuntimeError('Container count or health violates the single-service requirement.')
-            opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
-            with opener.open(LOCAL+'/api/status',timeout=5) as response:
-                if response.status!=200:raise RuntimeError('Host port 8765 health check failed.')
+            check_host_ready()
         except BaseException:
             print('Startup failed; cleaning project containers, retaining data/.',flush=True)
             run(COMPOSE+['down','--remove-orphans'])
@@ -242,6 +240,12 @@ def up(args):
         print('Running in background. Status: ./run.sh status | Logs: ./run.sh logs | Stop: ./run.sh down',flush=True)
     return 0
 
+
+
+def check_host_ready(base=LOCAL):
+    opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    with opener.open(base+'/api/capabilities',timeout=5) as response:
+        if response.status!=200:raise RuntimeError('Host port 8765 health check failed.')
 
 
 def merge_help(data):

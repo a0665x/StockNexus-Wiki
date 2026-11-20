@@ -308,8 +308,8 @@ class WikiStore:
             total=db.execute("SELECT count(*) FROM nodes WHERE kind='Thesis' AND created_version<=?",(version,)).fetchone()[0]
         return {'categories':counts,'theses':theses,'total_theses':total,'note':'既有模型局部觀點彙整，並非全圖重新推論；分類未以未來股價驗證。'}
 
-    def graph(self,version=None,as_of=None,limit=2400,start=None,end=None):
-        with self.connection() as db:
+    def graph(self,version=None,as_of=None,limit=2400,start=None,end=None,*,connection=None,include_activity=True):
+        with self.connection() if connection is None else contextlib.nullcontext(connection) as db:
             versions=[dict(r) for r in db.execute('SELECT * FROM versions ORDER BY version DESC LIMIT 10')]
             if as_of:
                 stamp=dt.datetime.fromisoformat(as_of.replace('Z','+00:00'))
@@ -321,7 +321,7 @@ class WikiStore:
                 if chosen<0 or (chosen and chosen not in {v['version'] for v in versions}): raise ValueError('只保留最近 10 個可切換版本')
             else: chosen=versions[0]['version'] if versions else 0
             from .workbench import enrich_graph
-            extra=enrich_graph(self,chosen,start,end)
+            extra=enrich_graph(db,chosen,start,end)
             allowed=encode(extra.pop('visible_ids')) if start or end else None
             extra.pop('visible_ids',None)
             nodes=[json.loads(r[0]) for r in db.execute('SELECT payload FROM nodes WHERE created_version<=? AND (? IS NULL OR id IN (SELECT value FROM json_each(?))) ORDER BY created_version DESC,id LIMIT ?',(chosen,allowed,allowed,limit))]
@@ -334,11 +334,14 @@ class WikiStore:
             from .classifier import enrich
             cutoff=dt.datetime.fromisoformat(stamp) if as_of else (dt.datetime.fromisoformat(next(v['created_at'] for v in versions if v['version']==chosen)) if version and chosen else None)
             classification=enrich(db,{'nodes':nodes,'edges':edges},cutoff)
-            classification_jobs=[{**dict(r),'payload':json.loads(r['payload'])} for r in db.execute("SELECT * FROM research_jobs WHERE json_extract(payload,'$.operation')='classify_l1' ORDER BY created_at DESC LIMIT 1")]
+            activity = {}
+            if include_activity:
+                classification_jobs=[{**dict(r),'payload':json.loads(r['payload'])} for r in db.execute("SELECT * FROM research_jobs WHERE json_extract(payload,'$.operation')='classify_l1' ORDER BY created_at DESC LIMIT 1")]
+                activity = {'classification_jobs':classification_jobs,'config':self.config(),'jobs':self.jobs()}
         perspectives=extra.pop('filtered_perspectives')
         visible_ids={n['id'] for n in nodes}|{n['id'] for n in perspectives['theses']}
         extra['histories']={k:v for k,v in extra['histories'].items() if k in visible_ids}
-        return {**extra,'classification_jobs':classification_jobs,'taxonomy':classification['taxonomy'],'opinion_groups':classification['opinion_groups'],'opinion_index':classification['opinion_index'],'instrument':self.instrument,'mode':'live_recorded','version':chosen,'versions':versions,'nodes':nodes,'edges':edges,'total_nodes':total,'captured_articles':count,'truncated':total>len(nodes),'config':self.config(),'jobs':self.jobs(),'perspectives':perspectives}
+        return {**extra,**activity,'taxonomy':classification['taxonomy'],'opinion_groups':classification['opinion_groups'],'opinion_index':classification['opinion_index'],'instrument':self.instrument,'mode':'live_recorded','version':chosen,'versions':versions,'nodes':nodes,'edges':edges,'total_nodes':total,'captured_articles':count,'truncated':total>len(nodes),'perspectives':perspectives}
 
     def markdown(self,version=None):
         graph=self.graph(version=version)

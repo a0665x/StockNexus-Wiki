@@ -1,5 +1,9 @@
 # LLM Wiki 執行與維護
 
+## November 20 cache and classifier update
+
+News prefetches the published graph for the confirmed instrument. Wiki paints the exact cached view before verifying progress and publications. The browser and server share scope-bound change tokens. L1 classification backfill uses four-opinion, 48 KiB evidence packets with one bounded split for a batch-specific failure. See the [state, failure and recovery contracts](references/wiki-cache-classifier-20261120.md).
+
 完整階段追查、保留期限與耗時解讀見 [Wiki observability](WIKI_OBSERVABILITY.md)。
 
 ## 2026-11-20 — Entry alignment and preparation reuse

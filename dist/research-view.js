@@ -114,14 +114,14 @@
  $('researchForm').onsubmit=async e=>{e.preventDefault();if(submitting)return;const token=serial;submitting=true;syncButton();progress('L2 正在確認研究工作狀態…');try{await availabilityOnce();if(token!==serial)return;if(busy){submitting=false;finishProgress();syncButton();status(busyReason());return;}progress('L2 準備研究條件與證據…');const [model,reasoning_effort]=($('wikiModel').value||'gpt-6.1-sol|high').split('|');const j=await api('query',{query:$('researchQuestion').value,lookback_days:Number($('researchWindow').value),model,reasoning_effort});if(token!==serial)return;track(j.job_id,token);}catch(e){if(token===serial){submitting=false;finishProgress();syncButton();status(e.message);}}};
  window.addEventListener('atlas-wiki-stock',()=>{rememberDraft();serial++;layerRequest++;runRequest++;finishProgress();stock='';runId=null;clearTimeout(timer);clearTimeout(availabilityTimer);watching=null;panel.hidden=true;result.hidden=true;result.replaceChildren();$('wikiControls').classList.remove('research-mode');$('wikiLower').classList.remove('research-visible');});
  window.addEventListener('atlas-wiki-research-clear',()=>{layerRequest++;runRequest++;layerMessage('');runId=null;result.hidden=true;$('wikiLower').classList.remove('research-visible');});
- async function loadLayer(){
+ async function loadLayer(event){
   const request=++layerRequest;runRequest++;
   if(submitting&&progressText){layerMessage(progressText,true);return;}
   if($('wikiLayer').value==='L1'){layerMessage('');result.hidden=true;$('wikiLower').classList.remove('research-visible');return;}
   if(runId){layerMessage('');result.hidden=false;$('wikiLower').classList.add('research-visible');return;}
   stock=$('wikiInstrument').value;const token=serial,valid=()=>token===serial&&request===layerRequest&&$('wikiLayer').value!=='L1';
   layerMessage('正在讀取 L2 研究…',true);
-  try{const r=await api('runs');if(!valid())return;if(r.runs.length)await loadRun(r.runs[0].id,false,valid);else layerMessage('尚未建立 L2；請由「研究問題 · L2」輸入問題。');}
+  try{if(event?.detail?.runId){await loadRun(event.detail.runId,false,valid);return;}const r=await api('runs');if(!valid())return;if(r.runs.length)await loadRun(r.runs[0].id,false,valid);else layerMessage('尚未建立 L2；請由「研究問題 · L2」輸入問題。');}
   catch(e){if(valid())layerMessage('無法讀取 L2：'+e.message,false,true);}
  }
  window.addEventListener('atlas-wiki-layer',loadLayer);
