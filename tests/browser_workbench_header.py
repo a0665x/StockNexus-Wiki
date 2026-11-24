@@ -38,6 +38,7 @@ def check_geometry(page, wiki=False):
     header=rect(page,'#workbenchHeader')
     frame=rect(page,'.brand-artwork')
     art=measured_logo(page)
+    assert frame['width']<=366.5,frame
     assert frame['left']-2<=art['left']<=20 and art['right']<=frame['right']+2,(art,frame)
     assert frame['top']-2<=art['top']<art['bottom']<=frame['bottom']+2,(art,frame)
     layout=rect(page,'.layout')
@@ -57,12 +58,12 @@ def run(page):
     viewport(page,1223,914)
     ready(page)
     default,small=check_geometry(page)
-    assert default==68 and small>=default*.75,(default,small)
+    assert default==68 and small>0,(default,small)
     page.js(SETUP)
     page.wait("AtlasWiki.runtime.state().version===124")
     drag(page,point(page,EDGE,.16),0,52)
     enlarged,big=check_geometry(page,wiki=True)
-    assert enlarged==default+52 and big>small+15,(default,small,enlarged,big)
+    assert enlarged==default+52 and abs(big-small)<=1,(default,small,enlarged,big)
     page.check('Wiki drag saves the height locally',f"AtlasUI.read('headerHeight')==={enlarged}&&!wikiPosts.length")
     drag(page,point(page,EDGE,.16),0,300)
     ceiling,largest=check_geometry(page,wiki=True)
@@ -94,7 +95,7 @@ def run(page):
     assert check_geometry(page)[0]==narrow and page.js("AtlasUI.read('headerHeight')") is None
     touch(page,touch_pos,{'x':touch_pos['x'],'y':touch_pos['y']+66})
     taller,tall_art=check_geometry(page)
-    assert taller==narrow+66 and tall_art>narrow_art+10,(taller,tall_art,narrow_art)
+    assert taller==narrow+66 and tall_art>=narrow_art-1,(taller,tall_art,narrow_art)
     page.language('en')
     page.wait("$('headerResize').getAttribute('aria-label')==='Resize header height'")
     click(page,'#openSearch')
@@ -112,7 +113,7 @@ def run(page):
     touch(page,pos,{'x':pos['x'],'y':pos['y']+20},cancel=False)
     larger_phone,larger_art=check_geometry(page)
     assert larger_phone==phone+20 and larger_art>=phone_art
-    assert larger_art>phone_art+4 or rect(page,'.brand-artwork')['width']>=372
+    assert abs(larger_art-phone_art)<=1
     page.language('zh-Hant')
     assert page.js("document.documentElement.scrollWidth<=innerWidth")
     check_geometry(page)

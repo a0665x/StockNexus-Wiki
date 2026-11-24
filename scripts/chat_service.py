@@ -1,9 +1,11 @@
 """Host-side chat process control; authentication never enters the image."""
+import hashlib
 import json
 import os
 from pathlib import Path
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import time
@@ -27,16 +29,27 @@ def manage(action,data=None):
                 if not Path(f'/proc/{pid}').exists():break
                 time.sleep(.05)
         pidfile.unlink(missing_ok=True);return
-    if running:return
+    # Node retains imported modules until the process exits, even after git switch.
+    signature=hashlib.sha256()
+    for module in sorted((ROOT/'chat').glob('*.mjs')):
+        signature.update(module.name.encode()+b'\0'+module.read_bytes())
+    revision=signature.hexdigest()
+    if running and record.get('revision')==revision:return
     node=shutil.which('node')
     if not node or not (ROOT/'node_modules/@openai/codex-sdk').is_dir():raise RuntimeError('Chat needs Node.js 20+. From the repository folder run ./run.sh chat setup, then ./run.sh chat start.')
+    if running:
+        print('Chat: restarting bridge to load updated modules')
+        manage('stop',data)
     env=os.environ.copy();env['ATLAS_CHAT_SOCKET']=str(private/'chat.sock')
     with (private/'chat.log').open('ab') as log:
         child=subprocess.Popen([node,str(ROOT/'chat/service.mjs')],cwd=ROOT,env=env,stdin=subprocess.DEVNULL,stdout=log,stderr=log,start_new_session=True)
-    pidfile.write_text(json.dumps({'pid':child.pid}));pidfile.chmod(0o600)
+    pidfile.write_text(json.dumps({'pid':child.pid,'revision':revision}));pidfile.chmod(0o600)
     for _ in range(50):
         if child.poll() is not None:raise RuntimeError('Chat failed to start; see data/private/chat.log')
-        if (private/'chat.sock').exists():print('Chat: ready');return
+        with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as probe:
+            try:probe.connect(str(private/'chat.sock'))
+            except (FileNotFoundError,ConnectionRefusedError):pass
+            else:print('Chat: ready');return
         time.sleep(.1)
     raise RuntimeError('Chat startup timed out')
 

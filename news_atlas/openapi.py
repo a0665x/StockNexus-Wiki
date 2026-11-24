@@ -111,6 +111,10 @@ def specification():
                           [('collection',string(64)),('source',string(64)),('mode',{'enum':['preview','apply']})]],
               description='Send a UTF-8 JSONL file up to 32 MiB from an allowed same-origin client. Preview validates without writing. Apply imports the complete source batch and returns counts. Records require display titles but publication dates may be absent/null. Explicit content links accept an optional non-empty rationale of at most 2000 characters; importing does not infer relationships or semantic distances.',writes=True)
     upload=paths['/api/documents/import']['post']
+    upload['parameters'].append({'in':'query','name':'instrument','required':False,'schema':string(),'description':'Associate the source with this stock on apply.'})
+    operation('/api/documents/bind','post','bind_document_source','將既有文件來源納入股票 L1','Documents',
+              parameters=[{'in':'query','name':k,'required':True,'schema':string()} for k in ('collection','source','instrument')],
+              description='Idempotently bind an existing source to global incremental L1 maintenance.',writes=True)
     upload['requestBody']={'required':True,'content':{'application/x-ndjson':{'schema':{'type':'string'}}}}
     upload['responses'].update({str(code):{'description':message} for code,message in
                                [(403,'Origin is not allowed'),(413,'Upload exceeds 32 MiB'),(415,'Expected application/x-ndjson'),(503,'Storage unavailable')]})
@@ -139,12 +143,13 @@ def specification():
         if name not in ('session','status','models'):op['security']=[{'ChatSession':[]}]
         if method=='post':op['parameters']=[{'name':'Origin','in':'header','required':True,'schema':{'type':'string','enum':['http://127.0.0.1:8765','http://localhost:8765']}}]
     wiki_description='Separate per-instrument SQLite Wiki. Writes require matching Origin/Host and local peer; remote origin must be explicitly listed in NEWS_ATLAS_WIKI_ORIGINS. Preview is model-free; start consumes a 10-minute plan. Bounded evidence batches, bilingual proposals, retrieved dependent viewpoint reassessment, immutable version history; no forecasts or exhaustive whole-graph reasoning.'
-    for name,method in [('status','get'),('models','get'),('graph','get'),('jobs','get'),('article','get'),('node','get'),('markdown','get'),('plan','post'),('apply','post'),('jobs','post'),('configure','post'),('cancel','post'),('stop','post'),('resume','post')]:
-        operation('/api/wiki/'+name,method,'wiki_'+method+'_'+name,'Wiki '+name,'Wiki',request={'type':'object'} if method=='post' else None,description=wiki_description,writes=method=='post',network=method=='post' and name in ('jobs','resume','apply'),code='202' if method=='post' and name=='jobs' else '200')
+    for name,method in [('status','get'),('models','get'),('graph','get'),('jobs','get'),('article','get'),('node','get'),('markdown','get'),('range-counts','post'),('plan','post'),('apply','post'),('jobs','post'),('configure','post'),('cancel','post'),('stop','post'),('resume','post')]:
+        operation('/api/wiki/'+name,method,'wiki_'+method+'_'+name,'Wiki '+name,'Wiki',request={'type':'object'} if method=='post' else None,description=wiki_description,writes=method=='post' and name!='range-counts',network=method=='post' and name in ('jobs','resume','apply'),code='202' if method=='post' and name=='jobs' else '200')
         op=paths['/api/wiki/'+name][method]
         if method=='get' and name not in ('status','models'):
             op['parameters']=[{'name':'instrument','in':'query','required':True,'schema':string()}]
             if name in ('graph','markdown','node'):op['parameters'].append({'name':'version','in':'query','schema':{'type':'integer','minimum':0}})
+            if name=='markdown':op['parameters'].append({'name':'lang','in':'query','schema':{'enum':['en','zh-Hant']}})
             if name=='graph':
                 op['parameters'].append({'name':'as_of','in':'query','schema':{'type':'string','format':'date-time'}})
                 op['parameters'].extend({'name':key,'in':'query','schema':{'type':'string','format':'date'}} for key in ('start','end'))
@@ -162,7 +167,7 @@ def specification():
     maintenance={'instrument':string(40),'model':string(100),'news_db':{'type':'boolean'},
                  'scope':{'enum':['global','loaded','focus']},'operation':{'enum':['update','review']},
                  'date_range':obj({'start':date,'end':date},['start','end']),
-                 'reasoning_effort':string(),'workers':{'type':'integer','enum':[1,3,5,10],'default':1,'description':'Concurrent tree workers for Graph root incremental update; a concurrency cap, not a guaranteed speed multiplier.'},'continuous':{'type':'boolean'}}
+                 'include_vix':{'type':'boolean','default':False,'description':'Consider dated VIX news from the same stock archive during L1 extraction.'},'reasoning_effort':string(),'workers':{'type':'integer','enum':[1,3,5,10],'default':1,'description':'Concurrent tree workers for Graph root incremental update; a concurrency cap, not a guaranteed speed multiplier.'},'continuous':{'type':'boolean'}}
     for action in ('plan','apply'):
         payload=paths['/api/wiki/'+action]['post']['requestBody']['content']['application/json']
         payload['schema']=obj(maintenance,['instrument','model'])

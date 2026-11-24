@@ -339,7 +339,7 @@
       for(const control of controls)if(control.offsetWidth)room-=control.offsetWidth+gap;
       const aspect=Number(heading.style.getPropertyValue('--brand-aspect'))||3;
       const secondRowWidth=(height-parseFloat(css.getPropertyValue('--controls-row')))*aspect;
-      header.toggleAttribute('data-stacked',root.innerWidth<=520||secondRowWidth>room);
+      header.toggleAttribute('data-stacked',root.innerWidth<=520||Math.min(secondRowWidth,parseFloat(css.getPropertyValue('--brand-max-width')))>room);
     }
     function render(value){
       height=limit(Math.round(value??standard),minimum,maximum);

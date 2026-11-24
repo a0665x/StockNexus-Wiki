@@ -48,10 +48,16 @@ class ViewSyncTests(unittest.TestCase):
         with self.store.connection() as db:
             job=db.execute('SELECT id,payload FROM jobs LIMIT 1').fetchone();payload=json.loads(job['payload'])
             trees=[{'root_id':key,'title':key,'articles':[{'id':key,'provider':'massive'}]} for key in ['selected','unused']]
-            payload.update(workers_state={'1':{'root_id':'selected'}},graph_selection={'trees':trees})
+            payload.update(workers_state={'1':{'root_id':'selected','stage':'compiling','status':'running','bridge_call_id':'lane-call'}},graph_selection={'trees':trees})
+            payload.update(failed_tree_count=1,last_tree_failure={'tree':4,'part':1,'code':'timeout'})
             db.execute("UPDATE jobs SET status='running',payload=? WHERE id=?",(json.dumps(payload),job['id']))
+        self.service.bridge_request=lambda route,body,timeout:{'lane-call':{'sdk_stage':'awaiting_model','last_event_ms':125000}}
         path='jobs?instrument=NASDAQ:TSLA&view=compact';first=self.request(path)[1]
         view=first['jobs'][0]['payload'];self.assertNotIn('receipts',view);self.assertNotIn('revisions',view)
+        self.assertEqual(view['workers_state']['1']['sdk_stage'],'awaiting_model')
+        self.assertEqual(view['workers_state']['1']['sdk_quiet_minutes'],2)
+        self.assertEqual(view['failed_tree_count'],1)
+        self.assertEqual(view['last_tree_failure']['code'],'timeout')
         self.assertEqual(view['graph_selection']['trees'],trees[:1]);self.assertEqual(view['total'],1)
         same=self.request(path+'&config_token='+first['config_token'])[1];self.assertNotIn('config',same)
         self.assertEqual(same['instrument'],self.store.instrument)

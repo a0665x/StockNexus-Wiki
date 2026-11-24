@@ -39,6 +39,7 @@ const timeLensAvailable=typeof globalThis.AtlasTimeLens?.init==='function'&&type
 let timeFocus=AtlasTimeline.timeSettings(AtlasUI.read('timeFocus',{}));
 const focusRoot=()=>lockedRoots[0]??null;
 const timelineStyle='density';
+let timelineRelationAnchor=null;
 const reducedMotion = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 function el(tag, text, cls) { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; }
 function date(value) { if (!value) return '日期未知'; const d = new Date(value); return Number.isNaN(d.getTime()) ? '日期未知' : d.toLocaleString(AtlasI18n.language()==='en'?'en-US':'zh-TW'); }
@@ -162,7 +163,12 @@ function evidenceText(edge) {
 function showArticle(n,pin=true) {
   if(pin&&wikiRootPreview){wikiRootPreview=null;lockedRoots=[];keywordLocked=false;}
   if(pin)globalThis.AtlasRuntime?.record('article',n.id);
-  selected = n.id;if(pin){priceLens?.select(n);if(AtlasTimeline.day(n.published_at)!==null){timeFocus.date=new Date(AtlasTimeline.day(n.published_at)).toISOString().slice(0,10);syncTimeFocus();AtlasUI.write('timeFocus',timeFocus);}acquireRoot(n);touchFocus();if(graph&&viewMode==='network'&&!graph.graphData().nodes.some(a=>a.id===n.id))renderNetwork();}
+  selected = n.id;
+  if(pin&&viewMode==='timeline'&&basePayload.relation_scope==='view'){
+    timelineRelationAnchor=n.id;
+    scheduleViewRelations();
+  }
+  if(pin){priceLens?.select(n);if(AtlasTimeline.day(n.published_at)!==null){timeFocus.date=new Date(AtlasTimeline.day(n.published_at)).toISOString().slice(0,10);syncTimeFocus();AtlasUI.write('timeFocus',timeFocus);}acquireRoot(n);touchFocus();if(graph&&viewMode==='network'&&!graph.graphData().nodes.some(a=>a.id===n.id))renderNetwork();}
   const root = $('article'); root.replaceChildren(); const card = el('div', null, 'card selected-news');card.append(el('div',AtlasI18n.t('目前選取新聞'),'selected-news-label'));
   card.append(el('div', `${n.source.publisher || n.source.provider} · ${date(n.published_at)}`, 'meta raw'), el('h3', n.title,'raw'), el('p', n.summary || '來源未提供摘要。', n.summary?'muted raw':'muted'));
   for (const entity of n.entities || []) card.append(el('span', `${entity.id} · ${entity.method === 'provider_ticker' ? '來源標註' : '文字辨識'}`, 'tag'));
@@ -190,7 +196,7 @@ function rebuild(payload,relationUpdate=false) {
   rootSearchTicket++;
   interaction?.clear();
   const previousCount = articles.length;
-  if (payload) {if(!relationUpdate)wikiRootPreview=null;globalThis.scheduleNewsWorkspace?.();basePayload = payload;classificationEpoch++;if(!relationUpdate){viewRevision++;viewRequestedSettings=null;completedRelationViews.clear();if(!restoringRelations){restoredRelationSeed=null;restoredRelationViews=[];}}}
+  if (payload) {if(!relationUpdate){wikiRootPreview=null;timelineRelationAnchor=null;}globalThis.scheduleNewsWorkspace?.();basePayload = payload;classificationEpoch++;if(!relationUpdate){viewRevision++;viewRequestedSettings=null;completedRelationViews.clear();if(!restoringRelations){restoredRelationSeed=null;restoredRelationViews=[];}}}
   if(basePayload.channel_definitions)channelDefinitions=basePayload.channel_definitions;
   renderChannelFilter();
   currentView = AtlasView.select(basePayload, viewSources(), isSeparate());
@@ -324,7 +330,7 @@ function applyMode(){
   const timeline=viewMode==='timeline';$('timeBellEditor').open=!timeline&&AtlasUI.read('timeCurveOpen',true);layoutTimeBar();$('graph').hidden=timeline;$('glowCanvas').hidden=timeline;glowLayer?.refresh();$('timeline').hidden=!timeline;$('timelineControls').hidden=!timeline;
   $('modeNetwork').classList.toggle('active',!timeline);$('modeTimeline').classList.toggle('active',timeline);
   $('modeNetwork').setAttribute('aria-pressed',String(!timeline));$('modeTimeline').setAttribute('aria-pressed',String(timeline));
-  $('stageHint').textContent=timeline?'橫向捲動／縮放 · 發布日期（UTC）× 主要分類 · 連線非因果':'拖曳節點牽動關聯 · 空白旋轉 · Ctrl＋左鍵拖拉平移 · 金色線跨來源';
+  $('stageHint').textContent=timeline?(AtlasI18n.language()==='en'?'Select a date cell to inspect its news. Hover to see links between cells.':'點日期格檢視該日新聞，移入格子查看跨格關聯線'):'拖曳節點牽動關聯 · 空白旋轉 · Ctrl＋左鍵拖拉平移 · 金色線跨來源';
   if(graph){if(timeline)graph.pauseAnimation();else graph.resumeAnimation();}
   syncHighlightUI();updateGraphMessage();
 }
@@ -596,6 +602,10 @@ function renderNodeJson(n){
   AtlasUI.jsonTree($('nodeJson'),{schema_version:'2.0',article,relations:related,visible_exploration:{root:n.id,settings:exploration,paths}});
 }
 function showBucket(bucket){
+  if(basePayload.relation_scope==='view'&&bucket.articles.length){
+    timelineRelationAnchor=bucket.articles[0].id;
+    scheduleViewRelations();
+  }
   selected=null;$('nodeJson').replaceChildren();const panel=$('article');panel.replaceChildren(el('h3',bucket.date+' UTC'),el('p',`${bucket.articles.length} 篇新聞 · 點選一篇查看內容`,'bucket-note'));
   const list=el('div',null,'bucket-list');AtlasUI.pagedRows(list,bucket.articles,a=>{const button=el('button');button.append(el('div',(a.display_sources||[a.source.provider]).map(p=>sourceNames[p]).join(' / ')+' · '+date(a.published_at),'meta'),el('div',a.title,'raw'));if(lockedRoots.length){const hit=activeTrace.nodes.get(a.id);button.append(el('div',hit?(hit.depth===0?'★ root':AtlasI18n.t('關聯深度')+' '+hit.depth):AtlasI18n.t('未在選定樹內'),'meta'));}button.onclick=()=>showArticle(a);return button;});panel.append(list);$('detail').classList.add('open');
 }
@@ -783,7 +793,9 @@ function viewPriority(){
 function scheduleViewRelations(){
   if(!viewRelationJob||restoringRelations)return;
   if(basePayload.relation_scope!=='view'||!currentView.articles.length){viewRelationJob.schedule(null);return;}
-  const slice=AtlasView.renderSlice(currentView,readingRenderBudget(),viewPriority());
+  const priority=viewMode==='timeline'&&timelineRelationAnchor
+    ?AtlasTimeline.relationPriority(currentView.articles,timelineRelationAnchor,viewPriority()):viewPriority();
+  const slice=AtlasView.renderSlice(currentView,readingRenderBudget(),priority);
   const byProvider=new Map();
   for(const row of slice.articles)for(const p of row.display_sources||[row.source.provider]){
     if(!byProvider.has(p))byProvider.set(p,new Set());byProvider.get(p).add(row.article_id||row.id);

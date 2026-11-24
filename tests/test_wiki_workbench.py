@@ -55,7 +55,14 @@ class WorkbenchTests(unittest.TestCase):
         self.assertEqual(g['timeline'][0]['date'],'2026-01-01')
         filtered=self.store.graph(version=3,start='2026-01-01',end='2026-01-01',limit=1)
         self.assertEqual(filtered['total_nodes'],2);self.assertEqual(len(filtered['nodes']),1)
-        self.assertIn('English' if False else 'Earnings perspective',self.store.markdown())
+        en=self.store.markdown(lang='en')
+        self.assertIn('Earnings perspective',en)
+        self.assertNotIn('盈餘觀點',en)
+        self.assertNotIn('來源版本',en)
+        zh=self.store.markdown(lang='zh-Hant')
+        self.assertIn('盈餘觀點',zh)
+        self.assertNotIn('Earnings perspective',zh)
+        self.assertNotIn('Viewpoint history',zh)
         self.assertIn('summary',self.calls[-1][1][0])
     def test_usage_interval_counts_cross_date_batch_once(self):
         self.service.runner=self.fixture

@@ -38,6 +38,24 @@ class ForestTests(unittest.TestCase):
         p=self.service.plan(body);self.assertEqual(p['selected'],810)
         trees=p['graph_selection']['trees'];self.assertEqual(len(trees),810)
         self.assertEqual(len({a['id'] for tree in trees for a in tree['articles']}),810)
+    def test_preview_counts_pending_trees_from_in_range_targets(self):
+        rows=[row(title=title,suffix=str(i),day='2026-11-02') for i,title in enumerate([
+            'Tesla factory earnings today','Tesla factory earnings growth','Isolated court ruling'])]
+        rows[2]['published_at']='2026-11-03T01:30:00+08:00'
+        body=self.body(rows,{'start':'2026-11-02','end':'2026-11-02'})
+        initial=self.service.plan({'instrument':'NASDAQ:TSLA','model':'fixture','articles':[rows[0],rows[2]]})
+        self.service.start({'plan_id':initial['plan_id']});self.service.tick()
+        calls=len(self.calls)
+        preview=self.service.range_counts(body)
+        self.assertEqual(preview,{'selected':3,'pending':1,'reused':2,'trees':{'total':2,'done':1,'pending':1}})
+        self.assertFalse(self.service.plans)
+        from unittest.mock import patch
+        with patch('news_atlas.wiki.forest.build_cached',side_effect=AssertionError('unexpected forest rebuild')):
+            actual=self.service.plan(body)
+        self.assertEqual(preview,{key:actual[key] for key in preview})
+        self.assertEqual(len(self.calls),calls)
+        empty=self.service.range_counts({**body,'date_range':{'start':'2026-11-03','end':'2026-11-03'}})
+        self.assertEqual(empty,{'selected':0,'pending':0,'reused':0,'trees':{'total':0,'done':0,'pending':0}})
     def test_saved_forest_reuse_requires_exact_evidence_dates_and_rules(self):
         from unittest.mock import patch
         from news_atlas.wiki.forest import prepare
@@ -97,8 +115,12 @@ class ForestTests(unittest.TestCase):
         self.service.runner=fail_second
         self.service.start({'plan_id':p['plan_id']});self.service.tick()
         self.assertEqual(self.store.jobs()[0]['status'],'failed')
-        self.assertEqual(self.service.coverage(self.store)['scope_done'],0)
-        self.assertEqual(self.store.graph()['version'],1)
+        failed_tree=p['graph_selection']['trees'][0]
+        targets={(r['provider'],r['id']) for r in failed_tree['targets']}
+        pending=self.store.pending()
+        self.assertEqual({(r['provider'],r['id']) for r in pending},targets)
+        self.assertEqual(self.service.coverage(self.store)['scope_done'],len(rows)-len(targets))
+        self.assertEqual(self.store.graph()['version'],len(self.calls)-1)
         self.assertEqual(self.calls[0]['_covered_articles'],[])
         self.assertGreater(self.calls[0]['_group']['parts'],1)
         published_first=self.calls[0]['_checkpoint']
@@ -110,7 +132,8 @@ class ForestTests(unittest.TestCase):
         self.assertEqual(self.store.jobs()[0]['status'],'completed')
         self.assertEqual(self.service.coverage(self.store)['scope_done'],15)
         self.assertTrue(all(call['_checkpoint']!=published_first for call in self.calls),'Published segments must not be replayed on explicit resume')
-        self.assertEqual(sum(len(a['_covered_articles']) for a in self.calls),15)
+        self.assertTrue(all(a['_group']['root_id']==failed_tree['root_id'] for a in self.calls))
+        self.assertEqual(sum(len(a['_covered_articles']) for a in self.calls),len(targets))
         # Bookkeeping can contain the whole tree, but must not inflate LLM input.
         bodies=[]
         self.service.bridge_request=lambda path,body,**kw:bodies.append(body)

@@ -20,16 +20,16 @@ Replace the active file `dist/stocknexus-wiki.png` and run `./run.sh up` from th
 
 ## Resizing the shared header
 
-The left-aligned wordmark scales with the header. Drag anywhere along its bottom edge. Double-click the edge to restore the responsive default. The separator also accepts the up/down arrow keys in 8-pixel steps and Home to reset. The browser saves a completed resize under `graphnews.headerHeight`. Cancelling a touch restores the prior height. Shrinking the viewport temporarily limits the rendered height and preserves the saved preference.
+The left-aligned wordmark scales to a maximum width of 366 CSS pixels. The return link to News has a 44-pixel minimum target height. Drag anywhere along its bottom edge. Double-click the edge to restore the responsive default. The separator also accepts the up/down arrow keys in 8-pixel steps and Home to reset. The browser saves a completed resize under `graphnews.headerHeight`. Cancelling a touch restores the prior height. Shrinking the viewport temporarily limits the rendered height and preserves the saved preference.
 
 `frameBrand` samples the PNG's alpha channel on image load. It frames the visible artwork and leaves a small margin for antialiased edges. Opaque replacements use their full bounds. The logo keeps its proportions up to the available width. At phone widths, or when a second row gives the wordmark more room, the controls sit below it. News sources use a stacked database icon. The time and size focus tool uses a magnifier around a curve. The same glyph appears beside each expanded title and at the center of its minimized square.
 
 | Given | When | Then |
 | --- | --- | --- |
-| A fresh profile and the active wordmark at 1223 × 914 | Drag the global edge down 52 px while reading L1, then to its limit | Header height changes from 68 to 120 CSS px. Visible artwork grows from 53.2 to 73.9 px. At the 180 px limit it can occupy the full first row. Wiki and News remain aligned to the bottom edge. |
+| A fresh profile and the active wordmark at 1223 × 914 | Drag the global edge down 52 px while reading L1, then to its limit | Header height changes from 68 to 120 CSS px. The wordmark stays within the 366 px cap. Wiki and News remain aligned to the bottom edge. |
 | A saved header height | Reload, briefly shorten the viewport, use the arrow keys, then press Home | Reload restores the height. The saved value survives the temporary viewport clamp. Home clears the preference and restores the responsive default. |
-| A 690 × 914 touch viewport | Cancel a drag, then complete a 66 px drag and open the News search drawer | Cancellation restores 60 px. The completed drag gives a 126 px header. Visible artwork grows from 34.5 to 62.0 px. The drawer starts below it. Double-click restores the default. |
-| A 390 × 844 phone | Enlarge the header, switch languages and substitute an opaque 2:1 PNG in the fixture | The wide wordmark already spans the available 374 px. Its measured ink height stays at 34.8 px as the header goes from 94 to 114 px. Chinese and English controls stay reachable, including at 320 px. The replacement retains its whole image and aspect ratio. |
+| A 690 × 914 touch viewport | Cancel a drag, then complete a 66 px drag and open the News search drawer | Cancellation restores 60 px. The completed drag gives a 126 px header. The artwork stays within the same width cap. The drawer starts below it. Double-click restores the default. |
+| A 390 × 844 phone | Enlarge the header, switch languages and substitute an opaque 2:1 PNG in the fixture | The wide wordmark is capped at 366 px. Its visible height stays stable as the header goes from 94 to 114 px. Chinese and English controls stay reachable, including at 320 px. The replacement retains its whole image and aspect ratio. |
 | An expanded or minimized News tool | Open, minimize, move, reload and reopen it at desktop and compact widths | The database and magnifier stay paired with their tools. The center of each drawn path is within one CSS pixel of its icon slot or square button center. The Wiki timeline retains its centered bar-chart icon. |
 
 The measured heights come from visible pixels in a separately sampled copy of the served image. Use the dedicated header and timeline journeys from the repository root. [Header gestures and replacement](../../tests/browser_workbench_header.py) · [Launcher geometry and chart navigation](../../tests/browser_wiki_timeline.py) · [Release test commands](../TESTING.md#workbench-release-verification)
@@ -76,6 +76,10 @@ The normal launcher rebuilt the web service after a read-only check of 18 idle W
 HTTPS returned the same bytes as the checkout for the ten changed frontend assets. The served ribbon, the tracked PNG and the user attachment all had SHA-256 `fef1aae9420f97d32a3e1bbcde0ec0266d76117a0b174c0058d91e97e9c428e2`.
 
 A fresh Chromium profile opened the production News workbench and the published TSLA Wiki v124. Both News tools crossed into the sidebar and reopened at their previous geometry. At 690 × 914 the header PNG used 164 CSS pixels of width. The Wiki launcher measured 44 × 44 and reopened on tap after a touch drag. The smoke isolated workspace saves, price requests and graph preview calls. It observed zero browser errors and zero model submissions.
+
+## Maintenance range preview
+
+Below the date controls, every preset shows local news coverage. In Graph root update mode a second bar counts the trees that still own unprocessed interval targets. Both bars count evidence for the selected maintenance scope. The citation timeline counts published viewpoints. [Maintenance selection and verification](../WIKI_RUNTIME.md#november-23-maintenance-controls)
 
 ## Earlier production verification of chart navigation
 

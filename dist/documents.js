@@ -6,6 +6,15 @@
   const launcher = byId('documentLauncher');
   const choices = byId('documentChoices');
   const params = new URLSearchParams(location.search);
+  const stockField = byId('documentInstrument');
+  if (stockField) stockField.value=params.get('instrument') || '';
+  const stock=()=>stockField?.value.trim().toUpperCase() || '';
+  const importLink=document.querySelector('a[href="/documents#importDocuments"]');
+  function updateImportLink(){
+    const instrument=window.AtlasWikiContext?.confirmedSearch?.().instrument;
+    if(importLink) importLink.href='/documents'+(instrument?'?'+new URLSearchParams({instrument}):'')+'#importDocuments';
+  }
+  for(const event of ['focus','pointerdown','click','contextmenu'])importLink?.addEventListener(event,updateImportLink);
   const nodeKey = (source,id) => source + '/' + id;
   const key = node => nodeKey(node.source,node.id);
   const make = (tag,text) => {
@@ -21,6 +30,9 @@
   }
   let collections = [], nodes = [], graph, selected, reading = 0, loadTicket = 0;
   let catalogTicket = 0, catalogSignature;
+  function notifyWiki(){
+    try{localStorage.setItem('stocknexus.documentImport',String(Date.now()));}catch{/* Storage may be disabled. */}
+  }
   function fail(error) {
     (byId('counts') || choices).textContent = error.message;
   }
@@ -34,24 +46,46 @@
         if (launcher) {
           if (box.checked) {
             box.checked = false;
-            location.assign('/documents?' + new URLSearchParams({collection:picker.value,source}));
+            const instrument=window.AtlasWikiContext?.confirmedSearch?.().instrument;
+            location.assign('/documents?' + new URLSearchParams({collection:picker.value,source,...(instrument?{instrument}:{})}));
           }
         } else render();
       };
       label.append(box,document.createTextNode(' '+source+' ('+count+')'));
       choices.append(label);
+      if (!launcher) {
+        const bindings=collection.bindings?.[source] || [];
+        if(bindings.length)choices.append(make('small','股票 L1 · '+bindings.join('、')));
+        const bind=make('button','將 '+source+' 納入指定股票 L1');
+        bind.type='button';
+        bind.onclick=async()=>{
+          const instrument=stock(), status=byId('importStatus');
+          if(!instrument){status.textContent='請先填寫股票代號，例如 NASDAQ:NVDA。';stockField.focus();return;}
+          bind.disabled=true;
+          try{
+            const response=await fetch('/api/documents/bind?'+new URLSearchParams({collection:picker.value,source,instrument}),{method:'POST'});
+            const result=await response.json();
+            if(!response.ok)throw Error(result.error || String(response.status));
+            notifyWiki();
+            status.textContent=source+' 已納入 '+instrument+' 的全局增量更新。';
+            await refresh(true);
+          }catch(error){status.textContent=error.message;}
+          finally{bind.disabled=false;}
+        };
+        choices.append(bind);
+      }
     }
   }
   function clearDetails() {
     selected = null; ++reading;
     byId('details').replaceChildren(make('h2','節點詳情'),make('p','點選目錄或圖上的節點。'));
   }
-  function show(node) {
+  function show(node, highlight, historical=false) {
     selected = key(node);
     const ticket = ++reading, panel = byId('details');
     let current = node;
     const index = new Map(nodes.map(n => [key(n),n]));
-    while (!current.path && current.parent_id && index.has(nodeKey(current.source,current.parent_id))) {
+    while (!historical && !current.path && current.parent_id && index.has(nodeKey(current.source,current.parent_id))) {
       current = index.get(nodeKey(current.source,current.parent_id));
     }
     panel.replaceChildren(make('h2',node.title), make('p',[node.source,node.kind,node.layer,'v'+node.revision].filter(Boolean).join(' · ')));
@@ -59,7 +93,16 @@
       node.locator?.line && 'L'+node.locator.line].filter(Boolean).join(' · ')),
       make('p',node.published_at || '日期未知'));
     if (node.question) panel.append(make('p',node.question));
-    if (node.text) panel.append(make('pre',node.text));
+    if (node.text) {
+      const body=make('pre',node.text);
+      if(highlight){
+        const chars=Array.from(node.text), {start,end}=highlight;
+        if(Number.isInteger(start)&&Number.isInteger(end)&&start>=0&&start<end&&end<=chars.length){
+          body.replaceChildren(chars.slice(0,start).join(''),make('mark',chars.slice(start,end).join('')),chars.slice(end).join(''));
+        }
+      }
+      panel.append(body);
+    }
     for (const link of node.links || []) {
       const source = link.source || node.source;
       const target = index.get(nodeKey(source,link.id));
@@ -68,7 +111,7 @@
         if (!link.revision) { if (target) show(target); return; }
         try {
           const result = await read({collection:picker.value,source,id:link.id,revision:link.revision});
-          if (ticket===reading) show({...result.record,source,revision:result.revision});
+          if (ticket===reading) show({...result.record,source,revision:result.revision},null,true);
         } catch(error) { if(ticket===reading) fail(error); }
       };
       panel.append(button);
@@ -110,6 +153,7 @@
     byId('counts').textContent=visible.length+' 節點 · '+edges.length+' 關係'+(graph?'':' · 3D 無法使用，可從目錄瀏覽');
     if (graph) graph.graphData({nodes:visible.map(n=>({id:key(n),record:n})),links:edges});
   }
+  let initialCitation=params.has('id')&&params.has('revision');
   async function load(requested) {
     const ticket=++loadTicket;
     const sources=Object.keys(collections.find(c=>c.id===picker.value)?.sources || {});
@@ -120,6 +164,15 @@
     const result = await read({collection:picker.value});
     if(ticket!==loadTicket) return;
     nodes=result.nodes; render();
+    if(initialCitation && params.get('collection')===picker.value){
+      initialCitation=false;
+      const source=params.get('source'), revision=params.get('revision'), selectionTicket=reading;
+      const saved=await read({collection:picker.value,source,id:params.get('id'),revision});
+      if(ticket===loadTicket&&selectionTicket===reading){
+        show({...saved.record,source,revision:saved.revision},{start:Number(params.get('start')),end:Number(params.get('end'))},true);
+        byId('details').querySelector('mark')?.scrollIntoView?.({block:'nearest'});
+      }
+    }
   }
   async function refresh(force=false, imported=null) {
     const ticket=++catalogTicket;
@@ -153,7 +206,7 @@
       buttons.forEach(button => { button.disabled = true; });
       status.textContent = mode === 'preview' ? '預覽中…' : '匯入中…';
       try {
-        const query = new URLSearchParams({collection, source, mode});
+        const query = new URLSearchParams({collection, source, mode,...(stock()?{instrument:stock()}:{})});
         const response = await fetch('/api/documents/import?' + query, {
           method:'POST', headers:{'Content-Type':'application/x-ndjson'}, body:file
         });
@@ -161,11 +214,12 @@
         if (!response.ok) throw Error(result.error || String(response.status));
         const action = result.dry_run ? '預覽（未寫入）' : '已匯入';
         status.textContent = action + ' · 新增 ' + result.added + ' · 更新 ' + result.updated +
-          ' · 未變更 ' + result.unchanged + ' · 重複列 ' + result.duplicate_lines;
+          ' · 未變更 ' + result.unchanged + ' · 重複列 ' + result.duplicate_lines + (result.instrument?' · 股票 L1 '+result.instrument:'');
         if (!result.dry_run) {
+          notifyWiki();
           try {
             await refresh(true, {collection, source});
-            history.replaceState(null, '', '/documents?' + new URLSearchParams({collection,source}));
+            history.replaceState(null, '', '/documents?' + new URLSearchParams({collection,source,...(stock()?{instrument:stock()}:{})}));
           } catch (error) {
             status.textContent += '。讀取圖譜失敗，請重新讀取 DB。' + error.message;
           }

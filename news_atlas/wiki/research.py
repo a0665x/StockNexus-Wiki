@@ -182,10 +182,17 @@ def bundle(db,lens):
     cutoff=instant(lens['time_spec']['as_of']);start=instant(lens['time_spec']['start']);tax=taxonomy(db,cutoff)
     articles={r['id']:{**json.loads(r['payload']),'available_at':r['captured_at']} for r in db.execute('SELECT * FROM articles') if instant(r['captured_at'])<=cutoff}
     latest={}
+    document_versions={}
     for a in articles.values():
+        if a.get('document'):
+            key=a['id']
+            document_versions[key]=max(document_versions.get(key,0),a['document']['revision'])
+            continue
         key=(a['provider'],a['id'])
         if key not in latest or a['available_at']>latest[key]['available_at']:latest[key]=a
     current={a['revision_id'] for a in latest.values()}
+    current.update(a['revision_id'] for a in articles.values()
+                   if a.get('document') and a['document']['revision']==document_versions[a['id']])
     statuses={}
     for r in db.execute("SELECT payload FROM research_objects WHERE kind='source_status' AND owner='' ORDER BY created_at,id"):
         e=json.loads(r[0])
@@ -197,6 +204,8 @@ def bundle(db,lens):
         if instant(available)<=cutoff:nodes[n['id']]={**n,'available_at':available}
     edges=[json.loads(r['payload']) for r in db.execute('SELECT payload FROM edges')]
     edges=[e for e in edges if e.get('available_at') and instant(e['available_at'])<=cutoff]
+    from .opinions import additional_sources
+    supplements=additional_sources(nodes,edges)
     updates={e['source']['stable_id']:e['target']['stable_id'] for e in edges if e['relation_type']=='UPDATES'}
     superseded=set(updates.values())
     def logical(key):
@@ -216,6 +225,9 @@ def bundle(db,lens):
         cites=n.get('citations',[])
         if not cites or any(c.get('article_revision_id') not in articles for c in cites):excluded['unresolved_source']+=1;continue
         if any(c['article_revision_id'] not in current for c in cites):excluded['outdated_source']+=1;continue
+        cites=[*cites,*[c for c in supplements.get(n['id'],[]) if c['article_revision_id'] in current
+                      and articles[c['article_revision_id']].get('published_at')
+                      and instant(articles[c['article_revision_id']]['published_at'])<cutoff]]
         sources=[articles[c['article_revision_id']] for c in cites]
         if not any(a.get('published_at') and start<=instant(a['published_at'])<cutoff for a in sources):excluded['outside_window']+=1;continue
         text=n.get('title','')+' '+n.get('summary','')
@@ -230,7 +242,7 @@ def bundle(db,lens):
         for c in cites:
             a=articles[c['article_revision_id']]
             if a.get(c['field'],'')[c['start']:c['end']]!=c['quote']:raise ValueError('L1 引用內容與來源不符')
-            evid.append({**c,'revision_id':a['revision_id'],'url':a['url'],'provider':a['provider'],'published_at':a['published_at'],'available_at':a['available_at'],'content_completeness':'summary_only','syndication_group':digest(re.sub(r'\W','',a['title'].casefold()))})
+            evid.append({**c,'revision_id':a['revision_id'],'url':a['url'],'provider':a['provider'],'published_at':a['published_at'],'available_at':a['available_at'],'content_completeness':'document_passage' if a.get('document') else 'summary_only','syndication_group':digest(re.sub(r'\W','',a['title'].casefold()))})
         candidates.append({'opinion_id':logical(n['id']),'revision_id':n['id'],'kind':n['kind'],'claim_id':n['id']+':claim','claim_type':n.get('opinion_metadata',{}).get('claim_type','inference' if n['kind']=='Thesis' else 'reported_claim'),'statement':n['summary'],'title':n['title'],'scope':n['scope'],'available_at':n['available_at'],'conditions':n.get('opinion_metadata',{}).get('conditions',[]),'horizon':n.get('opinion_metadata',{}).get('horizon'),'change_reason':n.get('opinion_metadata',{}).get('change_reason','legacy wrapper'),'legacy':'opinion_metadata' not in n,'evidence':evid,'labels':labels,'score':score,'selection_reason':'分類／全文相關' if score else '同股票時間窗內背景觀點'})
     # Keep contrary connected opinions only when they passed the same filters and time checks.
     candidates.sort(key=lambda n:(-n['score'],n['revision_id']))

@@ -26,7 +26,7 @@ def summarize(folder,job=None,instrument=None):
             open_spans.pop(key,None)
             if isinstance(r.get('elapsed_ms'),(int,float)):
                 groups[(r.get('process'),r.get('operation',''),r.get('stage'))].append(r['elapsed_ms'])
-        if r.get('event')=='error':errors.append({k:r[k] for k in ('ts','job_id','call_id','stage','error_code','error_type','frames') if k in r})
+        if r.get('event')=='error':errors.append({k:r[k] for k in ('ts','job_id','call_id','stage','error_code','error_type','sdk_stage','last_event_ms','deadline','frames') if k in r})
         if r.get('stage')=='job' and r.get('status'):states[r.get('job_id')]=r['status']
     stages=[{'process':p,'operation':op,'stage':s,'count':len(v),'sum_ms':round(sum(v),3),'p50_ms':round(statistics.median(v),3),'max_ms':max(v)} for (p,op,s),v in groups.items()]
     return {'events':len(rows),'malformed_lines':bad,'jobs':states,'stages':sorted(stages,key=lambda x:-x['sum_ms']),

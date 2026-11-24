@@ -58,6 +58,9 @@ test('twenty-article groups expand schema and separate topic evidence from price
   assert.equal(options.outputSchema.properties.nodes.maxItems,60);
   assert.equal(options.outputSchema.properties.relations.maxItems,120);
   assert.ok(options.outputSchema.properties.nodes.items.properties.assessment.required.includes('evidence'));
+  assert.ok(options.outputSchema.properties.nodes.items.required.includes('lineage'));
+  assert.ok(options.outputSchema.properties.relations.items.properties.type.enum.includes('EXTENDS'));
+  assert.match(prompt,/Only start a new_topic after considering reuse, corroboration, revision and extension/);
   assert.match(prompt,/Never infer credibility, price dependence or forecast accuracy/);
   return {finalResponse:'{"nodes":[],"relations":[]}',items:[]};
  }}));
@@ -128,4 +131,61 @@ test('backfill prompt resolves shared evidence and identifies invalid batch outp
   return {items:[],finalResponse:'[truncated'};
  }}));
  await assert.rejects(compiler.run({...input,operation:'classify_l1',article:{opinions:[{id:'a'}],nodes:{a:{}}}}),/Invalid Wiki classification response/);
+});
+
+test('root progress identifies SDK silence, keeps diagnostics private and releases the slot',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ const trace=[];let entered;
+ const ready=new Promise(resolve=>{entered=resolve;});
+ const compiler=createWikiCompiler(()=>({runStreamed:async(prompt,{signal})=>({events:(async function*(){
+  yield {type:'thread.started',thread_id:'private thread'};
+  yield {type:'turn.started'};
+  entered();
+  await new Promise((_,reject)=>signal.addEventListener('abort',()=>reject(Error('abort')),{once:true}));
+ })()})}),{trace:row=>trace.push(row)});
+ const parent='b'.repeat(32);
+ const pending=compiler.run({...input,parent_job_id:parent,operation:'update',article:{_group:{root_id:'root'}}});
+ await ready;
+ assert.equal(compiler.progress(parent)[input.job_id].sdk_stage,'awaiting_model');
+ const rejected=assert.rejects(pending,e=>e.wiki_code==='timeout'&&e.wiki_stage==='awaiting_model');
+ t.mock.timers.tick(600000);await rejected;
+ assert.deepEqual(compiler.progress(parent),{});
+ assert.equal(trace.find(e=>e.event==='error').deadline,'inactivity');
+ assert.doesNotMatch(JSON.stringify(trace),/private thread/);
+});
+
+test('root SDK activity extends the quiet deadline and preserves response and usage',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ const trace=[];
+ const compiler=createWikiCompiler(()=>({runStreamed:async(_,options)=>({events:(async function*(){
+  yield {type:'turn.started'};
+  t.mock.timers.tick(500000);
+  yield {type:'item.completed',item:{type:'reasoning',text:'sensitive rationale'}};
+  t.mock.timers.tick(300000);
+  assert.equal(options.signal.aborted,false);
+  yield {type:'item.completed',item:{type:'agent_message',text:'{"nodes":[],"relations":[]}'}};
+  yield {type:'turn.completed',usage:{output_tokens:19}};
+ })()})}),{trace:row=>trace.push(row)});
+ const result=await compiler.run({...input,operation:'update',article:{_group:{root_id:'root'}}});
+ assert.deepEqual(result,{proposal:{nodes:[],relations:[]},usage:{output_tokens:19}});
+ assert.doesNotMatch(JSON.stringify(trace),/sensitive rationale/);
+});
+
+test('root hard deadline and terminal stream errors are distinct from silence',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ let mode='timeout';
+ const compiler=createWikiCompiler(()=>({runStreamed:async(_,options)=>({events:(async function*(){
+  yield {type:'turn.started'};
+  if(mode==='rate'){yield {type:'turn.failed',error:{message:'429 rate limit'}};return;}
+  if(mode==='early')return;
+  for(let i=0;i<3;i++){
+   t.mock.timers.tick(450000);
+   if(options.signal.aborted)throw Error('abort');
+   yield {type:'item.updated',item:{type:'reasoning'}};
+  }
+ })()})}));
+ const job={...input,operation:'update',article:{_group:{root_id:'root'}}};
+ await assert.rejects(compiler.run(job),/hard limit/);
+ mode='rate';await assert.rejects(compiler.run(job),e=>e.wiki_code==='rate_limit');
+ mode='early';await assert.rejects(compiler.run(job),/stream ended before turn completion/);
 });

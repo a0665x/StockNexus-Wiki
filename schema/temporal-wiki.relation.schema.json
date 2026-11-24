@@ -65,6 +65,7 @@
         "SUPPORTS",
         "CONTRADICTS",
         "UPDATES",
+        "EXTENDS",
         "SUPERSEDES",
         "DEPENDS_ON",
         "TEMPORALLY_PRECEDES",
@@ -479,6 +480,22 @@
           "evidence_refs": {
             "minItems": 1
           }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "relation_type": {
+            "const": "EXTENDS"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "source": { "properties": { "kind": { "const": "Thesis" } } },
+          "target": { "properties": { "kind": { "const": "Thesis" } } },
+          "evidence_refs": { "minItems": 1 }
         }
       }
     },
