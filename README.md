@@ -1,6 +1,6 @@
 <p align="right"><strong>English</strong> · <a href="README.zh-TW.md" lang="zh-Hant">繁體中文</a></p>
 
-# StockNexus Wiki
+# <img src="dist/stocknexus-wiki.png" alt="StockNexus Wiki" width="420">
 
 A single earnings report can generate dozens of headlines. Some repeat the same announcement. Others draw conflicting conclusions from the same numbers. StockNexus Wiki helps you clean up a noisy stock news feed, see what each source adds, and trace a research conclusion back to the articles behind it.
 

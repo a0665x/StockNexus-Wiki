@@ -1,6 +1,6 @@
 <p align="right"><a href="README.md" lang="en">English</a> · <strong>繁體中文</strong></p>
 
-# StockNexus Wiki
+# <img src="dist/stocknexus-wiki.png" alt="StockNexus Wiki" width="420">
 
 一家公司公布財報後，同一份數字可能變成幾十則標題。有些報導只是轉述同一份公告，有些卻對毛利或需求得出相反的解讀。StockNexus Wiki 幫你清理股票新聞裡的雜訊，去除重複報導、把相關新聞放在一起，再沿著引用查清楚每個觀點的依據。
 
