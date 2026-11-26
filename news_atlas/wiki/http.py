@@ -48,9 +48,15 @@ def handle(handler):
                     classification=[{**dict(r),'payload':json.loads(r['payload'])} for r in db.execute("SELECT * FROM research_jobs WHERE json_extract(payload,'$.operation')='classify_l1' ORDER BY created_at DESC LIMIT 1")]
                 data={'jobs':store.jobs(),'classification_jobs':classification,'config':store.config(),'version':latest,'coverage':service.coverage(store)}
             elif path=='node':
-                with store.connection() as db:row=db.execute('SELECT payload FROM nodes WHERE id=? AND created_version<=?',(params.get('id',[''])[0],int(version) if version else 2147483647)).fetchone()
-                if not row:raise ValueError('此版本找不到觀點')
-                data=json.loads(row[0])
+                from .opinions import node_evidence_and_lineage
+                with store.connection() as db:
+                    db.execute('BEGIN')
+                    cutoff=int(version) if version else db.execute('SELECT COALESCE(max(version),0) FROM versions').fetchone()[0]
+                    row=db.execute('SELECT payload FROM nodes WHERE id=? AND created_version<=?',(params.get('id',[''])[0],cutoff)).fetchone()
+                    if not row:raise ValueError('此版本找不到觀點')
+                    data=json.loads(row[0])
+                    if data['kind']!='ArticleRevision':
+                        data.update(node_evidence_and_lineage(db,data,cutoff))
                 from .evidence import cached_market
                 refs=[c['article_revision_id'] for c in data.get('citations',[])]
                 with store.connection() as db:articles=[json.loads(r[0]) for r in db.execute('SELECT payload FROM articles WHERE id IN (SELECT value FROM json_each(?))',(json.dumps(refs),))]
@@ -61,7 +67,7 @@ def handle(handler):
                 with store.connection() as db: row=db.execute('SELECT payload FROM articles WHERE id=?',(params.get('id',[''])[0],)).fetchone()
                 if not row: raise ValueError('引用版本不存在')
                 data=json.loads(row[0])
-            elif path=='markdown': data={'markdown':store.markdown(version)}
+            elif path=='markdown': data={'markdown':store.markdown(version,params.get('lang',[None])[0])}
             else: handler.json_response(404,{'error':'Unknown Wiki endpoint'});return
             handler.json_response(200,data);return
         if not writable(handler):
@@ -70,7 +76,7 @@ def handle(handler):
         if handler.headers.get('Content-Type','').split(';')[0]!='application/json' or not 0<length<=32*1024*1024: raise ValueError('無效Wiki請求大小')
         body=json.loads(handler.rfile.read(length))
         if not isinstance(body,dict): raise ValueError('需要JSON object')
-        action={'plan':service.plan,'apply':service.apply,'jobs':service.start,'configure':service.configure,'cancel':service.cancel,'stop':service.stop_maintenance,'resume':service.resume}.get(path)
+        action={'range-counts':service.range_counts,'plan':service.plan,'apply':service.apply,'jobs':service.start,'configure':service.configure,'cancel':service.cancel,'stop':service.stop_maintenance,'resume':service.resume}.get(path)
         if not action: handler.json_response(404,{'error':'Unknown Wiki endpoint'});return
         handler.json_response(202 if path=='jobs' else 200,action(body))
     except (BrokenPipeError, ConnectionResetError):

@@ -5,7 +5,7 @@ import {resolve,dirname,join} from 'node:path';
 import {homedir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 import {Codex} from '@openai/codex-sdk';
-import {createWikiCompiler} from './wiki.mjs';
+import {createWikiCompiler,WIKI_WORKER_LIMIT} from './wiki.mjs';
 import {createWikiTrace} from './wiki-trace.mjs';
 import {createHistory} from './history.mjs';
 import {modelCatalog,WIKI_DEFAULT_MODEL} from './models.mjs';
@@ -42,10 +42,11 @@ export function createService({makeThread,makeWikiThread,wikiModel=WIKI_DEFAULT_
    const catalog=await listModels();
    return send(res,200,path==='/models'?catalog:{...catalog,models:catalog.models.filter(lightweight)});
   }
-  if(path==='/status'&&req.method==='GET')return send(res,200,{ready:true,wiki_ready:!!makeWikiThread,wiki_model:wikiModel});
+  if(path==='/status'&&req.method==='GET')return send(res,200,{ready:true,wiki_ready:!!makeWikiThread,wiki_worker_limit:WIKI_WORKER_LIMIT,wiki_model:wikiModel});
   if(req.method!=='POST')throw fail('Not found',404);
   const b=await body(req);
   if(path==='/wiki/compile')return send(res,200,await wiki.run(b));
+  if(path==='/wiki/progress')return send(res,200,wiki.progress(b.job_id));
   if(path==='/wiki/cancel'){wiki.cancel(b.job_id);return send(res,200,{cancelled:true});}
   if(path==='/session'){
    for(const [k,s] of sessions)if(!s.busy&&Date.now()-s.touched>3600000)sessions.delete(k);
@@ -164,7 +165,7 @@ export function createService({makeThread,makeWikiThread,wikiModel=WIKI_DEFAULT_
    emit({type:'done',cancelled:s.controller.signal.aborted});
   }catch(e){emit(s.controller.signal.aborted?{type:'done',cancelled:true}:{type:'error',message:/401|unauthorized|auth|login|refresh token/i.test(e.message)?'登入已失效，請在主機執行 codex login 後重試。':/429|quota|limit/i.test(e.message)?'已達用量限制，請稍後重試。':'回覆失敗：'+e.message.slice(0,600)});}
   finally{try{history.update(s.owner,s.conversation,{threadId:s.thread?.id||record.threadId});}finally{clearTimeout(timer);clearInterval(beat);cancel(s);s.busy=false;res.end();}}
- }catch(e){if(!res.headersSent)send(res,e.status||500,{error:e.message});else res.end();}});
+ }catch(e){if(!res.headersSent)send(res,e.status||500,{error:e.message,...(e.wiki_code?{code:e.wiki_code,sdk_stage:e.wiki_stage}:{})});else res.end();}});
  server.shutdown=()=>{wiki.close();for(const s of sessions.values())cancel(s);server.close();};
  return server;
 }

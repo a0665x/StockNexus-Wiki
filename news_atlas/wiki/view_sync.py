@@ -96,8 +96,8 @@ class GraphViews:
         return {**reply,'kind':'full','graph':graph}
 
 
-JOB_FIELDS = ('model','workers','workers_state','operation','stage','strategy','current_title','current_size',
-              'current_date','group_info','last_usage','reasoning_effort','done','usage','recovering','last_batch_error')
+JOB_FIELDS = ('last_decisions','model','workers','workers_state','operation','stage','strategy','current_title','current_size',
+              'failed_tree_count','last_tree_failure','current_date','group_info','last_usage','reasoning_effort','done','usage','recovering','last_batch_error')
 
 
 def compact_jobs(db, table):
@@ -138,10 +138,24 @@ def view_state(service,store,config_token):
                 'version':db.execute('SELECT COALESCE(max(version),0) FROM versions').fetchone()[0],
                 'jobs':compact_jobs(db,'jobs'),'classification_jobs':compact_jobs(db,'research_jobs')}
         if config_token != tag:
-            data['config'] = {k:v for k,v in json.loads(raw).items() if k not in ('revision_ids','graph_context_revisions','graph_edges')}
+            data['config'] = {k:v for k,v in json.loads(raw).items() if k not in ('revision_ids','document_ids','graph_context_revisions','graph_edges')}
             selection = data['config'].get('graph_selection') or {}
             if selection.get('mode') == 'coverage' and data['config'].get('graph_universe'):
                 # Settings rebuild the forest from its universe; open worker links use the job's frozen trees.
                 data['config']['graph_selection'] = {k:v for k,v in selection.items() if k!='trees'}
+    # Read transient SDK milestones outside the SQLite snapshot. Missing bridge
+    # telemetry must never hide already-published database progress.
+    for job in data['jobs']:
+        lanes = job['payload'].get('workers_state') or {}
+        if job['status']=='running' and any(w.get('status')=='running' and w.get('stage') in ('compiling','repairing') for w in lanes.values()):
+            try:
+                progress = service.bridge_request('/wiki/progress',{'job_id':job['id']},timeout=1)
+            except RuntimeError:
+                continue
+            for worker in lanes.values():
+                call = progress.get(worker.get('bridge_call_id'))
+                if call and worker.get('status')=='running' and worker.get('stage') in ('compiling','repairing'):
+                    worker['sdk_stage'] = call['sdk_stage']
+                    worker['sdk_quiet_minutes'] = call['last_event_ms']//60000
     data['coverage'] = service.coverage(store)
     return data

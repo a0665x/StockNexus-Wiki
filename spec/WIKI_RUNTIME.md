@@ -1,5 +1,9 @@
 # LLM Wiki 執行與維護
 
+L1 now compares each new batch with existing viewpoints before creating another topic. Quote support, operating impact, revision and branching have distinct meanings in the reader. [Viewpoint lineage, optional VIX evidence and grouped BDD scenarios](references/l1-opinion-lineage.md)
+
+全局增量維護另列綁定文件的原文段落。即使所選日期的待辦新聞為零，也能比對、補強或修訂既有觀點。文件引用鎖定原文版本與位置。[文件來源與版本契約](DOCUMENT_IMPORT.md)
+
 ## November 20 cache and classifier update
 
 News prefetches the published graph for the confirmed instrument. Wiki paints the exact cached view before verifying progress and publications. The browser and server share scope-bound change tokens. L1 classification backfill uses four-opinion, 48 KiB evidence packets with one bounded split for a batch-specific failure. See the [state, failure and recovery contracts](references/wiki-cache-classifier-20261120.md).
@@ -14,11 +18,11 @@ Root preparation persists a fingerprint over the actual source content, channels
 
 ## 2026-11-20 — Parallel tree workers and consistent progress
 
-Graph root incremental updates support **1 / 3 / 5 / 10 concurrent workers**. This is a concurrency limit, not a promised speed multiplier. Other grouping methods and manual review remain serial. Every worker uses the job's selected model/effort and owns a different tree; segments within a tree execute in order. Fair scheduling processes at most one tree per lane before giving other stocks/classification a turn. There is one parent job, shared append-only Wiki and transactional publication, rather than separate Wikis per worker.
+Graph root incremental updates support **1 / 3 / 5 / 10 concurrent workers**. This is a concurrency limit, not a promised speed multiplier. Other grouping methods and manual review remain serial. Every worker uses the job's selected model/effort and owns a different tree; segments within a tree execute in order. With multiple lanes, a free lane takes the next tree while its siblings are in flight. Free lanes can refill while a sibling is still processing its first scheduling allowance. Once all lanes reach that boundary, they yield to another queued stock or classifier. Single-lane fair turns still end at a tree boundary. There is one parent job, shared append-only Wiki and transactional publication, rather than separate Wikis per worker.
 
 The primary progress unit is **completed trees / total trees** over the frozen forest and selected evidence. A tree is complete only when every eligible target revision has extraction credit, including reused evidence. A tree's ordinal is its identity, not a completed-tree count. Article coverage remains secondary because trees differ in size and can share context; target articles remain uniquely assigned. Expanded worker rows show model, stage, tree identity, saved segments and target/context sizes. Each row opens its exact frozen tree. Disclosure survives polling; labels support Chinese and English. Non-root jobs continue to show article progress.
 
-Workers coordinate when their model context includes the same mutable opinion revision, rereading context after waiting. Independent proposals may observe different committed snapshots; parallel execution is not equivalent to serial reasoning order. Existing UPDATES conflict checks remain authoritative. The bridge admits at most ten independent calls and cancels all children by parent job ID. Stop/cancel prevents late publication. A worker failure stops further assignment while successful in-flight siblings may commit; no failed model turn is automatically replayed. Existing single bounded schema-repair behavior remains.
+Workers can read the same existing opinion concurrently. Publication checks each actual UPDATES target in the SQLite write transaction. If another tree already updated that base, the affected proposal is rejected and its usage recorded. A tree-local timeout, invalid proposal after the bounded repair, or stale base leaves that tree pending. Remaining eligible trees run. The job keeps a failed-root ledger across scheduler turns, reports its partial failure after draining eligible work, and ends catch-up in that transaction. A continuous watcher skips the deferred revisions and can enqueue fresh evidence. Explicit continuation starts a fresh job with pending targets and reuses committed segments. Shared authentication, account quota, unavailable bridge or storage faults can stop the parent. The bridge admits ten independent calls and supports parent cancellation. [Worker timeout diagnosis and timing](WIKI_OBSERVABILITY.md#november-24-nvda-worker-incident)
 
 Successful tree segments now write `wiki_segments` in the **same transaction** as their published version. The checkpoint key includes prompt version, root, exact ordered evidence revisions, target revisions and segment index. Explicit resumption reuses matching saved segments across model changes, while only the final segment credits target coverage. Input changes invalidate matching. Legacy segments have no checkpoints and may replay when an unfinished legacy tree resumes. Service restart still interrupts active work and requires explicit resumption. Checkpoints merge idempotently with remapped version references.
 
@@ -188,7 +192,7 @@ Wiki 使用與深色圖譜一致的細線文件、掃描光條與知識連線，
 
 ## 舊 revision 與終止交易（2026-11-07）
 
-GOOGL 月維護的正式模型結果揭露：相似上下文包含已有 UPDATES 後繼的舊節點，導致正確的發布 CAS 拒絕。現在候選排序與相依 Thesis 展開均排除被取代版本；歷史 ID／revision／引用不刪改，時間快照照常保留。這是「目前更新基底」的讀取規則，不是把歷史快照偷偷改成最新。模型在途仍可能遇到並行修訂，publish CAS 不放寬；拒絕時保存 proposal、usage 與 rejected receipt，保留最後完整圖且停止工作，不以舊 context 自動重試。
+GOOGL 月維護的正式模型結果揭露：相似上下文包含已有 UPDATES 後繼的舊節點，導致正確的發布 CAS 拒絕。現在候選排序與相依 Thesis 展開均排除被取代版本；歷史 ID／revision／引用不刪改，時間快照照常保留。這是「目前更新基底」的讀取規則，不是把歷史快照偷偷改成最新。模型在途仍可能遇到並行修訂，publish CAS 不放寬；拒絕時保存 proposal、usage 與 rejected receipt，保留最後完整圖。平行排程僅保留該樹待重試，其他樹可繼續。
 
 終止失敗與 config.enabled/catch_up=false 必須在同一 BEGIN IMMEDIATE 交易提交。原來兩次提交在停止／重啟邊界會留下 failed＋catch_up=true，讓啟動誤排第二次付費工作。本輪已取消誤建工作，沒有自動復活其他股票；後續只允許修正驗證後以原月範圍有界續跑一次，次數持久記在 private 批次紀錄。早期未記錄的模型回應／用量不能追溯補造。
 
@@ -211,3 +215,9 @@ L1 的 `WikiStore.publish` 在單一交易中保存版本、節點、連線、�
 使用者期望完成當前段再停、下次從下一段接續。安全暫停與持久分段 checkpoint 尚未實作，本次只記錄經核對的現況，不改執行中的工作。後續若實作，BDD 必須驗證：已提交段不再呼叫模型、checkpoint 與發布同交易、末段前不提前記 coverage、停止期間不排下一段、重啟與重試不重複提交，並保留既有 L2 完整結果。
 
 原始碼定位：[store.py](../news_atlas/wiki/store.py) `publish`、[compiler.py](../news_atlas/wiki/compiler.py) `process/_cancel`、[forest.py](../news_atlas/wiki/forest.py) `groups`、[research.py](../news_atlas/wiki/research.py) `query/process`。
+
+## November 23 maintenance controls
+
+Selecting Custom initializes one UTC year ending today. The dates and handles edit the same interval. Presets hide the handles. Every date preset and custom interval shows the articles already extracted into the Wiki and those still unprocessed. Graph root updates also show completed and pending news trees. The preview and Start share the same grouping and extraction checks. A tree remains pending while any assigned interval target is unprocessed. Outside-range context does not increase either total. Previewing creates no job or model call. The most recent preview forest can be reused after its input fingerprint is verified. Review mode separately shows eligible previously processed articles. Markdown downloads request the interface language for headings, viewpoints and history. Source articles and exact citations retain their original wording.
+
+Three five-worker NVDA jobs on November 23 failed with the single-call bridge's busy response. The latest started five model requests within 0.31 seconds at 16:04 Taipei. Four failed at the bridge. Independent trees can run concurrently, while segments in a tree run in order. The November 24 isolation change moved cross-tree revision coordination to publication. The launcher checks the host bridge module revision on start. Parallel dispatch checks the running bridge's advertised capacity before reserving model calls. The previous failed job's worker details remain available in the status panel.

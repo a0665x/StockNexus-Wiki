@@ -71,10 +71,11 @@ body.documents-workbench main{height:calc(100dvh - 68px)}body.documents-workbenc
 :root{--header-default:68px;--header-min:48px;--workbench-header-height:var(--header-default)}
 #workbenchHeader{
   --brand-height:calc(var(--workbench-header-height) - 12px);
-  --controls-row:50px;--header-gap:16px;
+  --brand-max-width:366px;--controls-row:50px;--header-gap:16px;
   position:relative;height:var(--workbench-header-height);padding:2px 20px 6px 16px;gap:var(--header-gap)
 }
 #workbenchHeader h1{
+  max-width:var(--brand-max-width);
   display:flex;align-items:center;flex:0 1 auto;min-width:0;
   width:calc(var(--brand-height) * var(--brand-aspect,3))
 }
@@ -243,3 +244,17 @@ dialog.wiki-comparison{box-sizing:border-box;width:min(920px,calc(100% - 48px));
  .comparison-selected p,.comparison-history p{gap:8px}
  .comparison-submit{flex-wrap:wrap}
 }
+
+#wikiBack{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 12px;font-size:16px;font-weight:600;color:var(--text);border:1px solid var(--line);border-radius:6px}
+#wikiBack:is(:hover,:focus-visible){border-color:var(--accent);color:var(--accent)}
+#wikiSelectedCoverage{display:grid;gap:12px;padding:10px;border:1px solid var(--line);border-radius:6px;font-size:13px;font-variant-numeric:tabular-nums}
+#wikiSelectedCoverage:empty{display:none}
+.wiki-range-row{display:grid;gap:4px;min-width:0}
+.wiki-range-row strong{font-weight:500}
+.wiki-interval-meter{width:100%;height:10px;border-radius:5px;overflow:hidden;background:#d6a85a}
+.wiki-interval-meter.is-empty{background:var(--line)}
+.wiki-interval-meter>span{display:block;height:100%;background:#67ceb2}
+.wiki-count-legend{display:flex;flex-wrap:wrap;column-gap:10px;row-gap:3px}
+.wiki-range-note{line-height:1.5}
+.wiki-count-legend span::before{content:"";display:inline-block;width:8px;height:8px;margin-inline-end:4px;background:#67ceb2}
+.wiki-count-legend span+span::before{background:#d6a85a}

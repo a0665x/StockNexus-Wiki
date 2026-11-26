@@ -10,6 +10,7 @@ from ..graph_payload import graph_payload
 from ..exploration import trace,settings,adjacency_index
 from .store import capture, digest
 from .evidence import bounded_groups
+from .workbench import news_day
 
 PROVIDERS=('google','yahoo','massive')
 def universe_rows(news,ident,universe):
@@ -22,15 +23,19 @@ def universe_rows(news,ident,universe):
         wanted.add((a['provider'],a['id']))
     store=select(news,ident.split(':')[1]);rows=[]
     with store.connection() as db:
-        for provider,key in sorted(wanted):
-            row=db.execute('SELECT payload FROM articles WHERE provider=? AND id=?',(provider,key)).fetchone()
-            if not row:raise ValueError('完整圖譜有新聞不在此股票 DB；請重新載入新聞圖譜')
-            rows.append(json.loads(row[0]))
+        for provider in sorted(PROVIDERS):
+            ids=[key for source,key in wanted if source==provider]
+            if not ids:
+                continue
+            found=db.execute('SELECT payload FROM articles WHERE provider=? AND id IN (SELECT value FROM json_each(?)) ORDER BY id',
+                             (provider,json.dumps(ids)))
+            rows.extend(json.loads(row[0]) for row in found)
+        if len(rows)!=len(wanted):
+            raise ValueError('完整圖譜有新聞不在此股票 DB；請重新載入新聞圖譜')
     return rows
 
 def in_range(a,dates):
-    day=(a.get('published_at') or '')[:10]
-    return not dates or bool(day and dates['start']<=day<=dates['end'])
+    return not dates or dates['start'] <= news_day(a.get('published_at')) <= dates['end']
 
 from .trace import span
 
@@ -46,7 +51,7 @@ def _prepare(news,ident,universe,graph_settings,dates,*,cached=None):
     from ..graph_cache import VERSION
     fingerprint=digest(['forest-v1',VERSION,ident,raw,channels,graph_settings,dates,universe.get('separate',False)])
     rows=[capture(a) for a in raw];targets=[a for a in rows if in_range(a,dates)]
-    if cached and cached.get('fingerprint')==fingerprint:
+    if cached and cached.get('fingerprint')==fingerprint and cached.get('target_revisions')==[a['revision_id'] for a in targets]:
         context_keys={(a['provider'],a['id']) for tree in cached['trees'] for a in tree['articles']}
         return targets,[a for a in rows if (a['provider'],a['id']) in context_keys],cached
     graph=build_cached(store,graph_payload,raw,channels,graph_settings['relation_settings'])

@@ -28,7 +28,7 @@ def root(owner):
 def error_fields(error):
     text=str(error).lower()
     code='timeout' if 'timed out' in text or isinstance(error,TimeoutError) else 'cancelled' if 'cancel' in text else 'quota' if any(x in text for x in ('429','quota','usage limit')) else 'authentication' if any(x in text for x in ('401','unauthorized','refresh token')) else 'validation' if isinstance(error,ValueError) else 'runtime'
-    return {'error_type':type(error).__name__,'error_code':code,
+    return {'error_type':type(error).__name__,'error_code':getattr(error,'code',None) or code,
             'frames':[{'file':Path(f.filename).name,'line':f.lineno,'function':f.name} for f in traceback.extract_tb(error.__traceback__)[-8:]]}
 
 def emit(owner,event,stage,**fields):

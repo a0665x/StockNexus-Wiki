@@ -1,5 +1,6 @@
-"""Versioned local document collections. No ticker, remote fetch or model dependency."""
+"""Versioned local document collections. Optional stock bindings authorize L1 to read one source."""
 import contextlib
+import datetime as dt
 from importlib import import_module
 import hashlib
 import io
@@ -16,6 +17,11 @@ records_schema = import_module('skills.stocknexus-document-import.scripts.docume
 DB_NAME = 'documents.sqlite3'
 SCHEMA = """CREATE TABLE IF NOT EXISTS versions (
     source TEXT NOT NULL, id TEXT NOT NULL, revision INTEGER NOT NULL, body TEXT NOT NULL,
+    PRIMARY KEY(source,id,revision));
+CREATE TABLE IF NOT EXISTS wiki_bindings (
+    source TEXT NOT NULL, instrument TEXT NOT NULL, bound_at TEXT NOT NULL, PRIMARY KEY(source,instrument));
+CREATE TABLE IF NOT EXISTS import_times (
+    source TEXT NOT NULL, id TEXT NOT NULL, revision INTEGER NOT NULL, imported_at TEXT NOT NULL,
     PRIMARY KEY(source,id,revision));
 CREATE VIEW IF NOT EXISTS current_nodes AS
     SELECT v.* FROM versions v WHERE revision=(
@@ -77,12 +83,15 @@ def archive(base, source, records):
     return path
 
 
-def import_records(root, collection, source, input_path, dry_run):
+def import_records(root, collection, source, input_path, dry_run, instrument=None):
     with Path(input_path).open(encoding='utf-8-sig') as stream:
-        return import_stream(root, collection, source, stream, dry_run)
+        return import_stream(root, collection, source, stream, dry_run, instrument)
 
 
-def import_stream(root, collection, source, stream, dry_run):
+def import_stream(root, collection, source, stream, dry_run, instrument=None):
+    if instrument is not None:
+        from .wiki.store import instrument as validate_instrument
+        validate_instrument(instrument)
     records_schema.slug(source)
     base = folder(root, collection)
     records, duplicates = records_schema.read_records(stream, source)
@@ -112,8 +121,35 @@ def import_stream(root, collection, source, stream, dry_run):
         validate_graph(db,source,records,revisions)
         if not dry_run:
             db.executemany('INSERT INTO versions VALUES (?,?,?,?)', writes)
+            stamp = dt.datetime.now(dt.timezone.utc).isoformat()
+            db.executemany('INSERT INTO import_times VALUES (?,?,?,?)', ((*row[:3],stamp) for row in writes))
+            if instrument:
+                db.execute('INSERT OR IGNORE INTO wiki_bindings VALUES (?,?,?)',(source,instrument,stamp))
             report['archive'] = str(archive(base,source,records))
+    if instrument:
+        report['instrument'] = instrument
     return report
+
+
+def bind_source(root, collection, source, instrument):
+    from .wiki.store import instrument as validate_instrument
+    validate_instrument(instrument)
+    records_schema.slug(source)
+    path = folder(root, collection)/DB_NAME
+    if not path.is_file():
+        raise ValueError('Unknown collection')
+    with contextlib.closing(sqlite3.connect(path, timeout=30)) as db, db:
+        db.executescript(SCHEMA)
+        db.execute('BEGIN IMMEDIATE')
+        if not db.execute('SELECT 1 FROM versions WHERE source=? LIMIT 1',(source,)).fetchone():
+            raise ValueError('Unknown document source')
+        db.execute('INSERT OR IGNORE INTO wiki_bindings VALUES (?,?,?)',
+                   (source,instrument,dt.datetime.now(dt.timezone.utc).isoformat()))
+    return {'collection':collection,'source':source,'instrument':instrument}
+
+
+def has_bindings(db):
+    return db.execute("SELECT 1 FROM sqlite_master WHERE name='wiki_bindings'").fetchone() is not None
 
 
 def query(root, collection=None, source=None, ident=None, revision=None):
@@ -124,8 +160,12 @@ def query(root, collection=None, source=None, ident=None, revision=None):
                 continue
             with contextlib.closing(sqlite3.connect(path.resolve().as_uri()+'?mode=ro', uri=True)) as db:
                 sources = dict(db.execute('SELECT source,count(*) FROM current_nodes GROUP BY source'))
+                bindings = {}
+                if has_bindings(db):
+                    for source,stock in db.execute('SELECT source,instrument FROM wiki_bindings ORDER BY source,instrument'):
+                        bindings.setdefault(source,[]).append(stock)
             if sources:
-                entries.append({'id':path.parent.name,'sources':sources})
+                entries.append({'id':path.parent.name,'sources':sources,**({'bindings':bindings} if bindings else {})})
         return {'collections':entries}
     path = folder(root, collection)/DB_NAME
     if not path.is_file():
@@ -172,7 +212,7 @@ def handle_import(handler):
         return
     try:
         params = urllib.parse.parse_qs(urllib.parse.urlsplit(handler.path).query, keep_blank_values=True)
-        if (set(params) != {'collection', 'source', 'mode'} or any(len(v) != 1 for v in params.values())
+        if (set(params)-{'instrument'} != {'collection', 'source', 'mode'} or any(len(v) != 1 for v in params.values())
                 or params['mode'][0] not in ('preview', 'apply')):
             raise ValueError('Provide collection, source and mode (preview or apply)')
         length = int(handler.headers.get('Content-Length', '0'))
@@ -186,10 +226,26 @@ def handle_import(handler):
             raise ValueError('Incomplete upload')
         with io.TextIOWrapper(io.BytesIO(data), encoding='utf-8-sig') as stream:
             report = import_stream(handler.store.path.parent, params['collection'][0], params['source'][0],
-                                   stream, params['mode'][0] == 'preview')
+                                   stream, params['mode'][0] == 'preview', params.get('instrument',[None])[0])
         report.pop('archive', None)
         handler.json_response(200, report)
     except ValueError as exc:
         handler.json_response(400, {'error': str(exc)})
     except (OSError, sqlite3.Error):
         handler.json_response(503, {'error': 'Document storage is unavailable'})
+
+def handle_bind(handler):
+    from .wiki.http import writable
+    if not writable(handler):
+        handler.json_response(403, {'error':'Use an allowed same-origin host'})
+        return
+    try:
+        params = urllib.parse.parse_qs(urllib.parse.urlsplit(handler.path).query, keep_blank_values=True)
+        if set(params) != {'collection','source','instrument'} or any(len(v)!=1 for v in params.values()):
+            raise ValueError('Provide collection, source and instrument')
+        result = bind_source(handler.store.path.parent, **{k:v[0] for k,v in params.items()})
+        handler.json_response(200,result)
+    except ValueError as exc:
+        handler.json_response(400,{'error':str(exc)})
+    except (OSError,sqlite3.Error):
+        handler.json_response(503,{'error':'Document storage is unavailable'})

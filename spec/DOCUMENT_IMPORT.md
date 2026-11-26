@@ -8,7 +8,7 @@ Working-tree follow-up on the same date adds optional link rationales, a blank-f
 
 Customers can turn their own articles, manuals, notes or folders into a versioned document graph without a stock ticker or publication date. An independent agent prepares a validated UTF-8 `records.jsonl`; the application imports and displays that export.
 
-This is a separate collection workspace at `/documents`. It does not feed uploaded documents into the stock Wiki compiler, automatically generate opinions, or start L1/L2 jobs. Agent-authored L1/L2 claims can be imported and filtered here, but they remain document records, not stock Wiki jobs or research runs. No model sign-in or API key is required for importing and browsing a prepared file.
+The document workspace at `/documents` stores each collection independently. Enter a stock such as `NASDAQ:NVDA` at import, or bind an existing source under **來源**. The graph visibility checkbox only controls display. Binding adds original passages to that stock’s global incremental L1 maintenance. Import, preview and binding require no model call. Agent-authored claims retain their attribution and pinned references in the document workspace.
 
 ```mermaid
 flowchart LR
@@ -27,6 +27,10 @@ flowchart LR
 3. Validate the final export with the bundled validator. For updates or references to existing records, also preview against the actual target collection.
 4. Open **Import research documents** on the homepage or go to `/documents`. Select `records.jsonl`. The form uses Traditional Chinese. The second button below the file picker previews the changes. The first imports the file and opens the graph.
 5. Select a collection and one or more sources. Browse the hierarchy or click a graph node for original text, location and citations. Use the layer filter for documents, L1 or L2. A revision-pinned citation opens the saved historical text even after its target changes.
+
+For stock maintenance, choose the global source scope and the ordinary incremental update. The document bar counts each nonempty original passage revision once across all publication dates. The menu below it shows the saved outcome and Wiki version. An old or undated interview can trigger a review on its own. A changed section creates a new revision. Reimporting identical normalized records preserves their existing revision and review credit. Sources are bound independently for each stock.
+
+A document job freezes its inputs at preview. An enabled watcher can pick up later imports after the active job finishes. Each cited quote links to its precise section revision and character range. Only bound document, section and note text supplies primary evidence. An imported claim can point to an older original via a revision-pinned citation when that original source is also bound. Publication date, import time and stock binding time are distinct. Legacy records without import timestamps use binding time for stock availability.
 
 If 3D is unavailable, browse the document outline.
 
@@ -66,7 +70,7 @@ Storage is `<data-root>/graph/<collection>/documents.sqlite3`, with normalized i
 
 `GET /api/documents` lists collections and source counts. Add `collection` and optional `source` for current nodes. A historical lookup requires all of `collection`, `source`, `id`, `revision`. Missing collections/revisions return 404.
 
-`POST /api/documents/import?collection=my_research&source=manuals&mode=preview` accepts the raw JSONL body with `Content-Type: application/x-ndjson`. Change mode to `apply` to write. Reports include `added`, `updated`, `unchanged`, `duplicate_lines` and `undated`. The web limit is 32 MiB; oversized bodies return 413. Both document reads and writes use the existing allowed-host/same-origin guard.
+`POST /api/documents/import?collection=my_research&source=manuals&mode=preview` accepts the raw JSONL body with `Content-Type: application/x-ndjson`. Change mode to `apply` to write. Reports include `added`, `updated`, `unchanged`, `duplicate_lines` and `undated`. Add optional `instrument=NASDAQ:NVDA` to bind on apply. Use `POST /api/documents/bind?collection=my_research&source=manuals&instrument=NASDAQ:NVDA` for an existing source. The web limit is 32 MiB; oversized bodies return 413. Both document reads and writes use the existing allowed-host/same-origin guard.
 
 From the repository root, against the same data directory as the server:
 

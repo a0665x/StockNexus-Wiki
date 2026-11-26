@@ -15,6 +15,8 @@ def news_day(value):
 def settings(body):
     workers=body.get('workers',1)
     if type(workers) is not int or workers not in (1,3,5,10):raise ValueError('Worker count must be 1, 3, 5 or 10')
+    include_vix=body.get('include_vix',False)
+    if type(include_vix) is not bool:raise ValueError('Invalid VIX news setting')
     effort=body.get('reasoning_effort','low')
     if effort not in ('minimal','low','medium','high','xhigh','max','ultra','persistent'):raise ValueError('無效思考深度')
     languages=body.get('languages',['zh-Hant','en'])
@@ -34,7 +36,7 @@ def settings(body):
     from .evidence import graph_options
     horizon=body.get('price_horizon',3)
     if type(horizon) is not int or horizon not in (1,3,5,7):raise ValueError('無效股價交易日範圍')
-    return dict(workers=workers,reasoning_effort=effort,languages=languages,evidence_size=size,strategy=strategy,graph_edges=clean,graph_settings=graph_options(body.get('graph_settings')),price_horizon=horizon)
+    return dict(workers=workers,include_vix=include_vix,reasoning_effort=effort,languages=languages,evidence_size=size,strategy=strategy,graph_edges=clean,graph_settings=graph_options(body.get('graph_settings')),price_horizon=horizon)
 
 
 def batches(rows,config):
@@ -81,9 +83,11 @@ def enrich_graph(db,version,start=None,end=None):
         fresh=[n for n in nodes.values() if n.get('version')==v['version']]
         links=[json.loads(r[0]) for r in db.execute('SELECT e.payload FROM edges e JOIN nodes a ON a.id=e.source JOIN nodes b ON b.id=e.target WHERE e.created_version=?',(v['version'],))]
         changes.append({**dict(v),'added':len(fresh),'relations':len(links),'updates':sum(e['relation_type']=='UPDATES' for e in links),'titles':[n['title'] for n in fresh if n['kind']!='ArticleRevision'][:8], 'node_ids':[n['id'] for n in fresh], 'edge_ids':[e['stable_id'] for e in links]})
+    from .opinions import additional_sources
+    supplements=additional_sources(nodes,edges)
     def dates(n):
         if n['kind']=='ArticleRevision':return [news_day(n.get('published_at'))]
-        return [news_day(articles.get(c['article_revision_id'],{}).get('published_at')) for c in n.get('citations',[])]
+        return [news_day(articles.get(c['article_revision_id'],{}).get('published_at')) for c in [*n.get('citations',[]),*supplements.get(n['id'],[])]]
     def visible(n):
         return not(start or end) or any(d and (not start or d[:10]>=start) and (not end or d[:10]<=end) for d in dates(n))
     visible_ids={k for k,n in nodes.items() if visible(n)}
@@ -121,7 +125,7 @@ def enrich_graph(db,version,start=None,end=None):
     index=[{'id':n['id'],'title':n['title'],'translations':{k:{'title':v['title']} for k,v in n.get('translations',{}).items()},'category':n.get('assessment',{}).get('category','uncertain'),'topic':topic(n),'topic_basis':'model' if n.get('assessment',{}).get('topic') else 'legacy_title_rule','date':max((d for d in dates(n) if d),default='unknown'),'version':n.get('version',0)} for n in theses]
     categories={k:sum(n['category']==k for n in index) for k in ('direct','indirect','low','uncertain')}
     perspectives={'index':index,'categories':dict(categories),'theses':theses[:40],'total_theses':len(theses),'note':'Stored model interpretations; not a whole-graph re-analysis.'}
-    return {'filtered_perspectives':perspectives,'changes':changes,'histories':histories,'timeline':[{'date':d,'categories':dict(v)} for d,v in sorted(counts.items())], 'visible_ids':list(visible_ids),'display_range':{'start':start,'end':end}}
+    return {'additional_sources':supplements,'filtered_perspectives':perspectives,'changes':changes,'histories':histories,'timeline':[{'date':d,'categories':dict(v)} for d,v in sorted(counts.items())], 'visible_ids':list(visible_ids),'display_range':{'start':start,'end':end}}
 
 
 def usage_summary(store,start=None,end=None):
@@ -133,6 +137,7 @@ def usage_summary(store,start=None,end=None):
                 if any(json.loads(r['usage']).values()):legacy+=1
                 continue
             for receipt in json.loads(r['receipts']):
+                if receipt.get('status')=='reused':continue
                 if (start or end) and not any(a.get('date') and (not start or news_day(a['date'])>=start) and (not end or news_day(a['date'])<=end) for a in receipt['articles']):continue
                 calls+=1
                 for k,v in receipt['usage'].items():

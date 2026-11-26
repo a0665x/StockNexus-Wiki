@@ -5,6 +5,8 @@
   <h2>匯入研究文件</h2>
   <label>知識庫 ID<input name="collection" value="my_research" pattern="[a-z0-9][a-z0-9_\-]{0,63}" maxlength="64" required></label>
   <label>來源 ID<input name="source" value="manuals" pattern="[a-z0-9][a-z0-9_\-]{0,63}" maxlength="64" required></label>
+  <label>納入股票 L1（選填）<input id="documentInstrument" name="instrument" placeholder="NASDAQ:NVDA" autocapitalize="characters" spellcheck="false"></label>
+  <small>留白可單獨保存文件。指定股票後，這個來源的原文會列入該股票的全局增量更新。</small>
   <label>JSONL 檔案<input type="file" name="records" accept=".jsonl,.ndjson,application/x-ndjson" required></label>
   <button type="submit" value="apply">匯入並開啟圖譜</button>
   <button type="submit" value="preview">只預覽</button>

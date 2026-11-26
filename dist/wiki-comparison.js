@@ -54,7 +54,7 @@
    chosen.push({ref:select.value,label:select.selectedOptions[0].textContent});paint();
   });
   add.dataset.action='add';select.onchange=paint;
-  const verdicts={similar:['可合併摘要','Similar viewpoints'],conflicting:['同命題有分歧','Conflicting positions'],different_scope:['適用範圍不同','Different scopes'],insufficient:['證據不足','Insufficient evidence']};
+  const verdicts={similar:['可合併摘要','Similar viewpoints'],conflicting:['同命題有分歧','Conflicting positions'],different_scope:['適用範圍不同','Different scopes'],insufficient:['現有引文不足以比較兩個觀點','Quotes insufficient to compare these viewpoints']};
   async function showReport(id){
    const ticket=++detailSerial;
    try{

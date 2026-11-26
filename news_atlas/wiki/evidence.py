@@ -6,8 +6,9 @@ from ..graph_storage import select
 from ..exploration import settings as exploration_settings
 from ..relation_settings import settings as relation_settings
 from ..price_lens import measurements
+from .workbench import news_day
 
-OPTION_KEYS=('workers','reasoning_effort','languages','evidence_size','strategy','graph_edges','graph_settings','price_horizon','settings_version','graph_selection','graph_universe','graph_context_revisions')
+OPTION_KEYS=('include_vix','workers','reasoning_effort','languages','evidence_size','strategy','graph_edges','graph_settings','price_horizon','settings_version','graph_selection','graph_universe','graph_context_revisions')
 TOPICS=('revenue','operations','costs','market','trading','other')
 
 def graph_options(value=None):
@@ -33,8 +34,8 @@ def selected_graph_rows(news,ident,selection,dates=None):
         for provider,ident in sorted(wanted):
             row=db.execute('SELECT payload FROM articles WHERE provider=? AND id=?',(provider,ident)).fetchone()
             if not row:raise ValueError('此 root 有新聞不在指定股票 DB；請重新搜尋並選取星河')
-            a=json.loads(row[0]);date=(a.get('published_at') or '')[:10]
-            if dates and not dates['start']<=date<=dates['end']:continue
+            a=json.loads(row[0])
+            if dates and not dates['start']<=news_day(a.get('published_at'))<=dates['end']:continue
             rows.append(a)
     return rows
 

@@ -212,6 +212,10 @@ class Handler(BaseHTTPRequestHandler):
         self.json_response(200 if removed else 404, {'channels':self.store.list_channels()} if removed else {'error':'自訂 channel 不存在'})
 
     def do_POST(self):
+        if urllib.parse.urlsplit(self.path).path == '/api/documents/bind':
+            from news_atlas.documents import handle_bind
+            handle_bind(self)
+            return
         if urllib.parse.urlsplit(self.path).path == '/api/documents/import':
             from news_atlas.documents import handle_import
             handle_import(self)

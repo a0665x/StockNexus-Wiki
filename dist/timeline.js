@@ -47,6 +47,15 @@
     }
     return times.map(time=>({value:Math.round((time-dates.start)/DAY),position:100*(time-dates.start)/Math.max(DAY,dates.end-dates.start),label:new Date(time).toISOString().slice(dates.days>=60?0:5,dates.days>=60?7:10)}));
   }
+  function relationPriority(articles,anchorId,pinned=[]){
+    const anchor=articles.find(row=>row.id===anchorId);
+    if(!anchor)return pinned;
+    const at=day(anchor.published_at);
+    if(at===null)return [anchorId,...pinned];
+    const nearby=articles.map(row=>({id:row.id,at:day(row.published_at)}))
+      .filter(row=>row.at!==null).sort((a,b)=>Math.abs(a.at-at)-Math.abs(b.at-at)||a.id.localeCompare(b.id));
+    return [anchorId,...pinned,...nearby.map(row=>row.id)];
+  }
   function selectionSummary(rows,trace){
     const hits=rows.map(a=>trace.nodes.get(a.id)).filter(Boolean);
     return {matched:hits.length,total:rows.length,roots:hits.filter(h=>h.depth===0).length,depth:hits.length?Math.min(...hits.map(h=>h.depth)):null};
@@ -178,5 +187,5 @@
     sheet.append(ruler,labels,svg);container.replaceChildren(sheet);highlight(null);return model;
   }
 
-  const api={timeSettings,profileGain,timeEvaluator,timeScale,timeTicks,selectionSummary,selectionTrace,range,filter,layout,render,day,density,renderDensity};if(typeof module!=='undefined'&&module.exports)module.exports=api;root.AtlasTimeline=api;
+  const api={relationPriority,timeSettings,profileGain,timeEvaluator,timeScale,timeTicks,selectionSummary,selectionTrace,range,filter,layout,render,day,density,renderDensity};if(typeof module!=='undefined'&&module.exports)module.exports=api;root.AtlasTimeline=api;
 })(globalThis);

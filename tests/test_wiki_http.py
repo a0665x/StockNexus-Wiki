@@ -30,6 +30,19 @@ class WikiHTTPTests(unittest.TestCase):
         self.assertEqual(self.request('configure',{'instrument':'NASDAQ:TSLA','enabled':False})[0],200)
         self.assertEqual(self.request('cancel',{'instrument':'NASDAQ:TSLA','job_id':j['job_id']})[0],200)
 
+    def test_counts_use_selected_interval_without_enqueuing_or_allocating_a_plan(self):
+        from test_server import row
+        articles=[row(day='2026-11-01',suffix='a'),row(day='2026-11-04',suffix='b')]
+        _,plan=self.request('plan',{'instrument':self.store.instrument,'model':'fixture','articles':articles[:1]})
+        self.request('jobs',{'plan_id':plan['plan_id']});self.service.tick()
+        plans=list(self.service.plans)
+        for end,total,pending in [('2026-11-01',1,0),('2026-11-04',2,1)]:
+            code,counts=self.request('range-counts',{'instrument':self.store.instrument,'scope':'loaded','articles':articles,
+                                                     'date_range':{'start':'2026-11-01','end':end}})
+            self.assertEqual((code,counts),(200,{'selected':total,'reused':1,'pending':pending}))
+        self.assertEqual(list(self.service.plans),plans)
+        self.assertEqual(len(self.store.jobs()),1)
+
     def test_node_refreshes_current_market_without_rewriting_generation_evidence(self):
         from test_server import row
         from news_atlas.wiki.evidence import cached_market

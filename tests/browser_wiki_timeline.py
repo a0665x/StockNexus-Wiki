@@ -28,8 +28,9 @@ const oldFetch=fetch;window.fetch=async(url,opts)=>{
   return {ok:true,json:async()=>({version:124,total:rows.length,items:rows.slice(offset,offset+20),next_offset:offset+20<rows.length?offset+20:null})};
  }
  if(!path.startsWith('/api/wiki/'))return oldFetch(url,opts);
- if(opts?.method==='POST')wikiPosts.push(path);
+ if(opts?.method==='POST'&&!path.endsWith('/range-counts'))wikiPosts.push(path);
  let packet={};
+ if(path.endsWith('/range-counts'))packet={selected:100,reused:13,pending:87,trees:{total:8,done:2,pending:6}};
  if(path.endsWith('/status'))packet={instruments:[{instrument,version:124}],news_databases:[{instrument,ticker:'TSLA',articles:100}],writable:true,bridge_ready:true};
  if(path.endsWith('/models'))packet={models:[{id:'fixture',name:'Fixture'}]};
  if(path.includes('/graph?'))packet=value;
@@ -245,6 +246,13 @@ def run(page):
     page.js(SETUP)
     page.wait("AtlasWiki.runtime.state().version===124")
     page.js("$('wikiRange').value='all';$('wikiRange').dispatchEvent(new Event('change'))")
+    page.wait("document.querySelectorAll('#wikiSelectedCoverage .wiki-interval-meter').length===2")
+    page.check('preset shows existing and pending article and tree shares below dates',
+               "[...document.querySelectorAll('#wikiSelectedCoverage .wiki-interval-meter>span')].map(n=>n.style.width).join(',')==='13%,25%'&&$('wikiSelectedCoverage').textContent.includes('待整理 6')")
+    page.js("window.idleResult=$('wikiShowPublished');window.idleLegend=$('wikiCoverage').firstElementChild")
+    time.sleep(2.3)
+    page.check('idle polling preserves the live result and coverage DOM',
+               "idleResult===$('wikiShowPublished')&&idleLegend===$('wikiCoverage').firstElementChild")
     energy="#wikiTimeline [data-term=energy]"
     plot="#wikiTimeline svg"
     page.wait("!!document.querySelector('#wikiTimeline [data-term=energy]')")

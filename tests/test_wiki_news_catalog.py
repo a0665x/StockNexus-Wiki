@@ -38,6 +38,15 @@ class WikiNewsCatalogTests(unittest.TestCase):
   a=self.add('AAPL','NASDAQ:AAPL')
   p=self.service.plan({'instrument':'NASDAQ:AAPL','news_db':True,'model':'fixture','scope':'global','strategy':'lexical','date_range':{'start':'2020-01-01','end':'2020-01-02'}})
   self.assertEqual(p['selected'],0)
+ def test_root_preview_for_new_news_db_does_not_create_a_wiki(self):
+  self.add('AAPL','NASDAQ:AAPL')
+  body={'instrument':'NASDAQ:AAPL','news_db':True,'scope':'global','strategy':'root'}
+  counts=self.service.range_counts(body)
+  self.assertEqual(counts,{'selected':1,'pending':1,'reused':0,'trees':{'total':1,'done':0,'pending':1}})
+  empty={**body,'date_range':{'start':'2020-01-01','end':'2020-01-02'}}
+  self.assertEqual(self.service.range_counts(empty)['trees'],{'total':0,'done':0,'pending':0})
+  self.assertEqual(self.service.stores(),[])
+  self.assertEqual(self.service.plan({**empty,'model':'fixture'})['selected'],0)
  def test_idle_model_change_preserves_scope_without_replanning(self):
   store=self.service.store('NASDAQ:AAPL');cfg=store.config()
   cfg.update(model='old',reasoning_effort='high',date_range={'start':'2025-11-14','end':'2026-11-13'},revision_ids=['kept'])

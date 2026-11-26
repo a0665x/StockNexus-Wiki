@@ -1,5 +1,9 @@
 # Current handoff — 2026-11-20 (Asia/Taipei)
 
+November 24 checkout update on `llm_wiki_unslop`. L1 extraction now records corroboration, revisions, child viewpoints and the reason for opening a new topic. Deployment of this change is pending. [Runtime contract and executable acceptance groups](references/l1-opinion-lineage.md)
+
+November 24 document update in this checkout. Bound source revisions now enter global L1 maintenance, with a separate workload bar, section-level outcomes and historical quote links. The served document form still needs the updated application build. [Document import and L1 contract](DOCUMENT_IMPORT.md)
+
 ## Workbench release handoff
 
 Use `main` for new work. The corresponding release branch is `llm_wiki_unslop`. To check the release on a later checkout, run `git rev-parse HEAD` and `git merge-base --is-ancestor origin/llm_wiki_unslop origin/main` after refreshing remote refs. An exit code of zero confirms that the fetched main includes the tip of the fetched feature branch.

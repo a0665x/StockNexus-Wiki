@@ -17,13 +17,14 @@ def main():
     parser.add_argument('--collection', required=True, help='Knowledge base ID, e.g. my_research')
     parser.add_argument('--source', required=True, help='Source ID, e.g. manuals')
     parser.add_argument('--input', required=True, type=Path, help='UTF-8 JSONL export')
+    parser.add_argument('--instrument', help='Include this source in L1 updates for a stock, e.g. NASDAQ:NVDA')
     parser.add_argument('--data-dir', type=Path, help='The data directory used by the web server')
     parser.add_argument('--dry-run', action='store_true', help='Preview only. Remove this flag to write the same import.')
     args = parser.parse_args()
     try:
         root = args.data_dir or (Path(os.environ['NEWS_ATLAS_DB']).parent if os.getenv('NEWS_ATLAS_DB') else None)
         root = root or load(ROOT) or os.getenv('ATLAS_DATA_DIR') or ROOT/'data'
-        result = import_records(root,args.collection,args.source,args.input,args.dry_run)
+        result = import_records(root,args.collection,args.source,args.input,args.dry_run,args.instrument)
     except (OSError,ValueError,sqlite3.Error,RuntimeError) as exc:
         parser.exit(1, str(exc)+'\n')
     print(json.dumps(result,ensure_ascii=False,indent=2))

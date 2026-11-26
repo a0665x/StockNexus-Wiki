@@ -91,10 +91,10 @@ def enrich(db,graph,cutoff=None):
     graph['opinion_groups']=members
     from .workbench import news_day
     byid={n['id']:n for n in graph['nodes']}
-    refs={c['article_revision_id'] for n in graph['nodes'] for c in n.get('citations',[])}
+    refs={c['article_revision_id'] for n in graph['nodes'] for c in [*n.get('citations',[]),*n.get('corroborating_citations',[])]}
     dates={r['id']:news_day(json.loads(r['payload']).get('published_at')) for r in db.execute('SELECT id,payload FROM articles WHERE id IN (SELECT value FROM json_each(?))',(encode(sorted(refs)),))}
     graph['opinion_index']=[{**{k:byid[root][k] for k in ('id','kind','title','translations','classification_terms','classification_status') if k in byid[root]},
-        'dates':sorted({dates[c['article_revision_id']] for i in ids for c in byid[i].get('citations',[]) if dates.get(c['article_revision_id'])})} for root,ids in members.items()]
+        'dates':sorted({dates[c['article_revision_id']] for i in ids for c in [*byid[i].get('citations',[]),*byid[i].get('corroborating_citations',[])] if dates.get(c['article_revision_id'])})} for root,ids in members.items()]
     return graph
 
 def enqueue(store,model,effort,date_range=None):

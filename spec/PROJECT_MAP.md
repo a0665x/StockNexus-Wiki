@@ -1,5 +1,7 @@
 # StockNexus-Wiki — 專案入口
 
+L1 新聞如何補引文、修訂或延伸舊觀點、建立新主題，以及日期範圍、舊新聞連線與 NVDA × VIX 的分組驗收，見 [L1 觀點鏈](references/l1-opinion-lineage.md)。
+
 Start a new `project-spec-graph-onboarding` session on `main`. The November 20 workbench release comes from `llm_wiki_unslop`. Run `git status -sb` and `git log -3 --oneline`, read the latest handoff, then choose one feature and its test. [Current handoff](CURRENT_STATE.md#workbench-release-handoff) · [Feature-to-test index](TESTING.md#workbench-release-verification) · [CodeGraph access](codegraph/INDEX.md)
 
 The shared News and Wiki tool contract covers the resizable header, centered launcher icons, chart gestures, split restoration and the path for replacing the logo. [Window behavior and browser acceptance](references/wiki-timeline-workbench.md)
@@ -18,7 +20,7 @@ The current News-to-Wiki navigation, incremental reads, classifier recovery and 
 
 本輪年度資料／L1 更新及市場報告交接：[2026-11-14 批次](references/annual-research-batch-20261114.md)。讀取即時 private ledger 後再續作，不沿用歷史工作數字。
 
-文件知識庫從 [英文功能與本機測試契約](DOCUMENT_IMPORT.md) 或 [外部 agent 匯入規格與範例](../skills/stocknexus-document-import/SKILL.md) 開始。使用獨立的 documents.sqlite3，由首頁進入 `/documents`；不自動送入股票 Wiki 編譯。2026-11-20 已核對 `228f6a7`，最新 Git／實測／部署差異見 CURRENT_STATE 頂部。
+文件知識庫從 [英文功能與本機測試契約](DOCUMENT_IMPORT.md) 或 [外部 agent 匯入規格與範例](../skills/stocknexus-document-import/SKILL.md) 開始。使用獨立的 documents.sqlite3，由首頁進入 `/documents`。來源綁定股票後，全局增量 L1 透過 `news_atlas/wiki/document_evidence.py` 讀取該來源的版本化原文。2026-11-20 已核對 `228f6a7`，最新 Git／實測／部署差異見 CURRENT_STATE 頂部。
 
 2026-11-20 Web UI、Wiki 選股、準備快取與 Chat 歷史：[unslop 改版契約](references/unslop-20261120.md)。
 
