@@ -44,6 +44,10 @@
  document.body.append(panel);
  const dialog=el('dialog',undefined,'wiki-settings');dialog.id='wikiSettings';dialog.dataset.ownI18n='true';dialog.innerHTML=`<form method="dialog"><button id="wikiSettingsClose">×</button></form><h2 id="wikiSettingsTitle"></h2><label><span id="wikiLanguageLabel"></span><select id="wikiLanguages"><option value="both"></option><option value="zh-Hant">繁體中文</option><option value="en">English</option></select></label><div class="help-heading"><label for="wikiStrategy" id="wikiStrategyLabel"></label><button type="button" class="help-trigger" aria-labelledby="wikiStrategyLabel workbenchHelpWord" aria-describedby="wikiStrategyNote"></button></div><select id="wikiStrategy"><option value="lexical"></option><option value="chronological"></option><option value="root"></option><option value="fusion"></option></select><span id="wikiStrategyNote" class="help-tip" role="tooltip" hidden></span><p id="wikiStrategyState" class="wiki-note"></p><div class="help-heading"><label for="wikiEvidenceSize" id="wikiEvidenceLabel"></label><button type="button" class="help-trigger" aria-labelledby="wikiEvidenceLabel workbenchHelpWord" aria-describedby="wikiEvidenceNote"></button></div><select id="wikiEvidenceSize"><option>5</option><option>10</option><option>15</option><option>20</option></select><span id="wikiEvidenceNote" class="help-tip" role="tooltip" hidden></span><label><input type="checkbox" id="wikiVix"><span id="wikiVixLabel"></span></label><div class="help-heading"><label for="wikiWorkers" id="wikiWorkersLabel"></label><button type="button" class="help-trigger" aria-labelledby="wikiWorkersLabel workbenchHelpWord" aria-describedby="wikiWorkersNote"></button></div><select id="wikiWorkers"><option>1</option><option>3</option><option>5</option><option>10</option></select><span id="wikiWorkersNote" class="help-tip" role="tooltip" hidden></span><div class="wiki-settings-actions"><span id="wikiApplyStatus" role="status"></span><button id="wikiApply" class="wiki-primary" hidden>Apply</button></div>`;document.body.append(dialog);
  const open=el('button','LLM Wiki');open.id='modeWiki';$('modeTimeline').after(open);
+ const arenaButton=el('button','Debate Arena');arenaButton.id='modeArena';open.after(arenaButton);
+ const wikiArena=el('button','Debate Arena');wikiArena.id='wikiArena';$('wikiExport').before(wikiArena);
+
+
  let data=null,info=null,graph=null,plan=null,busy=false,models=[],pollTimer=null,previewTimer=null,generation=0,request=0,previewSerial=0;
  let catalogAt=0,catalogPending=null,polling=false,showPending=null,loading=0,pollError=null;const cache=root.AtlasWikiCache.create(api);
  let displayedEpoch=null,displayedKey=null,openEpoch=0,warmTimer=null,warmKey=null,warmAt=0;
@@ -1072,6 +1076,7 @@
   }if(action.revision!==wikiRuntime.state().revision)throw Error('Wiki 已更新，請重新讀取狀態');if(action.kind==='select_article'){const n=data.nodes.find(n=>n.id===action.id);if(!n)throw Error('Unknown Wiki node');focusGalaxy(n.id);details(n);if(n.kind!=='ArticleRevision'&&n.layer!=='L2')await openViewpoint(n);}else if(action.kind==='set'&&wikiRuntime.state().controls.some(c=>c.id===action.id&&c.options.some(o=>o.value===String(action.value)))){const control=$(action.id);control.value=action.value;if(action.id==='wikiVersion')await selectVersion();else if(action.id==='wikiLayer')$(action.id).dispatchEvent(new Event('change'));else render();saveRuntime();}else throw Error('此 Wiki 操作不在允許清單');return wikiRuntime.state();}
  };
  root.AtlasWiki.runtime=wikiRuntime;
+ if(root.location?.hash==='#wiki')show();
  root.AtlasWorkspace?.ready.then(()=>preload(hooks.confirmedSearch?.()));
  root.AtlasWiki.chat=root.AtlasChatPanel?.mount({runtime:wikiRuntime,detail:$('wikiSide'),prefix:'wiki',title:'觀點詳情'});
 

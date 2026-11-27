@@ -41,6 +41,7 @@ Use this checkout's existing index first. Pass the repository root as `projectPa
 
 | 任務／領域 | Level 2 入口 | 優先原始碼 |
 | --- | --- | --- |
+| Debate Arena、多代理人席位與逐項裁決 | [DEBATE_ARENA.md](DEBATE_ARENA.md) | news_atlas/arena.py、chat/arena.mjs、chat/arena-adapters.mjs、dist/arena.js |
 | 客戶文章／資料夾、JSONL 上傳、文件 Graph | [DOCUMENT_IMPORT.md](DOCUMENT_IMPORT.md)（English） | news_atlas/documents.py、dist/documents.js、skills/stocknexus-document-import/ |
 | 計算定義、輸入／顯示範圍、進度與目的 | [CALCULATION_METHODS.md](CALCULATION_METHODS.md) | model.py、exploration.py、price_lens.py、wiki/forest.py |
 | 操作、設定、刷新、快照、開發交付 | [WORKFLOWS.md](WORKFLOWS.md) | run.sh、server.py、dist/app.js、dist/workspace.js、news_atlas/workspace.py |

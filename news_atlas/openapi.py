@@ -82,6 +82,27 @@ def specification():
             description='Allowed same-origin host required. Read-only, no network/model jobs. Independent of rendered graph. end exclusive; news uses publication time, L1 uses as-known evidence, L2 list uses run creation time; L2 id returns fixed snapshot. Prices use latest cached adjusted close vintage and full completed date buckets. Related uses shared entities/topics, not saved edges. L1 has a bounded 24-opinion retrieval and reports truncation; limit/offset apply to news, related and L2 lists.')
         paths['/api/context/'+resource]['get']['responses']['403']={'description':'Origin is not allowed'}
         paths['/api/context/'+resource]['get']['responses']['503']={'description':'Database temporarily unavailable'}
+    arena_id={'type':'string','format':'uuid'}
+    seat=obj({'name':string(60),'avatar':{'enum':['scout','challenger','planner','lead','judge']},
+              'runtime':{'enum':['codex','claude','ollama','gemini']},'model':string(128),
+              'persona':string(800),'weight':{'type':'integer','minimum':1,'maximum':5}},['name','avatar','runtime','model'])
+    operation('/api/arena/catalog','get','arena_catalog','Detect host agent runtimes and models','Debate Arena')
+    operation('/api/arena/runs','get','arena_runs','List local hearings','Debate Arena')
+    operation('/api/arena/run','get','arena_run','Read sealed sources, arguments and independent ballots','Debate Arena',
+              parameters=[{'name':'id','in':'query','required':True,'schema':arena_id}])
+    operation('/api/arena/start','post','arena_start','Freeze available evidence and start a hearing','Debate Arena',
+              obj({'id':arena_id,'topic':string(360),'instrument':string(40),'seats':{'type':'object','additionalProperties':seat}},
+                  ['id','topic','seats']),writes=True,network=True,code='202')
+    operation('/api/arena/cancel','post','arena_cancel','Stop the hearing and cancel active turns','Debate Arena',
+              obj({'id':arena_id},['id']),writes=True)
+    operation('/api/arena/observe','post','arena_observe','Ask a read-only observer about a sealed hearing snapshot','Debate Arena',
+              obj({'id':arena_id,'question':string(1200),'history':arr(obj({'role':string(12),'text':string(2400)}),6)},
+                  ['id','question']),network=True)
+    for action in ('catalog','runs','run','start','cancel','observe'):
+        operation_spec=next(iter(paths['/api/arena/'+action].values()))
+        operation_spec['responses'].update({'403':{'description':'Same-origin local access required'},
+                                           '503':{'description':'Host bridge or source database unavailable'}})
+    paths['/api/arena/start']['post']['responses']['409']={'description':'A hearing is active or the ID was reused with a different configuration'}
     def param(name):return [{'name':name,'in':'path','required':True,'schema':string()}]
     operation('/api/status','get','get_status','服務與 DB 狀態','System',response=obj({'schema_version':string(),'db':ref('DatabaseStats'),'massive_configured':{'type':'boolean'}}))
     operation('/api/settings/massive-key','post','remember_massive_key','保存本機 Massive 金鑰','System',obj({'key':{'type':'string','minLength':1,'maxLength':512,'format':'password','writeOnly':True}},['key']),obj({'configured':{'type':'boolean'}}),description='Explicit opt-in: save the last key in a private host file (0600), outside SQLite and exports. Never returns the key. Reused across server restarts and ports on this host.',writes=True)

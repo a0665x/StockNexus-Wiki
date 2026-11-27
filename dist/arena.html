@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debate Arena · StockNexus Wiki</title>
+<link rel="stylesheet" href="/chat-panel.css"><link rel="stylesheet" href="/workbench.css"><link rel="stylesheet" href="/arena.css"><script defer src="/arena-live.js"></script><script defer src="/arena.js"></script>
+</head>
+<body>
+<main>
+<div class="mobile-panes"><button id="showLibrary" type="button">代理人席庫</button><button id="showInspector" type="button">索引 ／ Chat</button></div>
+<div class="workspace">
+<aside class="library" id="library"><header><h2>代理人席庫</h2><label>研究標的<select id="instrument"><option value="">無指定標的</option></select></label><p>拖曳角色到席位，或依序點選角色與空席。拖回這裡可離席。</p></header>
+<div id="palette" class="palette"></div><section id="savedSection" hidden><h3>我的代理人</h3><div id="saved" class="palette"></div></section></aside>
+<div class="middle"><section class="court-wrap" aria-label="法庭配置">
+<header class="court-head"><h2>辯論法庭</h2><span id="count"></span></header>
+<div class="stage-strip" id="phaseTrack" aria-label="辯論階段"></div>
+<div class="court">
+<div class="jury"><h3>評審席</h3><div id="jury"></div></div>
+<section class="bench pro"><h3>支持方</h3><div id="pro"></div></section>
+<div class="center"><div class="board"><label for="topic">辯論主題</label><textarea id="topic" maxlength="360" rows="4" placeholder="寫下雙方可以辯論的研究命題…"></textarea></div>
+<div class="archives" aria-label="本庭資料索引">
+<button class="book-stack news-book" id="newsBook" type="button"><i aria-hidden="true"></i><span>新聞節點</span></button>
+<button class="book-stack wiki-book" id="wikiBook" type="button"><i aria-hidden="true"></i><span>LLM Wiki</span></button></div>
+<button id="gavel" disabled><span class="gavel-art" aria-hidden="true"><i></i><b></b></span><span>敲槌開庭</span></button><p id="ready" aria-live="polite"></p></div>
+<section class="bench con"><h3>反對方</h3><div id="con"></div></section>
+</div><p id="notice" role="status"></p><p id="resultBanner" hidden></p></section>
+<section id="hearings" class="hearings"><header><h2>庭次紀錄</h2><button id="draftMode" type="button" hidden>返回排席</button><select id="history" aria-label="選擇庭次"><option value="">選擇庭次</option></select></header>
+<div id="record">尚未選取庭次。</div></section>
+</div>
+<aside class="inspector" id="inspector"><div class="inspector-tabs" role="tablist">
+<button role="tab" aria-controls="sourcePane" aria-selected="true" id="sourceTab">索引來源</button>
+<button role="tab" aria-controls="observerPane" aria-selected="false" id="observerTab">Chat Agent</button></div>
+<section id="sourcePane" role="tabpanel" aria-labelledby="sourceTab"><h3>本庭來源</h3><div id="sourceIndex"></div>
+<h3>法庭事件</h3><ol id="eventLog"></ol></section>
+<section id="observerPane" role="tabpanel" aria-labelledby="observerTab" hidden><h3>法庭觀察員</h3><p id="observerInfo"></p>
+<div id="observerMessages" aria-live="polite"></div><form id="observerForm"><label for="observerQuestion">詢問本庭進度、攻防或引用</label>
+<textarea id="observerQuestion" rows="3" maxlength="1200" placeholder="反方剛才查了哪份資料？"></textarea><button id="observerSend">送出</button></form></section></aside>
+</div></main>
+<dialog id="galaxy"><header><div><h2 id="galaxyTitle"></h2><p id="galaxyScope"></p></div><button id="closeGalaxy" aria-label="關閉索引星圖">×</button></header>
+<div id="constellation"></div><div id="nodeDetail" aria-live="polite"></div></dialog>
+<dialog id="soul"><form id="binding">
+<header><div><p id="sideName" class="kicker"></p><h2 id="soulTitle">配置代理人</h2></div><button id="dismiss" type="button" aria-label="關閉">×</button></header>
+<div class="identity"><span id="portrait"></span><p id="duty"></p></div>
+<label>代理人名稱<input id="agentName" required maxlength="60"></label>
+<div class="fields"><label>執行環境<select id="runtime"></select></label><label>模型<input id="model" required maxlength="128" list="models"><datalist id="models"></datalist></label></div>
+<div class="connection"><p id="connection"></p><button id="refresh" type="button">重新檢查連線</button></div>
+<label>角色指示（選填）<textarea id="persona" rows="2" maxlength="800" placeholder="例如：特別留意時間順序與同源轉載"></textarea></label>
+<label id="weightRow" hidden>評審權重<select id="weight"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select></label>
+<footer><button type="button" id="remove">移出席位</button><button type="submit" class="primary">確認入席</button></footer>
+</form></dialog>
+</body></html>

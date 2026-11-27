@@ -131,6 +131,9 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_GET(self):
+        if self.path.startswith('/api/arena/'):
+            from news_atlas.arena import handle
+            return handle(self)
         if self.path.startswith('/api/context/'):
             from news_atlas.context_api import handle
             handle(self);return
@@ -186,6 +189,16 @@ class Handler(BaseHTTPRequestHandler):
             '/documents.js': ('dist/documents.js','text/javascript; charset=utf-8'),
             '/documents.css': ('dist/documents.css','text/css; charset=utf-8'),
         })
+        files.update({'/arena':('dist/index.html','text/html; charset=utf-8'),
+                      '/arena/court':('dist/arena.html','text/html; charset=utf-8'),
+                      '/arena-characters/LICENSE.txt':('dist/arena-characters/LICENSE.txt','text/plain; charset=utf-8'),
+                      '/arena-shell.js':('dist/arena-shell.js','text/javascript; charset=utf-8'),
+                      '/arena-live.js':('dist/arena-live.js','text/javascript; charset=utf-8'),
+                      '/arena.css':('dist/arena.css','text/css; charset=utf-8'),
+                      '/arena.js':('dist/arena.js','text/javascript; charset=utf-8')})
+        for character in ('scout','planner','challenger','lead','judge'):
+            asset='arena-characters/'+character+'.png'
+            files['/'+asset]=('dist/'+asset,'image/png')
         if path not in files:
             self.send_error(404)
             return
@@ -212,6 +225,9 @@ class Handler(BaseHTTPRequestHandler):
         self.json_response(200 if removed else 404, {'channels':self.store.list_channels()} if removed else {'error':'自訂 channel 不存在'})
 
     def do_POST(self):
+        if self.path.startswith('/api/arena/'):
+            from news_atlas.arena import handle
+            return handle(self)
         if urllib.parse.urlsplit(self.path).path == '/api/documents/bind':
             from news_atlas.documents import handle_bind
             handle_bind(self)

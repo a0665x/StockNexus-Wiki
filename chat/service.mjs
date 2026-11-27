@@ -1,4 +1,6 @@
 import http from 'node:http';
+import {createArena} from './arena.mjs';
+import {createArenaAdapters} from './arena-adapters.mjs';
 import {randomUUID,randomBytes} from 'node:crypto';
 import {mkdir,chmod,lstat,unlink,symlink} from 'node:fs/promises';
 import {resolve,dirname,join} from 'node:path';
@@ -29,6 +31,7 @@ export function createService({makeThread,makeWikiThread,wikiModel=WIKI_DEFAULT_
  const lightweight=m=>/(?:^|[-_.])(sol|luna|mini|nano)(?:[-_.]|$)/i.test(m.id);
  const wikiTrace=createWikiTrace(wikiTracePath);wikiTrace({event:'state',stage:'service',status:'started'});
  const wiki=createWikiCompiler(makeWikiThread,{trace:wikiTrace,validateModel:listModels?async (model,effort)=>{const m=(await listModels()).models.find(m=>m.id===model);if(!m||!lightweight(m))throw fail('Selected model is not in the Codex catalog',400);if(effort&&m.reasoning?.length&&!m.reasoning.some(r=>(r.reasoningEffort||r.effort||r)===effort))throw fail('Unsupported reasoning effort for selected model',400);}:null});
+ const arena=createArena({directory:historyPath?join(dirname(historyPath),'arena'):null,adapters:createArenaAdapters({makeWikiThread,listModels})});
  const history=createHistory(historyPath);
  const sessions=new Map();
  const pending=new Map();
@@ -37,6 +40,16 @@ export function createService({makeThread,makeWikiThread,wikiModel=WIKI_DEFAULT_
  function askBrowser(s,action){return new Promise((resolve,reject)=>{const id=randomUUID();const timer=setTimeout(()=>{pending.delete(id);s.queue=s.queue.filter(c=>c.commandId!==id);reject(fail('Browser unavailable or action timed out. No success confirmed.',409));},18000);pending.set(id,{session:s,resolve,reject,timer,kind:action.kind});s.queue.push({...action,commandId:id});});}
  const server=http.createServer(async(req,res)=>{try{
   const path=req.url;
+  if(path.startsWith('/arena/')){
+   const url=new URL(path,'http://localhost'),action=url.pathname.slice(7);
+   if(req.method==='GET'&&action==='catalog')return send(res,200,{adapters:await arena.catalog()});
+   if(req.method==='GET'&&action==='runs')return send(res,200,{runs:arena.list()});
+   if(req.method==='GET'&&action==='run')return send(res,200,arena.get(url.searchParams.get('id')));
+   if(req.method==='POST'&&action==='start')return send(res,202,await arena.start(await body(req)));
+   if(req.method==='POST'&&action==='observe')return send(res,200,await arena.observe(await body(req)));
+   if(req.method==='POST'&&action==='cancel')return send(res,200,arena.cancel((await body(req)).id));
+   throw fail('Unknown Arena action',404);
+  }
   if(['/models','/wiki/models'].includes(path)&&req.method==='GET'){
    if(!listModels)throw fail('Model catalog unavailable',503);
    const catalog=await listModels();
@@ -166,7 +179,7 @@ export function createService({makeThread,makeWikiThread,wikiModel=WIKI_DEFAULT_
   }catch(e){emit(s.controller.signal.aborted?{type:'done',cancelled:true}:{type:'error',message:/401|unauthorized|auth|login|refresh token/i.test(e.message)?'登入已失效，請在主機執行 codex login 後重試。':/429|quota|limit/i.test(e.message)?'已達用量限制，請稍後重試。':'回覆失敗：'+e.message.slice(0,600)});}
   finally{try{history.update(s.owner,s.conversation,{threadId:s.thread?.id||record.threadId});}finally{clearTimeout(timer);clearInterval(beat);cancel(s);s.busy=false;res.end();}}
  }catch(e){if(!res.headersSent)send(res,e.status||500,{error:e.message,...(e.wiki_code?{code:e.wiki_code,sdk_stage:e.wiki_stage}:{})});else res.end();}});
- server.shutdown=()=>{wiki.close();for(const s of sessions.values())cancel(s);server.close();};
+ server.shutdown=()=>{arena.close();wiki.close();for(const s of sessions.values())cancel(s);server.close();};
  return server;
 }
 async function main(){

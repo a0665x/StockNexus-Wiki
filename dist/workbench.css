@@ -163,7 +163,7 @@ body.documents-workbench main{height:calc(100dvh - 68px)}body.documents-workbenc
 :root{--source-ink:130 210 182;--time-ink:232 183 111;--wiki-ink:153 190 228}
 :is(#sourcePanel,#refreshDocuments,#documentLauncher,#importDocuments){--tool-ink:var(--source-ink)}
 :is(#timeFocusBar,#dateMode,.quick-months,#modeTimeline){--tool-ink:var(--time-ink)}
-:is(#wikiTimelineTool,#wikiTimelineLauncher,#modeWiki,#researchOpen,#wikiBrowse,#wikiCompare){--tool-ink:var(--wiki-ink)}
+:is(#wikiTimelineTool,#wikiTimelineLauncher,#modeWiki,#modeArena,#wikiArena,#researchOpen,#wikiBrowse,#wikiCompare){--tool-ink:var(--wiki-ink)}
 #newsFloatingTools{position:fixed;inset:0;z-index:18;pointer-events:none}
 #newsFloatingTools[hidden],.pane-workspace [hidden]:is(.pane-leaf,.pane-split,.pane-divider){display:none}
 #newsFloatingTools>:is(#sourcePanel,#timeFocusBar){position:fixed;inset:auto;margin:0;pointer-events:auto;max-height:none;border:1px solid var(--line);border-radius:12px;background:var(--panel);box-shadow:0 12px 36px #0006}
@@ -191,14 +191,14 @@ body.documents-workbench main{height:calc(100dvh - 68px)}body.documents-workbenc
 #dateMode{background:var(--panel);gap:3px}
 #dateMode::before{display:none}
 :is(#sourcePanel,#timeFocusBar) .floating-heading :is(.panel-fold,.panel-reset),
-:is(#timeBellReset,#timeBellUndo,#refreshDocuments,#modeWiki,#modeTimeline),
-.wiki-panel :is(#researchOpen,#wikiBrowse,#wikiCompare,#wikiTimelineReset,#wikiTimelineFloat,#wikiTimelineFold),
+:is(#timeBellReset,#timeBellUndo,#refreshDocuments,#modeWiki,#modeArena,#modeTimeline),
+.wiki-panel :is(#wikiArena,#researchOpen,#wikiBrowse,#wikiCompare,#wikiTimelineReset,#wikiTimelineFloat,#wikiTimelineFold),
 :is(#dateMode,.quick-months) button,#importDocuments button[value=preview]{
   color:rgb(var(--tool-ink));background:rgb(var(--tool-ink) / .09);border-color:rgb(var(--tool-ink) / .18)
 }
 :is(#sourcePanel,#timeFocusBar) .floating-heading :is(.panel-fold,.panel-reset):hover:not(:disabled),
-:is(#timeBellReset,#timeBellUndo,#refreshDocuments,#modeWiki,#modeTimeline):hover:not(:disabled),
-.wiki-panel :is(#researchOpen,#wikiBrowse,#wikiCompare,#wikiTimelineReset,#wikiTimelineFloat,#wikiTimelineFold):hover:not(:disabled),
+:is(#timeBellReset,#timeBellUndo,#refreshDocuments,#modeWiki,#modeArena,#modeTimeline):hover:not(:disabled),
+.wiki-panel :is(#wikiArena,#researchOpen,#wikiBrowse,#wikiCompare,#wikiTimelineReset,#wikiTimelineFloat,#wikiTimelineFold):hover:not(:disabled),
 :is(#dateMode,.quick-months) button:is(:hover,[aria-pressed=true]),#importDocuments button[value=preview]:hover,#stage #modeTimeline.active{
   background:rgb(var(--tool-ink) / .18);border-color:rgb(var(--tool-ink) / .34)
 }
@@ -258,3 +258,12 @@ dialog.wiki-comparison{box-sizing:border-box;width:min(920px,calc(100% - 48px));
 .wiki-range-note{line-height:1.5}
 .wiki-count-legend span::before{content:"";display:inline-block;width:8px;height:8px;margin-inline-end:4px;background:#67ceb2}
 .wiki-count-legend span+span::before{background:#d6a85a}
+
+#arenaPanel{position:fixed;inset:var(--workbench-header-height) 0 0;z-index:22;background:var(--bg)}
+#arenaPanel[hidden]{display:none}
+#arenaPanel iframe{width:100%;height:100%;border:0;display:block}
+#arenaPanel>.mode-tabs{position:absolute;top:var(--mode-top,14px);left:var(--mode-left,300px);right:auto;z-index:1;display:flex;gap:4px;flex-wrap:wrap;width:fit-content;max-width:calc(100% - min(var(--arena-left,280px),27%) - min(var(--arena-right,280px),27%) - 32px);background:var(--bg)}
+#arenaPanel>.mode-tabs button{font-size:12px}
+#arenaPanel #modeArena.active{color:var(--wiki-ink-color,#99bee4);background:rgb(var(--wiki-ink)/.2);border-color:rgb(var(--wiki-ink)/.4)}
+body.arena-open #newsFloatingTools,body.arena-open #wikiPanel{visibility:hidden}
+@media(max-width:800px){#arenaPanel>.mode-tabs{left:10px;right:10px;max-width:calc(100% - 20px)}}
